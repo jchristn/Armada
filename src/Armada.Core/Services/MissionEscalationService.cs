@@ -3,23 +3,63 @@ namespace Armada.Core.Services
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Text;
+    using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core;
     using Armada.Core.BlackBox;
+    using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services.Interfaces;
+    using Armada.Core.Settings;
+    using SyslogLogging;
 
     /// <summary>
-    /// Escalation in place (RS-5.6): a work stage whose captain could not finish moves, on the same branch, to the next
-    /// captain on its persona's escalation ladder or to a captain with a strictly higher effective tier.
+    /// Chooses and applies escalation to a stronger captain after a failed attempt.
     /// </summary>
-    public partial class MissionService
+    internal sealed class MissionEscalationService
     {
+        #region Private-Members
+
+        private readonly MissionService _Service;
+        private readonly MissionServiceContext _Context;
+        private readonly DatabaseDriver _Database;
+        private readonly IGitService? _Git;
+        private readonly string _Header;
+        private readonly LoggingModule _Logging;
+        private readonly ArmadaSettings _Settings;
+
         private static readonly BlackBoxRedactor _EscalationRedactor = new BlackBoxRedactor();
 
+        #endregion
+
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="service">The mission service facade.</param>
+        /// <param name="context">State and services shared by the mission services.</param>
+        /// <exception cref="ArgumentNullException">A parameter is null.</exception>
+        internal MissionEscalationService(MissionService service, MissionServiceContext context)
+        {
+            _Service = service ?? throw new ArgumentNullException(nameof(service));
+            _Context = context ?? throw new ArgumentNullException(nameof(context));
+            _Database = context.Database;
+            _Git = context.Git;
+            _Header = context.Header;
+            _Logging = context.Logging;
+            _Settings = context.Settings;
+        }
+
+        #endregion
+
+        #region Internal-Methods
+
         /// <inheritdoc />
-        public async Task<EscalationChoice?> ChooseEscalationAsync(Mission mission, string? failedCaptainId, CancellationToken token = default)
+        internal async Task<EscalationChoice?> ChooseEscalationAsync(Mission mission, string? failedCaptainId, CancellationToken token = default)
         {
             if (mission == null) throw new ArgumentNullException(nameof(mission));
             // Planning and review stages are not escalated; only stages that do the work.
@@ -29,7 +69,7 @@ namespace Armada.Core.Services
             if (mission.EscalationCount >= _Settings.MaxEscalations) return null;
             // A strict assignment fixes the captain on purpose (tests that control model identity), so it fails rather
             // than finishing on a different model. Strict missions therefore never count toward G12.
-            if (await HasStrictCaptainOverrideAsync(mission, token).ConfigureAwait(false)) return null;
+            if (await _Context.MissionCaptainRouter.HasStrictCaptainOverrideAsync(mission, token).ConfigureAwait(false)) return null;
             IReadOnlyList<Mission> voyageMissions = String.IsNullOrEmpty(mission.VoyageId)
                 ? new List<Mission>()
                 : await _Database.Missions.EnumerateByVoyageAsync(mission.VoyageId!, token).ConfigureAwait(false);
@@ -37,7 +77,7 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<bool> ApplyEscalationAsync(Mission mission, Captain failedCaptain, EscalationChoice choice, EscalationMemory memory, CancellationToken token = default)
+        internal async Task<bool> ApplyEscalationAsync(Mission mission, Captain failedCaptain, EscalationChoice choice, EscalationMemory memory, CancellationToken token = default)
         {
             if (mission == null) throw new ArgumentNullException(nameof(mission));
             if (failedCaptain == null) throw new ArgumentNullException(nameof(failedCaptain));
@@ -64,12 +104,16 @@ namespace Armada.Core.Services
             mission.DiffSnapshot = null;
             MissionTransitionRequest escalation = new MissionTransitionRequest { To = MissionStatusEnum.Pending, ExpectedLastUpdateUtc = escalationVersion };
             escalation.AllowedFrom.Add(observedStatus);
-            if (!await Transitions.TryTransitionAsync(mission, escalation, token).ConfigureAwait(false)) return false;
+            if (!await _Service.Transitions.TryTransitionAsync(mission, escalation, token).ConfigureAwait(false)) return false;
             _Logging.Warn(_Header + "mission " + mission.Id + ": " + failedCaptain.Name + " could not finish (" + memory.Reason + "); escalating to "
                 + choice.Captain.Name + " (" + choice.Describe() + ", hop " + mission.EscalationCount + " of " + _Settings.MaxEscalations + ")"
                 + (memory.HintRuleId != null ? "; hint " + memory.HintRuleId : ""));
             return true;
         }
+
+        #endregion
+
+        #region Private-Methods
 
         private async Task RecallPreviousAttemptAsync(Mission mission, Captain failedCaptain, EscalationMemory memory, CancellationToken token)
         {
@@ -78,12 +122,12 @@ namespace Armada.Core.Services
             if (!memory.FailureKind.HasValue && memory.RuntimeFailureKind.HasValue)
                 memory.FailureKind = FailureKindMapper.FromRuntimeExit(memory.RuntimeFailureKind.Value, memory.ExitCode);
 
-            string? output = String.IsNullOrEmpty(mission.AgentOutput) ? OnPeekMissionOutput?.Invoke(mission.Id) : mission.AgentOutput;
+            string? output = String.IsNullOrEmpty(mission.AgentOutput) ? _Service.OnPeekMissionOutput?.Invoke(mission.Id) : mission.AgentOutput;
             if (!String.IsNullOrWhiteSpace(output))
                 memory.OutputTail = _EscalationRedactor.Redact(BlackBoxLimits.Tail(output!.TrimEnd(), EscalationMemoryRenderer.MaxOutputTailChars));
 
             Dock? dock = String.IsNullOrEmpty(mission.DockId) ? null : await _Database.Docks.ReadAsync(mission.DockId!, token).ConfigureAwait(false);
-            if (dock != null) memory.ChangedFiles = await TryReadChangedFilesAsync(dock, TryReadDockStartCommit(dock, mission), token).ConfigureAwait(false);
+            if (dock != null) memory.ChangedFiles = await TryReadChangedFilesAsync(dock, _Context.MissionScopeGuard.TryReadDockStartCommit(dock, mission), token).ConfigureAwait(false);
 
             EscalationMemoryRenderer.ApplyHint(memory);
         }
@@ -92,7 +136,7 @@ namespace Armada.Core.Services
         private async Task<List<string>?> TryReadChangedFilesAsync(Dock dock, string? startCommit, CancellationToken token)
         {
             if (String.IsNullOrWhiteSpace(dock.WorktreePath) || String.IsNullOrWhiteSpace(startCommit)) return null;
-            DockHost? harborHost = HarborHostFor(dock);
+            DockHost? harborHost = _Context.StageCheckRunner.HarborHostFor(dock);
             IGitService? git = harborHost != null ? harborHost.Git : _Git;
             if (git == null) return null;
             try
@@ -110,5 +154,7 @@ namespace Armada.Core.Services
                 return null;
             }
         }
+
+        #endregion
     }
 }

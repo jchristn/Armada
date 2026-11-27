@@ -63,7 +63,7 @@ namespace Test.Shared.Suites.Services
                         ? new HostCommandResult { TimedOut = true, ExitCode = -1 }
                         : new HostCommandResult()
                 };
-                typeof(MissionService).GetField("_LocalCommands", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(missions, commands);
+                missions.Context.LocalCommands = commands;
                 string worktree = TestTemp.NewDirectory("stage_timeout_unverified");
                 try
                 {
@@ -119,7 +119,7 @@ namespace Test.Shared.Suites.Services
                         : new HostCommandResult()
                 };
                 // Inject at the command boundary: the real stage-check implementation still classifies the failure.
-                typeof(MissionService).GetField("_LocalCommands", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(missions, commands);
+                missions.Context.LocalCommands = commands;
                 string worktree = TestTemp.NewDirectory("stage_failed_resume");
                 settings.LogDirectory = TestTemp.NewDirectory("stage_failed_resume_logs");
                 try

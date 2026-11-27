@@ -2,28 +2,82 @@ namespace Armada.Core.Services
 {
     using System.Text;
     using System.Text.Json;
-    using SyslogLogging;
     using Armada.Core;
     using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
-    using Armada.Core.Settings;
     using Armada.Core.Services.Interfaces;
+    using Armada.Core.Settings;
+    using SyslogLogging;
 
     /// <summary>
-    /// Pipeline handoff and recovery: preparing the next stage, re-driving dangling handoffs, settling the stages behind
-    /// a failed one, cascading cancellation and settling the voyage.
+    /// Hands a finished pipeline stage to the next stage and settles voyages and dependent stages.
     /// </summary>
-    public partial class MissionService
+    internal sealed class MissionHandoffService
     {
+        #region Private-Members
+
+        private readonly MissionService _Service;
+        private readonly MissionServiceContext _Context;
+        private readonly DatabaseDriver _Database;
+        private readonly IGitService? _Git;
+        private readonly string _Header;
+        private readonly LoggingModule _Logging;
+        private readonly ArmadaSettings _Settings;
+
         // Produced missions whose refused handoff was already warned about, so each warns once.
         private readonly MissionFlagSet _RefusedHandoffWarnings = new MissionFlagSet();
 
-        #region Private-Methods
+        #endregion
+
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="service">The mission service facade.</param>
+        /// <param name="context">State and services shared by the mission services.</param>
+        /// <exception cref="ArgumentNullException">A parameter is null.</exception>
+        internal MissionHandoffService(MissionService service, MissionServiceContext context)
+        {
+            _Service = service ?? throw new ArgumentNullException(nameof(service));
+            _Context = context ?? throw new ArgumentNullException(nameof(context));
+            _Database = context.Database;
+            _Git = context.Git;
+            _Header = context.Header;
+            _Logging = context.Logging;
+            _Settings = context.Settings;
+        }
+
+        #endregion
+
+        #region Internal-Methods
+
+        /// <summary>
+        /// Determine whether a dependent pipeline mission has had upstream handoff context applied.
+        /// The handoff path stamps the downstream mission with the dependency's branch name,
+        /// so branch equality is used as the minimum readiness signal before launch.
+        /// </summary>
+        internal static bool IsPipelineHandoffPrepared(Mission mission, Mission dependency)
+        {
+            if (mission == null || dependency == null) return false;
+            if (String.IsNullOrEmpty(mission.DependsOnMissionId)) return true;
+
+            if (PersonaCatalog.Matches(dependency.Persona, PersonaCatalog.Architect))
+            {
+                return String.Equals(mission.ArchitectSourceMissionId, dependency.Id, StringComparison.Ordinal);
+            }
+
+            // If the dependency never had a branch, there is no stronger handoff signal
+            // available here; fall back to allowing assignment.
+            if (String.IsNullOrEmpty(dependency.BranchName)) return true;
+
+            return String.Equals(mission.BranchName, dependency.BranchName, StringComparison.Ordinal);
+        }
 
         /// <inheritdoc />
-        public async Task<int> SettleStagesBehindFailedDependenciesAsync(CancellationToken token = default)
+        internal async Task<int> SettleStagesBehindFailedDependenciesAsync(CancellationToken token = default)
         {
             List<Mission> pending = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending, token).ConfigureAwait(false);
             HashSet<string> settled = new HashSet<string>(StringComparer.Ordinal);
@@ -49,7 +103,7 @@ namespace Armada.Core.Services
         /// </summary>
         /// <param name="token">Cancellation token.</param>
         /// <returns>Count of missions whose handoff was re-driven.</returns>
-        public async Task<int> RecoverDanglingHandoffsAsync(CancellationToken token = default)
+        internal async Task<int> RecoverDanglingHandoffsAsync(CancellationToken token = default)
         {
             int redriven = 0;
             List<Mission> workProduced = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.WorkProduced, token).ConfigureAwait(false);
@@ -61,7 +115,7 @@ namespace Armada.Core.Services
                 {
                     try
                     {
-                        if (await TryRecoverArchitectFanOutAsync(produced, token).ConfigureAwait(false)) redriven++;
+                        if (await _Context.ArchitectFanOutService.TryRecoverArchitectFanOutAsync(produced, token).ConfigureAwait(false)) redriven++;
                     }
                     catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
                     {
@@ -71,11 +125,11 @@ namespace Armada.Core.Services
                 }
 
                 // A completion still being processed prepares its own handoff; re-driving it here would run the handoff twice.
-                if (IsCompletionInFlight(produced.Id)) continue;
+                if (_Service.IsCompletionInFlight(produced.Id)) continue;
 
                 // Recovery never bypasses the gates completion applies: a Judge's work moves on only with a substantiated PASS.
                 if (PersonaCatalog.Matches(produced.Persona, PersonaCatalog.Judge)
-                    && (JudgeVerdictParser.Parse(StageSubmissionText.EffectiveOutput(produced)) != JudgeVerdictEnum.Pass || !TryValidateJudgePassOutput(StageSubmissionText.EffectiveOutput(produced), out _)))
+                    && (JudgeVerdictParser.Parse(StageSubmissionText.EffectiveOutput(produced)) != JudgeVerdictEnum.Pass || !_Context.StageCompletionHandler.TryValidateJudgePassOutput(StageSubmissionText.EffectiveOutput(produced), out _)))
                 {
                     // Recovery runs every health cycle; say this once per mission, not every few seconds.
                     if (_RefusedHandoffWarnings.TrySetFirst(produced.Id))
@@ -114,8 +168,7 @@ namespace Armada.Core.Services
             return redriven;
         }
 
-
-        private async Task<bool> TryHandoffToNextStageAsync(Mission completedMission, CancellationToken token)
+        internal async Task<bool> TryHandoffToNextStageAsync(Mission completedMission, CancellationToken token)
         {
             if (String.IsNullOrEmpty(completedMission.VoyageId)) return false;
 
@@ -135,44 +188,44 @@ namespace Armada.Core.Services
                 // RS-6.2: the plan is read once, from a submitted plan when there is one, and handed to the fan-out.
                 ArchitectPlanParseResult planResult = ArchitectPlanParser.Parse(StageSubmissionText.EffectiveOutput(completedMission), _Settings.Concurrency.MaxHierarchyDepth);
                 if (planResult.Status == ArchitectPlanParseStatusEnum.NoPlanFound
-                    && await TryRepairArchitectPlanAsync(completedMission, token).ConfigureAwait(false))
+                    && await _Context.OutputRepairService.TryRepairArchitectPlanAsync(completedMission, token).ConfigureAwait(false))
                     planResult = ArchitectPlanParser.Parse(StageSubmissionText.EffectiveOutput(completedMission), _Settings.Concurrency.MaxHierarchyDepth);
 
                 string? planError = planResult.Error;
-                List<ParsedArchitectMission> parsed = planError == null ? ParseArchitectOutput(completedMission, planResult.Plan) : new List<ParsedArchitectMission>();
-                planError ??= ValidateArchitectHierarchy(parsed);
+                List<ParsedArchitectMission> parsed = planError == null ? _Context.ArchitectFanOutService.ParseArchitectOutput(completedMission, planResult.Plan) : new List<ParsedArchitectMission>();
+                planError ??= _Context.ArchitectFanOutService.ValidateArchitectHierarchy(parsed);
 
                 // RS-6.4: a plan that exists but breaks the contract (invalid JSON, a rejected field, a bad hierarchy) first
                 // gets one format-only turn that restates it with the parser's errors. A missing plan is never restated
                 // (narration is not inferred into missions), and an oversized plan must be split, not reformatted.
                 if (planError != null && planResult.Status != ArchitectPlanParseStatusEnum.NoPlanFound
                     && planResult.Status != ArchitectPlanParseStatusEnum.TooLarge
-                    && await TryFormatRepairArchitectPlanAsync(completedMission, null, planError,
+                    && await _Context.OutputRepairService.TryFormatRepairArchitectPlanAsync(completedMission, null, planError,
                         planResult.Errors.Count > 0 ? planResult.Errors : new List<string> { planError }, token).ConfigureAwait(false))
                 {
                     planResult = ArchitectPlanParser.Parse(completedMission.AgentOutput, _Settings.Concurrency.MaxHierarchyDepth);
                     planError = planResult.Error;
-                    parsed = planError == null ? ParseArchitectOutput(completedMission) : new List<ParsedArchitectMission>();
-                    planError ??= ValidateArchitectHierarchy(parsed);
+                    parsed = planError == null ? _Context.ArchitectFanOutService.ParseArchitectOutput(completedMission) : new List<ParsedArchitectMission>();
+                    planError ??= _Context.ArchitectFanOutService.ValidateArchitectHierarchy(parsed);
                 }
 
                 if (planError != null)
                 {
-                    if (await TryScheduleOutputRepairAsync(completedMission, planError, token).ConfigureAwait(false))
+                    if (await _Context.OutputRepairService.TryScheduleOutputRepairAsync(completedMission, planError, token).ConfigureAwait(false))
                         return false;
 
                     MissionStatusEnum planStatusBefore = completedMission.Status;
-                    completedMission.FailureReason = AppendRepairHistory(planError, completedMission);
+                    completedMission.FailureReason = _Context.OutputRepairService.AppendRepairHistory(planError, completedMission);
                     completedMission.FailureKind = MissionFailureKindEnum.InvalidOutput;
                     completedMission.CompletedUtc = DateTime.UtcNow;
-                    if (!await Transitions.TryTransitionAsync(completedMission, new[] { planStatusBefore }, MissionStatusEnum.Failed, null, token).ConfigureAwait(false)) return false;
-                    await RecordFailureAsync(completedMission, planStatusBefore, BlackBoxStepEnum.PlanParse, null, context =>
+                    if (!await _Service.Transitions.TryTransitionAsync(completedMission, new[] { planStatusBefore }, MissionStatusEnum.Failed, null, token).ConfigureAwait(false)) return false;
+                    await _Context.MissionFailureCapture.RecordFailureAsync(completedMission, planStatusBefore, BlackBoxStepEnum.PlanParse, null, context =>
                         context.Note = "Architect plan error: " + planError, token).ConfigureAwait(false);
                     return false;
                 }
                 if (parsed.Count > 0)
                 {
-                    await ProjectArchitectMissionsToLogAsync(completedMission, parsed, token).ConfigureAwait(false);
+                    await _Context.ArchitectFanOutService.ProjectArchitectMissionsToLogAsync(completedMission, parsed, token).ConfigureAwait(false);
                     _Logging.Debug(_Header + "architect produced " + parsed.Count + " mission definitions");
 
                     // RS-4.3: the whole fan-out (the first slice written into the waiting Worker, every further slice
@@ -186,20 +239,20 @@ namespace Armada.Core.Services
                         nextMission.Title = first.Title + " [Worker]";
                         nextMission.ArchitectSourceMissionId = completedMission.Id;
                         nextMission.ArchitectPlanIndex = 0;
-                        nextMission.Description = first.Description + await BuildArchitectSliceContextAsync(completedMission, parsed, 0, token).ConfigureAwait(false);
+                        nextMission.Description = first.Description + await _Context.ArchitectFanOutService.BuildArchitectSliceContextAsync(completedMission, parsed, 0, token).ConfigureAwait(false);
                         nextMission.WaitForVoyageWorkers = first.WaitForOtherMissions;
                         nextMission.BranchName = null;
                         work.Changed(nextMission);
-                        RetitleDependentChain(work, nextMission, first.Title, first.Description);
-                        await ApplyArchitectWorkerEnvelopeAsync(completedMission, nextMission, first, work, token).ConfigureAwait(false);
+                        ArchitectFanOutService.RetitleDependentChain(work, nextMission, first.Title, first.Description);
+                        await _Context.WorkerEnvelopeService.ApplyArchitectWorkerEnvelopeAsync(completedMission, nextMission, first, work, token).ConfigureAwait(false);
 
                         // The Worker slot and its stages are the template for every further slice.
                         for (int i = 1; i < parsed.Count; i++)
-                            await CreateArchitectSliceAsync(completedMission, nextMission, work, parsed, i, token).ConfigureAwait(false);
+                            await _Context.ArchitectFanOutService.CreateArchitectSliceAsync(completedMission, nextMission, work, parsed, i, token).ConfigureAwait(false);
                     }
 
-                    ApplyArchitectMissionDependencies(completedMission, parsed, work);
-                    await CommitArchitectFanOutAsync(completedMission, work, token).ConfigureAwait(false);
+                    _Context.ArchitectFanOutService.ApplyArchitectMissionDependencies(completedMission, parsed, work);
+                    await _Context.ArchitectFanOutService.CommitArchitectFanOutAsync(completedMission, work, token).ConfigureAwait(false);
                     return true; // Architect special handling complete, skip normal handoff
                 }
 
@@ -214,10 +267,10 @@ namespace Armada.Core.Services
 
                 // An absent plan is a format failure, not a judgment about the work: run the Architect again with the
                 // exact contract before failing the voyage. Narration is never inferred into missions.
-                if (await TryScheduleOutputRepairAsync(completedMission, failureReason, token).ConfigureAwait(false))
+                if (await _Context.OutputRepairService.TryScheduleOutputRepairAsync(completedMission, failureReason, token).ConfigureAwait(false))
                     return false;
 
-                failureReason = AppendRepairHistory(failureReason, completedMission);
+                failureReason = _Context.OutputRepairService.AppendRepairHistory(failureReason, completedMission);
 
                 _Logging.Warn(_Header + "architect mission " + completedMission.Id +
                     " produced no valid mission definitions -- marking as failed");
@@ -225,8 +278,8 @@ namespace Armada.Core.Services
                 completedMission.FailureReason = failureReason;
                 completedMission.FailureKind = MissionFailureKindEnum.InvalidOutput;
                 completedMission.CompletedUtc = DateTime.UtcNow;
-                if (!await Transitions.TryTransitionAsync(completedMission, new[] { markersStatusBefore }, MissionStatusEnum.Failed, null, token).ConfigureAwait(false)) return false;
-                await RecordFailureAsync(completedMission, markersStatusBefore, BlackBoxStepEnum.PlanParse, null, context =>
+                if (!await _Service.Transitions.TryTransitionAsync(completedMission, new[] { markersStatusBefore }, MissionStatusEnum.Failed, null, token).ConfigureAwait(false)) return false;
+                await _Context.MissionFailureCapture.RecordFailureAsync(completedMission, markersStatusBefore, BlackBoxStepEnum.PlanParse, null, context =>
                     context.Note = hadArchitectMarkers ? "The output had [ARMADA:MISSION] markers but none was valid." : "The output had no plan block and no mission markers.", token).ConfigureAwait(false);
                 return false;
             }
@@ -270,72 +323,14 @@ namespace Armada.Core.Services
             return true;
         }
 
-        /// <summary>
-        /// Force-advance the shared pipeline branch to the just-completed stage's produced commit. A prior
-        /// stage's dock can end on a detached HEAD (its commit is not on the branch ref), so the next stage --
-        /// which reuses the same branch -- would otherwise check out stale code. Resolve the dock's live HEAD
-        /// and lift it onto the branch ref without rewinding newer work. A refused update blocks downstream
-        /// dispatch with a recoverable commit reference and remediation. Transport exceptions retain the existing
-        /// best-effort behavior.
-        /// </summary>
-        private async Task<bool> HardenStageBranchAsync(Mission completedMission, CancellationToken token)
-        {
-            if (_Git == null) return true;
-            if (String.IsNullOrEmpty(completedMission.BranchName) || String.IsNullOrEmpty(completedMission.DockId)) return true;
-
-            Dock? dock = !String.IsNullOrEmpty(completedMission.TenantId)
-                ? await _Database.Docks.ReadAsync(completedMission.TenantId, completedMission.DockId!, token).ConfigureAwait(false)
-                : await _Database.Docks.ReadAsync(completedMission.DockId!, token).ConfigureAwait(false);
-            DockHost? harborHost = HarborHostFor(dock);
-            IGitService git = harborHost != null ? harborHost.Git : _Git;
-            if (dock == null || String.IsNullOrEmpty(dock.WorktreePath) || !await DockDirectoryExistsAsync(harborHost, dock.WorktreePath!, token).ConfigureAwait(false)) return true;
-
-            try
-            {
-                string? headCommit = await git.GetHeadCommitHashAsync(dock.WorktreePath!, token).ConfigureAwait(false);
-                if (String.IsNullOrEmpty(headCommit)) return true;
-
-                // This also prevents rewinds when talking to an older Harbor implementation.
-                if (await git.IsAncestorAsync(dock.WorktreePath!, headCommit!, completedMission.BranchName!, token).ConfigureAwait(false) == true) return true;
-                bool advanced = await git.ForceAdvanceBranchAsync(dock.WorktreePath!, completedMission.BranchName!, headCommit!, token).ConfigureAwait(false);
-                if (!advanced)
-                {
-                    MissionStatusEnum hardenStatusBefore = completedMission.Status;
-                    completedMission.CommitHash = headCommit;
-                    completedMission.FailureKind = MissionFailureKindEnum.LandingConflict;
-                    completedMission.FailureReason = "Pipeline handoff could not safely advance branch " + completedMission.BranchName
-                        + " to stage commit " + headCommit + ". No downstream stage was dispatched. "
-                        + "Remediation: inspect the branch and saved stage commit; integrate any divergent work without resetting newer commits, then restart the failed stage. Check Harbor/git availability if the update itself failed.";
-                    completedMission.CompletedUtc = DateTime.UtcNow;
-                    await Transitions.TryTransitionAsync(completedMission, new[] { hardenStatusBefore }, MissionStatusEnum.Failed, null, token).ConfigureAwait(false);
-                    await RecordFailureAsync(completedMission, hardenStatusBefore, BlackBoxStepEnum.StageBranchHarden, dock, context =>
-                    {
-                        context.GitFacts = new BlackBoxGitFacts { BranchTip = headCommit, GitOperation = "update-ref refs/heads/" + completedMission.BranchName, WorktreeExisted = true };
-                    }, token).ConfigureAwait(false);
-                    return false;
-                }
-                if (advanced)
-                {
-                    _Logging.Debug(_Header + "stage-lag hardening: advanced branch " + completedMission.BranchName +
-                        " to " + headCommit + " from dock " + dock.Id + " before handoff from mission " + completedMission.Id);
-                }
-            }
-            catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-            catch (Exception ex)
-            {
-                _Logging.Warn(_Header + "stage-lag hardening failed for mission " + completedMission.Id + ": " + ex.ToString());
-            }
-            return true;
-        }
-
-        private async Task CancelDependentPipelineStagesAsync(Mission failedMission, CancellationToken token)
+        internal async Task CancelDependentPipelineStagesAsync(Mission failedMission, CancellationToken token)
         {
             if (failedMission == null) throw new ArgumentNullException(nameof(failedMission));
             if (String.IsNullOrEmpty(failedMission.VoyageId)) return;
 
             // A failed slice also stops the voyage's final integration, which would otherwise run without its work.
             if (failedMission.Status == MissionStatusEnum.Failed || failedMission.Status == MissionStatusEnum.LandingFailed)
-                await CancelIntegrationsBlockedByFailureAsync(failedMission, token).ConfigureAwait(false);
+                await _Context.IntegrationBarrierService.CancelIntegrationsBlockedByFailureAsync(failedMission, token).ConfigureAwait(false);
 
             List<Mission> voyageMissions = await _Database.Missions.EnumerateByVoyageAsync(failedMission.VoyageId, token).ConfigureAwait(false);
             List<Mission> directDependents = voyageMissions.Where(m =>
@@ -356,10 +351,10 @@ namespace Armada.Core.Services
                     + (blockThis ? ". Restart that mission to continue, or cancel the voyage." : String.Empty);
                 dependent.FailureKind = MissionFailureKindEnum.DependencyFailed;
                 dependent.CompletedUtc = blockThis ? null : DateTime.UtcNow;
-                if (!await Transitions.TryTransitionAsync(dependent, new[] { dependentStatusBefore }, blockThis ? MissionStatusEnum.Blocked : MissionStatusEnum.Cancelled, null, token).ConfigureAwait(false)) continue;
+                if (!await _Service.Transitions.TryTransitionAsync(dependent, new[] { dependentStatusBefore }, blockThis ? MissionStatusEnum.Blocked : MissionStatusEnum.Cancelled, null, token).ConfigureAwait(false)) continue;
                 _Logging.Info(_Header + (blockThis ? "blocked" : "cancelled") + " dependent mission " + dependent.Id +
                     " because upstream mission " + failedMission.Id + " ended in " + failedMission.Status);
-                await RecordFailureAsync(dependent, dependentStatusBefore, BlackBoxStepEnum.DependencyCancelled, null, context =>
+                await _Context.MissionFailureCapture.RecordFailureAsync(dependent, dependentStatusBefore, BlackBoxStepEnum.DependencyCancelled, null, context =>
                 {
                     context.Note = (blockThis ? "Non-terminal: held as Blocked" : "Cancelled") + " because upstream mission " + failedMission.Id + " ended "
                         + failedMission.Status + (failedMission.LastBlackBoxEntryId != null ? " (entry " + failedMission.LastBlackBoxEntryId + ")" : "") + ".";
@@ -375,7 +370,7 @@ namespace Armada.Core.Services
         /// <param name="voyageId">Voyage id.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>Task.</returns>
-        public async Task ReevaluateVoyageAsync(string voyageId, CancellationToken token = default)
+        internal async Task ReevaluateVoyageAsync(string voyageId, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(voyageId)) return;
             Voyage? voyage = await _Database.Voyages.ReadAsync(voyageId, token).ConfigureAwait(false);
@@ -383,7 +378,7 @@ namespace Armada.Core.Services
             await UpdateVoyageTerminalStatusAsync(voyageId, token).ConfigureAwait(false);
         }
 
-        private async Task UpdateVoyageTerminalStatusAsync(string? voyageId, CancellationToken token)
+        internal async Task UpdateVoyageTerminalStatusAsync(string? voyageId, CancellationToken token)
         {
             if (String.IsNullOrEmpty(voyageId)) return;
 
@@ -391,12 +386,74 @@ namespace Armada.Core.Services
             if (voyage == null) return;
 
             List<Mission> missions = await _Database.Missions.EnumerateByVoyageAsync(voyageId, token).ConfigureAwait(false);
-            VoyageStatusEnum? settled = await VoyageSettlement.DecideAsync(missions, IsCompletionInFlight,
+            VoyageStatusEnum? settled = await VoyageSettlement.DecideAsync(missions, _Service.IsCompletionInFlight,
                 () => MergeQueueMissionActivity.GetMissionIdsWithActiveEntriesAsync(_Database, token)).ConfigureAwait(false);
             if (settled == null) return;
 
-            await VoyageSettlement.ApplyAsync(_Database, voyage, settled.Value, missions, token, BlackBox, _Logging).ConfigureAwait(false);
+            await VoyageSettlement.ApplyAsync(_Database, voyage, settled.Value, missions, token, _Service.BlackBox, _Logging).ConfigureAwait(false);
             _Logging.Info(_Header + "voyage " + voyage.Id + " reached terminal status " + voyage.Status + " during mission completion");
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        /// <summary>
+        /// Force-advance the shared pipeline branch to the just-completed stage's produced commit. A prior
+        /// stage's dock can end on a detached HEAD (its commit is not on the branch ref), so the next stage --
+        /// which reuses the same branch -- would otherwise check out stale code. Resolve the dock's live HEAD
+        /// and lift it onto the branch ref without rewinding newer work. A refused update blocks downstream
+        /// dispatch with a recoverable commit reference and remediation. Transport exceptions retain the existing
+        /// best-effort behavior.
+        /// </summary>
+        private async Task<bool> HardenStageBranchAsync(Mission completedMission, CancellationToken token)
+        {
+            if (_Git == null) return true;
+            if (String.IsNullOrEmpty(completedMission.BranchName) || String.IsNullOrEmpty(completedMission.DockId)) return true;
+
+            Dock? dock = !String.IsNullOrEmpty(completedMission.TenantId)
+                ? await _Database.Docks.ReadAsync(completedMission.TenantId, completedMission.DockId!, token).ConfigureAwait(false)
+                : await _Database.Docks.ReadAsync(completedMission.DockId!, token).ConfigureAwait(false);
+            DockHost? harborHost = _Context.StageCheckRunner.HarborHostFor(dock);
+            IGitService git = harborHost != null ? harborHost.Git : _Git;
+            if (dock == null || String.IsNullOrEmpty(dock.WorktreePath) || !await _Context.StageCheckRunner.DockDirectoryExistsAsync(harborHost, dock.WorktreePath!, token).ConfigureAwait(false)) return true;
+
+            try
+            {
+                string? headCommit = await git.GetHeadCommitHashAsync(dock.WorktreePath!, token).ConfigureAwait(false);
+                if (String.IsNullOrEmpty(headCommit)) return true;
+
+                // This also prevents rewinds when talking to an older Harbor implementation.
+                if (await git.IsAncestorAsync(dock.WorktreePath!, headCommit!, completedMission.BranchName!, token).ConfigureAwait(false) == true) return true;
+                bool advanced = await git.ForceAdvanceBranchAsync(dock.WorktreePath!, completedMission.BranchName!, headCommit!, token).ConfigureAwait(false);
+                if (!advanced)
+                {
+                    MissionStatusEnum hardenStatusBefore = completedMission.Status;
+                    completedMission.CommitHash = headCommit;
+                    completedMission.FailureKind = MissionFailureKindEnum.LandingConflict;
+                    completedMission.FailureReason = "Pipeline handoff could not safely advance branch " + completedMission.BranchName
+                        + " to stage commit " + headCommit + ". No downstream stage was dispatched. "
+                        + "Remediation: inspect the branch and saved stage commit; integrate any divergent work without resetting newer commits, then restart the failed stage. Check Harbor/git availability if the update itself failed.";
+                    completedMission.CompletedUtc = DateTime.UtcNow;
+                    await _Service.Transitions.TryTransitionAsync(completedMission, new[] { hardenStatusBefore }, MissionStatusEnum.Failed, null, token).ConfigureAwait(false);
+                    await _Context.MissionFailureCapture.RecordFailureAsync(completedMission, hardenStatusBefore, BlackBoxStepEnum.StageBranchHarden, dock, context =>
+                    {
+                        context.GitFacts = new BlackBoxGitFacts { BranchTip = headCommit, GitOperation = "update-ref refs/heads/" + completedMission.BranchName, WorktreeExisted = true };
+                    }, token).ConfigureAwait(false);
+                    return false;
+                }
+                if (advanced)
+                {
+                    _Logging.Debug(_Header + "stage-lag hardening: advanced branch " + completedMission.BranchName +
+                        " to " + headCommit + " from dock " + dock.Id + " before handoff from mission " + completedMission.Id);
+                }
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "stage-lag hardening failed for mission " + completedMission.Id + ": " + ex.ToString());
+            }
+            return true;
         }
 
         #endregion

@@ -107,7 +107,7 @@ how to find out which ones matter.
 | C2 | **Handoffs are excerpts, cut to length on two paths.** `PipelineHandoffContext` passes the previous stage's output cut to 3000 characters (first and last 1500); `MissionPromptBuilder` separately caps the previous stage's diff at 4000 characters. Both tell the reader to fetch the rest with `mission_status` or `get_mission_diff`. | A reader without MCP tools cannot fetch it that way; the middle of a review (often the findings) is lost; nothing says what was dropped. |
 | C3 | **The writer does not know the reader.** The Architect writes slice descriptions before the Worker's captain is chosen, and the Judge writes findings without knowing who will do the rework. | Handoffs are tuned for the writer's own abilities. |
 | C4 | **Escalation repeats the same prompt.** When rework escalates to a different captain, the new captain gets the same task spec plus the review, not a prompt that says what already failed. | The same work is paid for twice, and the stronger model has to work out again what went wrong. |
-| C5 | **Dense compound instructions.** For example, the rework instruction in `MissionService.Rework.cs` is one paragraph of about 150 words with eight separate demands. | Claude handles it; a small model does one or two of the eight. |
+| C5 | **Dense compound instructions.** For example, the rework instruction in `MissionReworkService.cs` is one paragraph of about 150 words with eight separate demands. | Claude handles it; a small model does one or two of the eight. |
 
 ### D. The runtime and environment (not the model's fault, but blamed on it)
 

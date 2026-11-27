@@ -2,22 +2,57 @@ namespace Armada.Core.Services
 {
     using System.Text;
     using System.Text.Json;
-    using SyslogLogging;
     using Armada.Core;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
-    using Armada.Core.Settings;
     using Armada.Core.Services.Interfaces;
+    using Armada.Core.Settings;
+    using SyslogLogging;
 
     /// <summary>
-    /// Judge and verifier rework: building and writing the rework chain.
+    /// Schedules Judge-requested rework of earlier stages.
     /// </summary>
-    public partial class MissionService
+    internal sealed class MissionReworkService
     {
-        #region Private-Methods
+        #region Private-Members
 
-        private async Task<bool> TryScheduleReworkAsync(Mission judge, CancellationToken token, Action<string>? onUnavailable = null,
+        private readonly MissionServiceContext _Context;
+        private readonly DatabaseDriver _Database;
+        private readonly string _Header;
+        private readonly LoggingModule _Logging;
+        private readonly ArmadaSettings _Settings;
+
+        private const string _ReworkTitlePrefix = IntegrationBarrier.ReworkTitlePrefix;
+
+        private const string _EscalatedMarker = IntegrationBarrier.EscalatedMarker;
+
+        #endregion
+
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="service">The mission service facade.</param>
+        /// <param name="context">State and services shared by the mission services.</param>
+        /// <exception cref="ArgumentNullException">A parameter is null.</exception>
+        internal MissionReworkService(MissionService service, MissionServiceContext context)
+        {
+            if (service == null) throw new ArgumentNullException(nameof(service));
+            _Context = context ?? throw new ArgumentNullException(nameof(context));
+            _Database = context.Database;
+            _Header = context.Header;
+            _Logging = context.Logging;
+            _Settings = context.Settings;
+        }
+
+        #endregion
+
+        #region Internal-Methods
+
+        internal async Task<bool> TryScheduleReworkAsync(Mission judge, CancellationToken token, Action<string>? onUnavailable = null,
             bool operatorRestart = false, Action<string>? onReviewerCreated = null, string? operatorGuidance = null)
         {
             bool Unavailable(string reason) { onUnavailable?.Invoke(reason); return false; }
@@ -79,7 +114,7 @@ namespace Armada.Core.Services
             if (decision.First.Action == RecoveryActionEnum.Escalate)
             {
                 string escalationTrigger = decision.First.Reason + " ";
-                if (await HasStrictCaptainOverrideAsync(worker, token).ConfigureAwait(false))
+                if (await _Context.MissionCaptainRouter.HasStrictCaptainOverrideAsync(worker, token).ConfigureAwait(false))
                     return Unavailable(escalationTrigger + "Strict captain selection prevents automatic escalation; no captain substitution was made.");
                 Captain? alternative = await CaptainEscalationSelector.SelectAsync(_Database, worker, worker.CaptainId, voyageMissions, token).ConfigureAwait(false);
                 if (alternative == null) return Unavailable(escalationTrigger + "No eligible Worker captain is available for Judge-requested escalation: none on a higher rung of the Worker persona's escalation ladder or, with no ladder, with a higher tier. Check captain availability, scope, tier, persona priorities and the escalation ladder.");
@@ -181,9 +216,9 @@ namespace Armada.Core.Services
             return true;
         }
 
-        private const string _ReworkTitlePrefix = IntegrationBarrier.ReworkTitlePrefix;
+        #endregion
 
-        private const string _EscalatedMarker = IntegrationBarrier.EscalatedMarker;
+        #region Private-Methods
 
         private static bool IsAncestorOf(Mission candidate, Mission descendant, Dictionary<string, Mission> byId)
         {

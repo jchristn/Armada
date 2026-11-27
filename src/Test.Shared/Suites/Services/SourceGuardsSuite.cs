@@ -86,6 +86,8 @@ namespace Test.Shared.Suites.Services
                     for (int i = 0; i < file.Code.Length; i++)
                     {
                         string code = file.Code[i];
+                        // The MissionService facade forwards IMissionService members to the class that owns them.
+                        if (file.Declares("MissionService") && _FacadeForward.IsMatch(code)) continue;
                         if (_BeginDispatchPassCall.IsMatch(code) && !_MethodDeclaration.IsMatch(code)) offenders.Add(file.Location(i) + " (dispatch pass)");
                         if (_DispatchPendingDeclaration.IsMatch(code)) offenders.Add(file.Location(i) + " (second dispatcher)");
                         if (_PendingEnumeration.IsMatch(code)) enumeratesPending = true;
@@ -118,6 +120,7 @@ namespace Test.Shared.Suites.Services
         private static readonly Regex _DescriptionMatch = new Regex(@"\b[dD]escription\w*\??\.(Contains|IndexOf|LastIndexOf|StartsWith|EndsWith)\(|Regex\.\w+\([^;]*[dD]escription", RegexOptions.Compiled);
         private static readonly Regex _TitleLookup = new Regex(@"Title\s*==[^;]*\[(Worker|Judge|Architect)\]|\[(Worker|Judge|Architect)\]""\s*==", RegexOptions.Compiled);
         private static readonly Regex _MessageMatch = new Regex(@"Message\??\.(Contains|IndexOf|LastIndexOf|StartsWith|EndsWith)\(|Regex\.\w+\([^;]*\.Message\b", RegexOptions.Compiled);
+        private static readonly Regex _FacadeForward = new Regex(@"^\s*=>\s*_Context\.\w+\.\w+\(", RegexOptions.Compiled);
         private static readonly Regex _BeginDispatchPassCall = new Regex(@"\bBeginDispatchPass\s*\(", RegexOptions.Compiled);
         private static readonly Regex _DispatchPendingDeclaration = new Regex(@"\bTask(<[^>]+>)?\s+Dispatch\w*Pending\w*Async\s*\(", RegexOptions.Compiled);
         private static readonly Regex _PendingEnumeration = new Regex(@"EnumerateByStatusAsync\(\s*MissionStatusEnum\.Pending\b", RegexOptions.Compiled);

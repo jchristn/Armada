@@ -249,12 +249,12 @@ namespace Test.Shared.Suites.Services
 
         private static string GetMissionServiceFallback(MissionService service, string templateName)
         {
-            MethodInfo? method = typeof(MissionService).GetMethod(
+            MethodInfo? method = typeof(MissionInstructionWriter).GetMethod(
                 "GetHardcodedFallback",
                 BindingFlags.Instance | BindingFlags.NonPublic);
             if (method == null) throw new InvalidOperationException("Could not find GetHardcodedFallback.");
 
-            return (string?)method.Invoke(service, new object[] { templateName }) ?? String.Empty;
+            return (string?)method.Invoke(service.Context.MissionInstructionWriter, new object[] { templateName }) ?? String.Empty;
         }
 
         private static string? ParseStructuredJudgeVerdictSignal(string line)

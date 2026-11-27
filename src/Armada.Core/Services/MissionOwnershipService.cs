@@ -4,21 +4,55 @@ namespace Armada.Core.Services
     using System.Collections.Generic;
     using System.Linq;
     using System.Text;
+    using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core;
+    using Armada.Core.BlackBox;
+    using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services.Interfaces;
+    using Armada.Core.Settings;
+    using SyslogLogging;
 
     /// <summary>
-    /// Path ownership in mission prompts (archive/CONCURRENCY_IMPROVEMENTS.md 10.2): <c>{ConcurrentSiblingPaths}</c> lists the
-    /// paths owned by voyage missions that may run at the same time (not this mission's ancestors or descendants) and
-    /// <c>{ParentSummary}</c> what its parent finished.
+    /// Owned-path parameters and sibling summaries for a mission's prompt.
     /// </summary>
-    public partial class MissionService
+    internal sealed class MissionOwnershipService
     {
+        #region Private-Members
+
+        private readonly DatabaseDriver _Database;
+        private readonly string _Header;
+        private readonly LoggingModule _Logging;
+
         private const int _MaxConcurrentPathsListed = 50;
 
-        private async Task AddOwnershipParamsAsync(Mission mission, Dictionary<string, string> templateParams, CancellationToken token)
+        #endregion
+
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="service">The mission service facade.</param>
+        /// <param name="context">State and services shared by the mission services.</param>
+        /// <exception cref="ArgumentNullException">A parameter is null.</exception>
+        internal MissionOwnershipService(MissionService service, MissionServiceContext context)
+        {
+            if (service == null) throw new ArgumentNullException(nameof(service));
+            if (context == null) throw new ArgumentNullException(nameof(context));
+            _Database = context.Database;
+            _Header = context.Header;
+            _Logging = context.Logging;
+        }
+
+        #endregion
+
+        #region Internal-Methods
+
+        internal async Task AddOwnershipParamsAsync(Mission mission, Dictionary<string, string> templateParams, CancellationToken token)
         {
             if (String.IsNullOrEmpty(mission.VoyageId)) return;
             try
@@ -74,7 +108,7 @@ namespace Armada.Core.Services
             for (int hops = 0; String.IsNullOrEmpty(root.ParentMissionId) && !String.IsNullOrEmpty(root.DependsOnMissionId) && hops < 64
                 && byId.TryGetValue(root.DependsOnMissionId!, out Mission? upstream); hops++) root = upstream;
             if (String.IsNullOrEmpty(root.ParentMissionId) || !byId.TryGetValue(root.ParentMissionId!, out Mission? parent)) return "";
-            Mission terminal = FindTerminalPipelineStage(voyage, parent);
+            Mission terminal = ArchitectFanOutService.FindTerminalPipelineStage(voyage, parent);
             StringBuilder text = new StringBuilder("\n   Your parent mission \"").Append(parent.Title).Append("\" (").Append(parent.Id).Append(") ")
                 .Append(terminal.Status == MissionStatusEnum.Complete || terminal.Status == MissionStatusEnum.WorkProduced ? "finished" : "is " + terminal.Status);
             string? branch = terminal.BranchName ?? parent.BranchName;
@@ -87,5 +121,6 @@ namespace Armada.Core.Services
             return text.ToString();
         }
 
+        #endregion
     }
 }

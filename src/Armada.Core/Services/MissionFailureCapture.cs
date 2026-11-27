@@ -2,28 +2,54 @@ namespace Armada.Core.Services
 {
     using System.Collections.Concurrent;
     using System.Runtime.CompilerServices;
+    using System.Text;
+    using System.Text.Json;
+    using Armada.Core;
     using Armada.Core.BlackBox;
+    using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services.Interfaces;
+    using Armada.Core.Settings;
+    using SyslogLogging;
 
     /// <summary>
-    /// Black box capture for the failure writes MissionService owns (dispatch, provision, completion, review, handoff).
-    /// Each site updates the mission row first and then records the failure here; the capture never throws.
+    /// Black box capture of mission failures and provisioning failures.
     /// </summary>
-    public partial class MissionService
+    internal sealed class MissionFailureCapture
     {
         #region Private-Members
+
+        private readonly MissionService _Service;
+        private readonly IDockService _Docks;
 
         private readonly ConcurrentDictionary<string, string> _ProvisionFailureCaptures = new ConcurrentDictionary<string, string>(StringComparer.Ordinal);
 
         #endregion
 
-        #region Private-Methods
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="service">The mission service facade.</param>
+        /// <param name="context">State and services shared by the mission services.</param>
+        /// <exception cref="ArgumentNullException">A parameter is null.</exception>
+        internal MissionFailureCapture(MissionService service, MissionServiceContext context)
+        {
+            _Service = service ?? throw new ArgumentNullException(nameof(service));
+            if (context == null) throw new ArgumentNullException(nameof(context));
+            _Docks = context.Docks;
+        }
+
+        #endregion
+
+        #region Internal-Methods
 
         // A provisioned dock ends the failure streak, so the next provision failure is captured again.
-        private void ForgetProvisionFailureCapture(string missionId) => _ProvisionFailureCaptures.TryRemove(missionId, out string? _);
+        internal void ForgetProvisionFailureCapture(string missionId) => _ProvisionFailureCaptures.TryRemove(missionId, out string? _);
 
-        private Task<string?> RecordFailureAsync(
+        internal Task<string?> RecordFailureAsync(
             Mission mission,
             MissionStatusEnum? statusBefore,
             BlackBoxStepEnum step,
@@ -34,14 +60,14 @@ namespace Armada.Core.Services
             [CallerFilePath] string callerFile = "",
             [CallerLineNumber] int callerLine = 0)
         {
-            return BlackBox.RecordMissionFailureAsync(mission, statusBefore, step, context =>
+            return _Service.BlackBox.RecordMissionFailureAsync(mission, statusBefore, step, context =>
             {
                 if (dock != null && context.Dock == null) context.Dock = dock;
                 configure?.Invoke(context);
             }, token, callerMember, callerFile, callerLine);
         }
 
-        private async Task RecordProvisionFailureAsync(Mission mission, Captain captain, string? harborId, Exception? exception, CancellationToken token,
+        internal async Task RecordProvisionFailureAsync(Mission mission, Captain captain, string? harborId, Exception? exception, CancellationToken token,
             [CallerMemberName] string callerMember = "",
             [CallerFilePath] string callerFile = "",
             [CallerLineNumber] int callerLine = 0)
@@ -56,7 +82,7 @@ namespace Armada.Core.Services
             _ProvisionFailureCaptures[mission.Id] = signature;
             if (_ProvisionFailureCaptures.Count > 10000) _ProvisionFailureCaptures.Clear();
 
-            await BlackBox.RecordMissionFailureAsync(mission, MissionStatusEnum.Assigned, step, context =>
+            await _Service.BlackBox.RecordMissionFailureAsync(mission, MissionStatusEnum.Assigned, step, context =>
             {
                 context.Captain = captain;
                 BlackBoxSiteFacts.ApplyException(context, cause);

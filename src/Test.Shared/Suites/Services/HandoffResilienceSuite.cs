@@ -831,19 +831,19 @@ namespace Test.Shared.Suites.Services
             {
                 using StageCheckFixture fx = await StageCheckFixture.CreateAsync("exit 3").ConfigureAwait(false);
                 BudgetExecutor executor = new BudgetExecutor();
-                var command = typeof(MissionService).GetMethod("RunStageCommandAsync", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
-                var baseline = typeof(MissionService).GetMethod("FailsOnBaseCommitAsync", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+                System.Reflection.MethodInfo command = typeof(StageCheckRunner).GetMethod("RunStageCommandAsync", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+                System.Reflection.MethodInfo baseline = typeof(StageCheckRunner).GetMethod("FailsOnBaseCommitAsync", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
                 DateTime deadline = DateTime.UtcNow.AddSeconds(2);
-                await ((Task<HostCommandResult>)command.Invoke(fx.Missions, new object[] { executor, false, fx.Repo, "check", deadline, CancellationToken.None })!).ConfigureAwait(false);
-                bool? unknown = await ((Task<bool?>)baseline.Invoke(fx.Missions, new object[] { executor, false, "vessel", fx.Repo, "base", "check", deadline, CancellationToken.None })!).ConfigureAwait(false);
+                await ((Task<HostCommandResult>)command.Invoke(fx.Missions.Context.StageCheckRunner, new object[] { executor, false, fx.Repo, "check", deadline, CancellationToken.None })!).ConfigureAwait(false);
+                bool? unknown = await ((Task<bool?>)baseline.Invoke(fx.Missions.Context.StageCheckRunner, new object[] { executor, false, "vessel", fx.Repo, "base", "check", deadline, CancellationToken.None })!).ConfigureAwait(false);
                 AssertNull(unknown, "baseline timeout is unverified");
                 AssertEqual(2, executor.CheckTimeouts.Count);
                 AssertTrue(executor.CheckTimeouts[1] <= executor.CheckTimeouts[0], "baseline receives only remaining time");
                 executor.Timeout = false;
-                bool? known = await ((Task<bool?>)baseline.Invoke(fx.Missions, new object[] { executor, false, "vessel", fx.Repo, "base", "check", deadline, CancellationToken.None })!).ConfigureAwait(false);
+                bool? known = await ((Task<bool?>)baseline.Invoke(fx.Missions.Context.StageCheckRunner, new object[] { executor, false, "vessel", fx.Repo, "base", "check", deadline, CancellationToken.None })!).ConfigureAwait(false);
                 AssertEqual(false, known, "the timed-out baseline was not cached");
                 int count = executor.CheckTimeouts.Count;
-                await ((Task<HostCommandResult>)command.Invoke(fx.Missions, new object[] { executor, false, fx.Repo, "check", DateTime.UtcNow.AddSeconds(-1), CancellationToken.None })!).ConfigureAwait(false);
+                await ((Task<HostCommandResult>)command.Invoke(fx.Missions.Context.StageCheckRunner, new object[] { executor, false, fx.Repo, "check", DateTime.UtcNow.AddSeconds(-1), CancellationToken.None })!).ConfigureAwait(false);
                 AssertEqual(count, executor.CheckTimeouts.Count, "expired budget starts no command");
             }));
 

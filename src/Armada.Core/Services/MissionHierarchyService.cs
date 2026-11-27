@@ -3,20 +3,60 @@ namespace Armada.Core.Services
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Text;
+    using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core;
+    using Armada.Core.BlackBox;
+    using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services.Interfaces;
+    using Armada.Core.Settings;
+    using SyslogLogging;
 
-    // Mission hierarchy (archive/CONCURRENCY_IMPROVEMENTS.md section 7, D13 to D18). ParentMissionId links logical missions: it
-    // always names a root, and a child root starts once its parent's terminal pipeline stage finishes.
-    public partial class MissionService
+    /// <summary>
+    /// Parent and child mission readiness and cancellation.
+    /// </summary>
+    internal sealed class MissionHierarchyService
     {
+        #region Private-Members
+
+        private readonly MissionService _Service;
+        private readonly MissionServiceContext _Context;
+        private readonly DatabaseDriver _Database;
+        private readonly string _Header;
+        private readonly LoggingModule _Logging;
+
         private static readonly MissionStatusEnum[] _ParentFailureStatuses = new[] { MissionStatusEnum.Failed, MissionStatusEnum.Cancelled, MissionStatusEnum.LandingFailed };
+
+        #endregion
+
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="service">The mission service facade.</param>
+        /// <param name="context">State and services shared by the mission services.</param>
+        /// <exception cref="ArgumentNullException">A parameter is null.</exception>
+        internal MissionHierarchyService(MissionService service, MissionServiceContext context)
+        {
+            _Service = service ?? throw new ArgumentNullException(nameof(service));
+            _Context = context ?? throw new ArgumentNullException(nameof(context));
+            _Database = context.Database;
+            _Header = context.Header;
+            _Logging = context.Logging;
+        }
+
+        #endregion
+
+        #region Internal-Methods
 
         // Gate 2: a child root waits for its parent's terminal stage. Returns the failed terminal stage when the parent
         // failed, so dispatch cancels the subtree (diagnostics never mutate).
-        private async Task<HierarchyReadiness> EvaluateParentReadinessAsync(Mission mission, CancellationToken token)
+        internal async Task<HierarchyReadiness> EvaluateParentReadinessAsync(Mission mission, CancellationToken token)
         {
             HierarchyReadiness readiness = new HierarchyReadiness();
             if (String.IsNullOrEmpty(mission.ParentMissionId) || !String.IsNullOrEmpty(mission.DependsOnMissionId)) return readiness;
@@ -44,18 +84,9 @@ namespace Armada.Core.Services
             return readiness;
         }
 
-        // The last stage of a logical mission: follow DependsOn links from the root within its voyage or vessel.
-        private async Task<Mission> TerminalStageAsync(Mission root, CancellationToken token)
-        {
-            List<Mission> scope = !String.IsNullOrEmpty(root.VoyageId)
-                ? await _Database.Missions.EnumerateByVoyageAsync(root.VoyageId!, token).ConfigureAwait(false)
-                : String.IsNullOrEmpty(root.VesselId) ? new List<Mission>() : await _Database.Missions.EnumerateByVesselAsync(root.VesselId!, token).ConfigureAwait(false);
-            return FindTerminalPipelineStage(scope, root);
-        }
-
         // D16: the first child in plan order (creation order) continues the parent's branch; later children fork from its
         // head so parallel siblings never share a branch. An explicit ContinueParent on a later child is downgraded.
-        private async Task ApplyHierarchyBranchAsync(Mission mission, Mission parentTerminal, CancellationToken token)
+        internal async Task ApplyHierarchyBranchAsync(Mission mission, Mission parentTerminal, CancellationToken token)
         {
             if (String.IsNullOrEmpty(parentTerminal.BranchName)) return;
             List<Mission> scope = !String.IsNullOrEmpty(mission.VoyageId)
@@ -76,7 +107,7 @@ namespace Armada.Core.Services
         }
 
         // D18: a failed, cancelled or unlanded parent cancels every Pending descendant with ParentFailed, breadth-first.
-        private async Task CancelDescendantsForFailedParentAsync(Mission child, Mission failedTerminal, CancellationToken token)
+        internal async Task CancelDescendantsForFailedParentAsync(Mission child, Mission failedTerminal, CancellationToken token)
         {
             Queue<Mission> pending = new Queue<Mission>();
             pending.Enqueue(child);
@@ -92,10 +123,10 @@ namespace Armada.Core.Services
                     latest.FailureKind = MissionFailureKindEnum.ParentFailed;
                     latest.FailureReason = "Cancelled because ancestor mission " + failedTerminal.Id + " ended " + failedTerminal.Status + ". Restart that mission to bring this one back.";
                     latest.CompletedUtc = DateTime.UtcNow;
-                    if (await Transitions.TryTransitionAsync(latest, new[] { MissionStatusEnum.Pending }, MissionStatusEnum.Cancelled, null, token).ConfigureAwait(false))
+                    if (await _Service.Transitions.TryTransitionAsync(latest, new[] { MissionStatusEnum.Pending }, MissionStatusEnum.Cancelled, null, token).ConfigureAwait(false))
                     {
                         _Logging.Info(_Header + "cancelled mission " + latest.Id + " because ancestor " + failedTerminal.Id + " ended " + failedTerminal.Status);
-                        await CancelDependentPipelineStagesAsync(latest, token).ConfigureAwait(false);
+                        await _Context.MissionHandoffService.CancelDependentPipelineStagesAsync(latest, token).ConfigureAwait(false);
                     }
                 }
                 foreach (Mission descendant in await ChildRootsAsync(latest, token).ConfigureAwait(false)) pending.Enqueue(descendant);
@@ -125,12 +156,25 @@ namespace Armada.Core.Services
                 {
                     MissionStatusEnum observed = member.Status;
                     member.FailureKind = null; member.FailureReason = null; member.CompletedUtc = null;
-                    if (await Transitions.TryTransitionAsync(member, new[] { observed }, MissionStatusEnum.Pending, null, token).ConfigureAwait(false)) restored.Add(member.Id);
+                    if (await _Service.Transitions.TryTransitionAsync(member, new[] { observed }, MissionStatusEnum.Pending, null, token).ConfigureAwait(false)) restored.Add(member.Id);
                 }
                 foreach (Mission descendant in await ChildRootsAsync(child, token).ConfigureAwait(false)) queue.Enqueue(descendant);
             }
             if (restored.Count > 0) _Logging.Info(_Header + "restart of " + parent.Id + " restored " + restored.Count + " descendant mission(s) cancelled with ParentFailed");
             return restored;
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        // The last stage of a logical mission: follow DependsOn links from the root within its voyage or vessel.
+        private async Task<Mission> TerminalStageAsync(Mission root, CancellationToken token)
+        {
+            List<Mission> scope = !String.IsNullOrEmpty(root.VoyageId)
+                ? await _Database.Missions.EnumerateByVoyageAsync(root.VoyageId!, token).ConfigureAwait(false)
+                : String.IsNullOrEmpty(root.VesselId) ? new List<Mission>() : await _Database.Missions.EnumerateByVesselAsync(root.VesselId!, token).ConfigureAwait(false);
+            return ArchitectFanOutService.FindTerminalPipelineStage(scope, root);
         }
 
         private async Task<List<Mission>> ChildRootsAsync(Mission parent, CancellationToken token)
@@ -140,5 +184,7 @@ namespace Armada.Core.Services
                 : String.IsNullOrEmpty(parent.VesselId) ? new List<Mission>() : await _Database.Missions.EnumerateByVesselAsync(parent.VesselId!, token).ConfigureAwait(false);
             return scope.Where(m => m.ParentMissionId == parent.Id && String.IsNullOrEmpty(m.DependsOnMissionId)).OrderBy(m => m.CreatedUtc).ToList();
         }
+
+        #endregion
     }
 }

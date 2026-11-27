@@ -3,21 +3,63 @@ namespace Armada.Core.Services
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Text;
+    using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core;
+    using Armada.Core.BlackBox;
+    using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
+    using SyslogLogging;
 
-    public partial class MissionService
+    /// <summary>
+    /// Usage-based captain selection: policy evaluation, selection waits, and selection telemetry.
+    /// </summary>
+    internal sealed class MissionUsageSelector
     {
-        /// <summary>Stable Admiral credential-host identity. Required for local usage enforcement; the server supplies its protected usage identity.</summary>
-        public string? UsageSelectionLocalHostId { get; set; }
+        #region Private-Members
 
-        private readonly UsageSelectionBlockerStore _UsageSelection = new UsageSelectionBlockerStore();
+        private readonly MissionService _Service;
+        private readonly MissionServiceContext _Context;
+        private readonly DatabaseDriver _Database;
+        private readonly string _Header;
+        private readonly MissionLaunchBackoff _LaunchBackoff;
+        private readonly LoggingModule _Logging;
+        private readonly ArmadaSettings _Settings;
+        private readonly UsageSelectionBlockerStore _UsageSelection;
+
+        #endregion
+
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="service">The mission service facade.</param>
+        /// <param name="context">State and services shared by the mission services.</param>
+        /// <exception cref="ArgumentNullException">A parameter is null.</exception>
+        internal MissionUsageSelector(MissionService service, MissionServiceContext context)
+        {
+            _Service = service ?? throw new ArgumentNullException(nameof(service));
+            _Context = context ?? throw new ArgumentNullException(nameof(context));
+            _Database = context.Database;
+            _Header = context.Header;
+            _LaunchBackoff = context.LaunchBackoff;
+            _Logging = context.Logging;
+            _Settings = context.Settings;
+            _UsageSelection = context.UsageSelection;
+        }
+
+        #endregion
+
+        #region Internal-Methods
 
         /// <inheritdoc />
-        public void ReconsiderCaptainSelection(Mission mission)
+        internal void ReconsiderCaptainSelection(Mission mission)
         {
             ArgumentNullException.ThrowIfNull(mission);
             _UsageSelection.ClearBlocker(mission.Id);
@@ -26,7 +68,7 @@ namespace Armada.Core.Services
 
         // A mission pinned to a captain that cannot run now says what an administrator can authorize: fallback to another
         // captain (when others were excluded only for needing that permission) or a soft-reserve exception for the pinned one.
-        private static MissionAssignmentBlocker AddRecoveryAdvice(MissionAssignmentBlocker blocker, Mission mission, UsageSelectionSnapshot usage)
+        internal static MissionAssignmentBlocker AddRecoveryAdvice(MissionAssignmentBlocker blocker, Mission mission, UsageSelectionSnapshot usage)
         {
             if (usage.Settings.Mode != UsageSelectionModeEnum.Enforce || String.IsNullOrEmpty(mission.RequestedCaptainId)) return blocker;
             if (mission.UsageRecovery?.AllowFallback != true && usage.Evaluation.Candidates.Any(c => c.ReasonCode == UsageSelectionReasonCodes.FallbackPermissionRequired))
@@ -39,12 +81,12 @@ namespace Armada.Core.Services
             return blocker;
         }
 
-        private void NotifySelectionChanged(Mission mission, string? decisionId, string outcome)
+        internal void NotifySelectionChanged(Mission mission, string? decisionId, string outcome)
         {
-            if (OnCaptainSelectionChanged == null || String.IsNullOrEmpty(mission.TenantId)) return;
+            if (_Service.OnCaptainSelectionChanged == null || String.IsNullOrEmpty(mission.TenantId)) return;
             try
             {
-                OnCaptainSelectionChanged(new CaptainSelectionChange { TenantId = mission.TenantId, UserId = mission.UserId,
+                _Service.OnCaptainSelectionChanged(new CaptainSelectionChange { TenantId = mission.TenantId, UserId = mission.UserId,
                     MissionId = mission.Id, VoyageId = mission.VoyageId, DecisionId = decisionId, Outcome = outcome });
             }
             catch (Exception ex)
@@ -53,26 +95,26 @@ namespace Armada.Core.Services
             }
         }
 
-        private string UsagePolicyKey() => System.Text.Json.JsonSerializer.Serialize(_Settings.EffectiveUsageSelection);
+        internal string UsagePolicyKey() => System.Text.Json.JsonSerializer.Serialize(_Settings.EffectiveUsageSelection);
 
-        private bool UsageRetryPending(Mission mission)
+        internal bool UsageRetryPending(Mission mission)
         {
             return _UsageSelection.TryGetBlocker(mission.Id, out UsageSelectionTransientBlocker? failure)
                 && failure.PolicyKey == UsagePolicyKey() && failure.RetryUtc > DateTime.UtcNow;
         }
 
-        private static MissionAssignmentBlocker UsageBlocker(string? code, string summary)
+        internal static MissionAssignmentBlocker UsageBlocker(string? code, string summary)
             => new MissionAssignmentBlocker { Reason = MissionAssignmentBlockerReasonEnum.NoEligibleCaptain, SelectionReasonCode = code, Summary = summary };
 
-        private void UsageWait(Mission mission, string code, string summary)
+        internal void UsageWait(Mission mission, string code, string summary)
         {
-            NoteWait(mission, UsageBlocker(code, summary), MissionWaitGateEnum.CaptainSlot, code);
+            _Context.MissionWaitCoordinator.NoteWait(mission, UsageBlocker(code, summary), MissionWaitGateEnum.CaptainSlot, code);
             _UsageSelection.SetBlockerBounded(mission.Id, new UsageSelectionTransientBlocker
             {
                 PolicyKey = UsagePolicyKey(), RetryUtc = DateTime.UtcNow.AddSeconds(_Settings.EffectiveUsageSelection.UnknownRetrySeconds),
                 Blocker = new MissionAssignmentBlocker { Reason = MissionAssignmentBlockerReasonEnum.NoEligibleCaptain,
                     SelectionReasonCode = code, Summary = summary }
-            }, _MaxEnvelopeDecisionsTracked);
+            }, WorkerEnvelopeService._MaxEnvelopeDecisionsTracked);
         }
 
         /// <summary>Read-only current-state selection preview using shared readiness, eligibility and routing rules.</summary>
@@ -81,7 +123,7 @@ namespace Armada.Core.Services
         /// <param name="pageSize">Comparison rows, 1..1000.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>Authorized candidate explanations without account keys or writes.</returns>
-        public async Task<CaptainSelectionPreview> PreviewCaptainSelectionAsync(Mission mission, int pageNumber = 1, int pageSize = 25, CancellationToken token = default)
+        internal async Task<CaptainSelectionPreview> PreviewCaptainSelectionAsync(Mission mission, int pageNumber = 1, int pageSize = 25, CancellationToken token = default)
         {
             ArgumentNullException.ThrowIfNull(mission);
             if (pageNumber < 1 || pageSize < 1 || pageSize > 1000 || (long)(pageNumber - 1) * pageSize > Int32.MaxValue)
@@ -93,7 +135,7 @@ namespace Armada.Core.Services
             if (mission.Status != MissionStatusEnum.Pending) readiness = UsageSelectionReasonCodes.MissionNotPending;
             else if (String.IsNullOrEmpty(mission.TenantId)) readiness = UsageSelectionReasonCodes.MissionScopeUnavailable;
             else if (_LaunchBackoff.TryGet(mission.Id, out MissionLaunchFailure? backoff) && DateTime.UtcNow < backoff.NextAttemptUtc
-                && !await HasUntriedIdleCaptainAsync(mission, backoff, token).ConfigureAwait(false)) readiness = UsageSelectionReasonCodes.LaunchRetryPending;
+                && !await _Context.MissionLauncher.HasUntriedIdleCaptainAsync(mission, backoff, token).ConfigureAwait(false)) readiness = UsageSelectionReasonCodes.LaunchRetryPending;
             else if (!String.IsNullOrWhiteSpace(mission.VoyageId))
             {
                 Voyage? voyage = await _Database.Voyages.ReadAsync(mission.VoyageId, token).ConfigureAwait(false);
@@ -104,12 +146,12 @@ namespace Armada.Core.Services
             {
                 Vessel? vessel = String.IsNullOrEmpty(mission.VesselId) ? null : await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
                 if (vessel == null) readiness = UsageSelectionReasonCodes.VesselMissing;
-                else if (UsesSharedLocalAndWorkingDirectory(vessel)) readiness = UsageSelectionReasonCodes.VesselMisconfigured;
+                else if (MissionCaptainRouter.UsesSharedLocalAndWorkingDirectory(vessel)) readiness = UsageSelectionReasonCodes.VesselMisconfigured;
                 else
                 {
-                    MissionAssignmentBlocker? blocker = (await EvaluateReadinessAdmissionAsync(mission, token).ConfigureAwait(false)).Blocker
-                        ?? await EvaluateSafetyAdmissionAsync(mission, vessel, token).ConfigureAwait(false)
-                        ?? await EvaluateGlobalAdmissionAsync(token).ConfigureAwait(false);
+                    MissionAssignmentBlocker? blocker = (await _Context.MissionAdmissionPipeline.EvaluateReadinessAdmissionAsync(mission, token).ConfigureAwait(false)).Blocker
+                        ?? await _Context.MissionAdmissionPipeline.EvaluateSafetyAdmissionAsync(mission, vessel, token).ConfigureAwait(false)
+                        ?? await _Context.MissionCaptainRouter.EvaluateGlobalAdmissionAsync(token).ConfigureAwait(false);
                     readiness = blocker?.Reason.ToString();
                 }
             }
@@ -119,11 +161,11 @@ namespace Armada.Core.Services
                 preview.Candidates = EnumerationResult<CaptainSelectionCandidateView>.Create(new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize }, new List<CaptainSelectionCandidateView>(), 0);
                 return preview;
             }
-            CaptainAdmissionSelection selection = await SelectCaptainAdmissionAsync(mission, token).ConfigureAwait(false);
+            CaptainAdmissionSelection selection = await _Context.MissionAdmissionPipeline.SelectCaptainAdmissionAsync(mission, token).ConfigureAwait(false);
             UsageSelectionSnapshot snapshot = await BuildUsageSelectionAsync(selection, settings, token).ConfigureAwait(false);
             if (settings.Mode == UsageSelectionModeEnum.Enforce) snapshot.ActualCaptainId = snapshot.Evaluation.SelectedCaptainId;
-            bool placementWaiting = snapshot.ActualCaptainId != null && CanAssignMissionAsync != null
-                && !await CanAssignMissionAsync(selection.Mission, snapshot.Captains[snapshot.ActualCaptainId]).ConfigureAwait(false);
+            bool placementWaiting = snapshot.ActualCaptainId != null && _Service.CanAssignMissionAsync != null
+                && !await _Service.CanAssignMissionAsync(selection.Mission, snapshot.Captains[snapshot.ActualCaptainId]).ConfigureAwait(false);
             if (placementWaiting) snapshot.ActualCaptainId = null;
             preview.EvaluatedUtc = snapshot.EvaluatedUtc; preview.ActualCaptainId = snapshot.ActualCaptainId;
             preview.HypotheticalCaptainId = snapshot.Evaluation.SelectedCaptainId; preview.ReasonCode = placementWaiting ? UsageSelectionReasonCodes.PlacementWaiting : snapshot.Evaluation.ReasonCode;
@@ -141,7 +183,7 @@ namespace Armada.Core.Services
             return preview;
         }
 
-        private async Task<bool> RecordUsageSelectionWaitAsync(UsageSelectionSnapshot snapshot, Mission mission, CancellationToken token, string? reason = null)
+        internal async Task<bool> RecordUsageSelectionWaitAsync(UsageSelectionSnapshot snapshot, Mission mission, CancellationToken token, string? reason = null)
         {
             try
             {
@@ -173,35 +215,7 @@ namespace Armada.Core.Services
             }
         }
 
-        /// <summary>Event type recorded when a mission enters a materially new captain-selection waiting state.</summary>
-        public const string SelectionWaitingEventType = "mission.selection_waiting";
-
-        // Material waiting states are already deduplicated by fingerprint, so this records one event per state change.
-        private async Task RecordSelectionWaitingEventAsync(Mission mission, CaptainSelectionDecision decision, CancellationToken token)
-        {
-            try
-            {
-                ArmadaEvent evt = new ArmadaEvent(SelectionWaitingEventType, "Waiting for captain selection: " + UsageSelectionText.ForReason(decision.PrimaryReasonCode));
-                evt.TenantId = mission.TenantId;
-                evt.UserId = mission.UserId;
-                evt.EntityType = "mission";
-                evt.EntityId = mission.Id;
-                evt.MissionId = mission.Id;
-                evt.VesselId = mission.VesselId;
-                evt.VoyageId = mission.VoyageId;
-                evt.Payload = System.Text.Json.JsonSerializer.Serialize(new CaptainSelectionWaitingEvent
-                {
-                    DecisionId = decision.Id, Mode = decision.Mode, ReasonCode = decision.PrimaryReasonCode, NextReconsiderUtc = decision.NextReconsiderUtc
-                });
-                await _Database.Events.CreateAsync(evt, token).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
-            {
-                _Logging.Warn(_Header + "could not record the selection waiting event for mission " + mission.Id + ": " + ex.Message);
-            }
-        }
-
-        private async Task<bool> OwnsSelectionCleanupAsync(Mission mission)
+        internal async Task<bool> OwnsSelectionCleanupAsync(Mission mission)
         {
             if (String.IsNullOrEmpty(mission.TenantId) || String.IsNullOrEmpty(mission.UsageAdmissionExecutionKey)) return true;
             try
@@ -214,14 +228,14 @@ namespace Armada.Core.Services
             catch (System.Data.Common.DbException) { return true; }
         }
 
-        private async Task ReleaseSelectionIfUnstartedAsync(Mission mission, Captain captain)
+        internal async Task ReleaseSelectionIfUnstartedAsync(Mission mission, Captain captain)
         {
             if (String.IsNullOrEmpty(mission.UsageAdmissionExecutionKey)) return;
             try { await _Database.CaptainSelections.ReleaseUnstartedAsync(mission.TenantId!, mission.Id, captain.Id, mission.UsageAdmissionExecutionKey, CancellationToken.None).ConfigureAwait(false); }
             catch (System.Data.Common.DbException) { _Logging.Warn(_Header + "unstarted usage release could not be persisted for mission " + mission.Id + "; retaining conservative debt"); }
         }
 
-        private async Task RecordSelectionExecutionStartedAsync(Mission mission, CancellationToken token)
+        internal async Task RecordSelectionExecutionStartedAsync(Mission mission, CancellationToken token)
         {
             if (String.IsNullOrWhiteSpace(mission.TenantId)) return;
             try
@@ -239,7 +253,7 @@ namespace Armada.Core.Services
             { _Logging.Warn(_Header + "selection execution evidence could not be recorded for mission " + mission.Id); }
         }
 
-        private async Task RecordSelectionModelReportAsync(Mission mission, string? reportedModel, CancellationToken token)
+        internal async Task RecordSelectionModelReportAsync(Mission mission, string? reportedModel, CancellationToken token)
         {
             if (String.IsNullOrWhiteSpace(mission.TenantId) || String.IsNullOrWhiteSpace(reportedModel)) return;
             string? sanitized = UsageSelectionEvidenceSanitizer.Label(reportedModel);
@@ -263,7 +277,7 @@ namespace Armada.Core.Services
         }
 
         // Admission outcome labels: Admitted, Replayed (already committed) or Conflict (slot, revision or evidence changed).
-        private static void RecordAdmissionTelemetry(CaptainSelectionStage stage, UsageSelectionSnapshot snapshot, CaptainSelectionRecordSet records, CaptainSelectionAdmissionReceipt receipt)
+        internal static void RecordAdmissionTelemetry(CaptainSelectionStage stage, UsageSelectionSnapshot snapshot, CaptainSelectionRecordSet records, CaptainSelectionAdmissionReceipt receipt)
         {
             string outcome = receipt.Claimed ? CaptainSelectionOutcomes.Admitted : receipt.AlreadyCommitted ? "Replayed" : "Conflict";
             stage.Complete(outcome);
@@ -273,7 +287,7 @@ namespace Armada.Core.Services
                 CaptainSelectionTelemetry.ObserveDivergence(snapshot.Settings.Strategy);
         }
 
-        private async Task<UsageSelectionSnapshot> BuildUsageSelectionAsync(CaptainAdmissionSelection selection, UsageSelectionSettings settings, CancellationToken token)
+        internal async Task<UsageSelectionSnapshot> BuildUsageSelectionAsync(CaptainAdmissionSelection selection, UsageSelectionSettings settings, CancellationToken token)
         {
             UsageSelectionSnapshot snapshot = new UsageSelectionSnapshot { Settings = settings, Recovery = selection.Mission.UsageRecovery, EvaluatedUtc = DateTime.UtcNow,
                 ActualCaptainId = selection.Selected?.Id, CaptureEnabled = _Settings.UsageCapture.EffectiveEnabled, Captains = selection.Visible.ToDictionary(c => c.Id, StringComparer.Ordinal),
@@ -315,7 +329,7 @@ namespace Armada.Core.Services
                     RoutingBucket = buckets.TryGetValue(captain.Id, out int bucket) ? bucket : Int32.MaxValue,
                     FirstAvailableRank = ranks.TryGetValue(captain.Id, out int rank) ? rank : Int32.MaxValue,
                     HasAuthoritativeQuotaHold = captain.QuarantineUntilUtc > snapshot.EvaluatedUtc && UsageQuotaHold.IsQuotaOwned(captain.QuarantineReason) };
-                CaptainEligibilityFailure? failure = EvaluateCaptainIneligibility(captain, selection.Mission, selection.Eligibility);
+                CaptainEligibilityFailure? failure = MissionCaptainRouter.EvaluateCaptainIneligibility(captain, selection.Mission, selection.Eligibility);
                 candidate.IneligibilityReason = failure?.Code;
                 if (selection.CapacityExclusions.TryGetValue(captain.Id, out MissionAssignmentBlocker? capacity)) candidate.IneligibilityReason = capacity.Reason.ToString();
                 if (candidate.IneligibilityReason == null && !buckets.ContainsKey(captain.Id)) candidate.IneligibilityReason = UsageSelectionReasonCodes.RoutingPreferenceExcluded;
@@ -332,5 +346,36 @@ namespace Armada.Core.Services
             }
             return snapshot;
         }
+
+        #endregion
+
+        #region Private-Methods
+
+        // Material waiting states are already deduplicated by fingerprint, so this records one event per state change.
+        private async Task RecordSelectionWaitingEventAsync(Mission mission, CaptainSelectionDecision decision, CancellationToken token)
+        {
+            try
+            {
+                ArmadaEvent evt = new ArmadaEvent(MissionService.SelectionWaitingEventType, "Waiting for captain selection: " + UsageSelectionText.ForReason(decision.PrimaryReasonCode));
+                evt.TenantId = mission.TenantId;
+                evt.UserId = mission.UserId;
+                evt.EntityType = "mission";
+                evt.EntityId = mission.Id;
+                evt.MissionId = mission.Id;
+                evt.VesselId = mission.VesselId;
+                evt.VoyageId = mission.VoyageId;
+                evt.Payload = System.Text.Json.JsonSerializer.Serialize(new CaptainSelectionWaitingEvent
+                {
+                    DecisionId = decision.Id, Mode = decision.Mode, ReasonCode = decision.PrimaryReasonCode, NextReconsiderUtc = decision.NextReconsiderUtc
+                });
+                await _Database.Events.CreateAsync(evt, token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
+            {
+                _Logging.Warn(_Header + "could not record the selection waiting event for mission " + mission.Id + ": " + ex.Message);
+            }
+        }
+
+        #endregion
     }
 }

@@ -1,18 +1,55 @@
 namespace Armada.Core.Services
 {
     using System;
+    using System.Text;
+    using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core;
+    using Armada.Core.BlackBox;
+    using Armada.Core.Database;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services.Interfaces;
+    using Armada.Core.Settings;
+    using SyslogLogging;
 
     /// <summary>
-    /// Branch durability at completion: the mission branch in the dock's repository must hold the produced commit, so a
-    /// landing, a retry or a dock repair can always rebuild the work from the branch even if the dock directory is lost.
+    /// Makes sure a mission branch holds its commit before the dock is released.
     /// </summary>
-    public partial class MissionService
+    internal sealed class BranchDurabilityService
     {
-        #region Private-Methods
+        #region Private-Members
+
+        private readonly MissionServiceContext _Context;
+        private readonly DatabaseDriver _Database;
+        private readonly IGitService? _Git;
+        private readonly string _Header;
+        private readonly LoggingModule _Logging;
+
+        #endregion
+
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="service">The mission service facade.</param>
+        /// <param name="context">State and services shared by the mission services.</param>
+        /// <exception cref="ArgumentNullException">A parameter is null.</exception>
+        internal BranchDurabilityService(MissionService service, MissionServiceContext context)
+        {
+            if (service == null) throw new ArgumentNullException(nameof(service));
+            _Context = context ?? throw new ArgumentNullException(nameof(context));
+            _Database = context.Database;
+            _Git = context.Git;
+            _Header = context.Header;
+            _Logging = context.Logging;
+        }
+
+        #endregion
+
+        #region Internal-Methods
 
         /// <summary>
         /// Check that the mission branch in the owning repository points at the produced commit, fast-forward it when the
@@ -20,13 +57,13 @@ namespace Armada.Core.Services
         /// mission.branch_verified or mission.branch_unverified event. Never pushes, so vessels without a remote and
         /// LandingMode None are unaffected. Best effort: a failure is recorded, not thrown.
         /// </summary>
-        private async Task EnsureBranchHoldsCommitAsync(Mission mission, Dock dock, CancellationToken token)
+        internal async Task EnsureBranchHoldsCommitAsync(Mission mission, Dock dock, CancellationToken token)
         {
             if (String.IsNullOrEmpty(mission.CommitHash) || String.IsNullOrEmpty(dock.WorktreePath)) return;
             string? branch = !String.IsNullOrEmpty(mission.BranchName) ? mission.BranchName : dock.BranchName;
             if (String.IsNullOrEmpty(branch)) return;
 
-            DockHost? harborHost = HarborHostFor(dock);
+            DockHost? harborHost = _Context.StageCheckRunner.HarborHostFor(dock);
             IGitService? git = harborHost != null ? harborHost.Git : _Git;
             if (git == null) return;
 
@@ -88,6 +125,10 @@ namespace Armada.Core.Services
                 _Logging.Warn(_Header + "could not record the branch check for mission " + mission.Id + ": " + ex.Message);
             }
         }
+
+        #endregion
+
+        #region Private-Methods
 
         private static async Task<string?> BranchTipAsync(IGitService git, string repository, string branch, CancellationToken token)
         {

@@ -259,7 +259,7 @@ namespace Test.Shared.Suites.Services
             {
                 using TestDatabase t = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
                 using BlackBoxRuntime bb = BlackBoxTestKit.Runtime(t.Driver);
-                System.Reflection.MethodInfo? method = typeof(MissionService).GetMethod("TryFailMissionForScopeViolationAsync", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                System.Reflection.MethodInfo? method = typeof(MissionScopeGuard).GetMethod("TryFailMissionForScopeViolationAsync", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
                 AssertNotNull(method, "reference site exists");
                 System.Reflection.PropertyInfo? prop = typeof(MissionService).GetProperty("BlackBox");
                 AssertNotNull(prop, "MissionService.BlackBox property");

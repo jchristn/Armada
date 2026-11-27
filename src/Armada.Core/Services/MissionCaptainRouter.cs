@@ -2,81 +2,72 @@ namespace Armada.Core.Services
 {
     using System.Text;
     using System.Text.Json;
-    using SyslogLogging;
     using Armada.Core;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
-    using Armada.Core.Settings;
     using Armada.Core.Services.Interfaces;
+    using Armada.Core.Settings;
+    using SyslogLogging;
 
     /// <summary>
-    /// Captain routing: eligibility, persona defaults, tiers, captain overrides and per-vessel active missions.
+    /// Routes a mission to a captain: eligibility, persona and tier rules, preferred captains, and routing notes.
     /// </summary>
-    public partial class MissionService
+    internal sealed class MissionCaptainRouter
     {
         #region Private-Members
+
+        private readonly MissionServiceContext _Context;
+        private readonly DatabaseDriver _Database;
+        private readonly string _Header;
+        private readonly MissionLaunchBackoff _LaunchBackoff;
+        private readonly LoggingModule _Logging;
+        private readonly ArmadaSettings _Settings;
 
         private PersonaOutcomeStatsService? _OutcomeStats = null;
 
         #endregion
 
-        #region Private-Methods
+        #region Constructors-and-Factories
 
-        private async Task<bool> HasStrictCaptainOverrideAsync(Mission mission, CancellationToken token)
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="service">The mission service facade.</param>
+        /// <param name="context">State and services shared by the mission services.</param>
+        /// <exception cref="ArgumentNullException">A parameter is null.</exception>
+        internal MissionCaptainRouter(MissionService service, MissionServiceContext context)
+        {
+            if (service == null) throw new ArgumentNullException(nameof(service));
+            _Context = context ?? throw new ArgumentNullException(nameof(context));
+            _Database = context.Database;
+            _Header = context.Header;
+            _LaunchBackoff = context.LaunchBackoff;
+            _Logging = context.Logging;
+            _Settings = context.Settings;
+        }
+
+        #endregion
+
+        #region Internal-Methods
+
+        /// <summary>
+        /// The persona a mission is routed as: its own, or Worker for a mission dispatched without one (a plain dispatch
+        /// with no pipeline, create_mission, a fleet action), so persona captain priorities and voyage captain
+        /// assignments apply to it like any Worker stage.
+        /// </summary>
+        internal static string RoutingPersona(Mission mission)
+        {
+            return String.IsNullOrWhiteSpace(mission.Persona) ? PersonaCatalog.Worker : mission.Persona!.Trim();
+        }
+
+        internal async Task<bool> HasStrictCaptainOverrideAsync(Mission mission, CancellationToken token)
         {
             List<CaptainAssignmentOverride> overrides = await ReadVoyageCaptainOverridesAsync(mission.VoyageId, token).ConfigureAwait(false);
             CaptainAssignmentOverride? chosen = overrides.FirstOrDefault(o => PersonaCatalog.Matches(o.Persona, RoutingPersona(mission)))
                 ?? overrides.FirstOrDefault(o => o.Persona == "*" || String.IsNullOrEmpty(o.Persona));
             return chosen?.StrictCaptain == true && !String.IsNullOrEmpty(chosen.CaptainId);
-        }
-
-        private async Task<HashSet<string>> ReviewAuthorCaptainIdsAsync(Mission mission, CancellationToken token)
-        {
-            HashSet<string> authors = new HashSet<string>(StringComparer.Ordinal);
-            if (!PersonaCatalog.Matches(mission.Persona, PersonaCatalog.Judge)) return authors;
-            HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal) { mission.Id };
-            string? parentId = mission.DependsOnMissionId;
-            if (String.IsNullOrEmpty(parentId)) return authors;
-
-            // Parents of a voyage mission come from one summary read of the voyage instead of one read per hop (RS-10.3).
-            Dictionary<string, MissionSummary>? voyage = null;
-            if (!String.IsNullOrEmpty(mission.VoyageId))
-            {
-                voyage = new Dictionary<string, MissionSummary>(StringComparer.Ordinal);
-                foreach (MissionSummary summary in await _Database.Missions.EnumerateSummariesByVoyageAsync(mission.VoyageId, token).ConfigureAwait(false))
-                    voyage[summary.Id] = summary;
-            }
-
-            while (!String.IsNullOrEmpty(parentId) && seen.Add(parentId))
-            {
-                string? parentVoyageId;
-                string? parentPersona;
-                string? parentCaptainId;
-                string? nextId;
-                if (voyage != null)
-                {
-                    if (!voyage.TryGetValue(parentId, out MissionSummary? summary)) break;
-                    parentVoyageId = summary.VoyageId;
-                    parentPersona = summary.Persona;
-                    parentCaptainId = summary.CaptainId;
-                    nextId = summary.DependsOnMissionId;
-                }
-                else
-                {
-                    Mission? parent = await _Database.Missions.ReadAsync(parentId, token).ConfigureAwait(false);
-                    if (parent == null) break;
-                    parentVoyageId = parent.VoyageId;
-                    parentPersona = parent.Persona;
-                    parentCaptainId = parent.CaptainId;
-                    nextId = parent.DependsOnMissionId;
-                }
-                if (parentVoyageId != mission.VoyageId || PersonaCatalog.Matches(parentPersona, PersonaCatalog.Judge)) break;
-                if (!String.IsNullOrEmpty(parentCaptainId)) authors.Add(parentCaptainId);
-                if (PersonaCatalog.Matches(parentPersona, PersonaCatalog.Worker)) break;
-                parentId = nextId;
-            }
-            return authors;
         }
 
         /// <summary>
@@ -98,16 +89,16 @@ namespace Armada.Core.Services
             return CaptainIneligibilityReason(captain, mission, context);
         }
 
-        private async Task<CaptainEligibilityContext> BuildCaptainEligibilityContextAsync(Mission mission, CancellationToken token)
+        internal async Task<CaptainEligibilityContext> BuildCaptainEligibilityContextAsync(Mission mission, CancellationToken token)
         {
             CaptainEligibilityContext context = new CaptainEligibilityContext();
             context.RoutingPersona = RoutingPersona(mission);
             if (!String.IsNullOrEmpty(mission.RequestedCaptainId))
             {
-                Captain? requested = await PassCaptainAsync(mission.RequestedCaptainId, token).ConfigureAwait(false);
+                Captain? requested = await _Context.MissionDispatchPass.PassCaptainAsync(mission.RequestedCaptainId, token).ConfigureAwait(false);
                 context.InactiveRequestedCaptain = requested?.Active == false;
             }
-            List<Captain> visible = (await PassCaptainsAsync(token).ConfigureAwait(false)).Where(c => CaptainVisibleToMission(c, mission)).ToList();
+            List<Captain> visible = (await _Context.MissionDispatchPass.PassCaptainsAsync(token).ConfigureAwait(false)).Where(c => CaptainVisibleToMission(c, mission)).ToList();
             // Review authors only change eligibility when they are excluded; otherwise they are merely less preferred. Both the
             // exclusion and the Judge strength rule compare models, so another captain on an author's model counts as an author.
             await AddJudgeRulesAsync(context, mission, visible, token).ConfigureAwait(false);
@@ -122,16 +113,16 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(mission.RequestedCaptainId))
             {
                 context.DefaultCaptainId = await PersonaDefaultCaptainIdAsync(mission, context.RoutingPersona, token).ConfigureAwait(false);
-                context.Persona = await PassPersonaAsync(mission.TenantId, context.RoutingPersona, mission.UserId, token).ConfigureAwait(false);
+                context.Persona = await _Context.MissionDispatchPass.PassPersonaAsync(mission.TenantId, context.RoutingPersona, mission.UserId, token).ConfigureAwait(false);
             }
-            context.EnvelopeGate = await BuildWorkerEnvelopeGateAsync(mission, token).ConfigureAwait(false);
+            context.EnvelopeGate = await _Context.WorkerEnvelopeService.BuildWorkerEnvelopeGateAsync(mission, token).ConfigureAwait(false);
             return context;
         }
 
-        private static string? CaptainIneligibilityReason(Captain captain, Mission mission, CaptainEligibilityContext context)
+        internal static string? CaptainIneligibilityReason(Captain captain, Mission mission, CaptainEligibilityContext context)
             => EvaluateCaptainIneligibility(captain, mission, context)?.Summary;
 
-        private static CaptainEligibilityFailure? EvaluateCaptainIneligibility(Captain captain, Mission mission, CaptainEligibilityContext context)
+        internal static CaptainEligibilityFailure? EvaluateCaptainIneligibility(Captain captain, Mission mission, CaptainEligibilityContext context)
         {
             CaptainEligibilityFailure Failure(string code, string summary) => new CaptainEligibilityFailure { Code = code, Summary = summary };
             // The selector, diagnostics and repair admission all apply this predicate. Requested and persona-default
@@ -160,7 +151,7 @@ namespace Armada.Core.Services
             return null;
         }
 
-        private static bool CaptainVisibleToMission(Captain captain, Mission mission)
+        internal static bool CaptainVisibleToMission(Captain captain, Mission mission)
         {
             return captain.TenantId == mission.TenantId && (captain.UserId == null || captain.UserId == mission.UserId);
         }
@@ -275,7 +266,7 @@ namespace Armada.Core.Services
             }
         }
 
-        private async Task<Captain?> FindRoutedCaptainAsync(Mission mission, WorkerEnvelopeGate? envelopeGate, CaptainAdmissionSelection selection, CancellationToken token)
+        internal async Task<Captain?> FindRoutedCaptainAsync(Mission mission, WorkerEnvelopeGate? envelopeGate, CaptainAdmissionSelection selection, CancellationToken token)
         {
             string? persona = RoutingPersona(mission);
             CaptainTierEnum? requiredTier = mission.Tier;
@@ -284,7 +275,7 @@ namespace Armada.Core.Services
             List<Captain> idleCaptains = selection.Available.Where(c => CaptainIneligibilityReason(c, mission, context) == null).ToList();
             selection.RoutingEligible = idleCaptains.ToList();
             HashSet<string> reviewAuthors = await ReviewAuthorCaptainIdsAsync(mission, token).ConfigureAwait(false);
-            idleCaptains = await ApplyCapacityLimitsAsync(idleCaptains, mission, token, selection.CapacityExclusions).ConfigureAwait(false);
+            idleCaptains = await _Context.MissionLauncher.ApplyCapacityLimitsAsync(idleCaptains, mission, token, selection.CapacityExclusions).ConfigureAwait(false);
             if (envelopeGate != null) envelopeGate.IdlePool = idleCaptains;
             if (idleCaptains.Count == 0)
                 return null;
@@ -342,54 +333,6 @@ namespace Armada.Core.Services
             return groups.FirstOrDefault()?.Captains.FirstOrDefault();
         }
 
-        private static List<CaptainRoutingBucket> BuildGeneralRoutingBuckets(Mission mission, string? persona, CaptainTierEnum? requiredTier,
-            string? requestedCaptainId, List<Captain> candidates, CaptainEligibilityContext context)
-        {
-            List<CaptainRoutingBucket> groups = new List<CaptainRoutingBucket>();
-            HashSet<string> grouped = new HashSet<string>(StringComparer.Ordinal);
-            void Add(string reason, IEnumerable<Captain> source, bool priority)
-            {
-                List<Captain> available = source.Where(c => !grouped.Contains(c.Id)).ToList();
-                // Priority definitions use active count then ID, whereas general routing also uses last update.
-                foreach (bool preferred in new[] { true, false })
-                {
-                    IEnumerable<Captain> pool = available.Where(c => (!String.IsNullOrEmpty(persona) && PersonaCatalog.Matches(c.PreferredPersona, persona)) == preferred);
-                    // RS-8.6: with outcome ranking on, captains whose model has enough results for the persona come first, best
-                    // score first; the rest keep the load and last-update order. With no scores this is the 1.4.0 order.
-                    List<Captain> ordered = priority
-                        ? pool.OrderBy(c => c.ActiveMissionCount).ThenBy(c => c.Id, StringComparer.Ordinal).ToList()
-                        : pool.OrderBy(c => context.OutcomeScores.ContainsKey(c.Id) ? 0 : 1)
-                            .ThenByDescending(c => context.OutcomeScores.TryGetValue(c.Id, out PersonaOutcomeScore? score) ? score.Score : 0)
-                            .ThenBy(c => c.ActiveMissionCount).ThenBy(c => c.LastUpdateUtc).ThenBy(c => c.Id, StringComparer.Ordinal).ToList();
-                    if (ordered.Count == 0) continue;
-                    foreach (Captain captain in ordered) grouped.Add(captain.Id);
-                    groups.Add(new CaptainRoutingBucket { ReasonCode = reason + (preferred ? "PreferredPersona" : ""), Captains = ordered });
-                }
-            }
-            if (String.IsNullOrEmpty(requestedCaptainId) && !String.IsNullOrEmpty(persona) && context.Persona != null && context.Persona.CaptainPriorities.Count > 0)
-            {
-                Persona definition = context.Persona;
-                if (PersonaCaptainPrioritySelector.Validate(definition) != null) return groups;
-                IEnumerable<PersonaCaptainPriority> priorities = definition.PriorityAvailability == PersonaPriorityAvailabilityEnum.WaitForFirstPriority
-                    ? definition.CaptainPriorities.Take(1) : definition.CaptainPriorities;
-                int index = 0;
-                foreach (PersonaCaptainPriority priority in priorities)
-                {
-                    Add("PersonaPriority" + (++index), candidates.Where(c => c.Active && PersonaCaptainPrioritySelector.Matches(priority, c)
-                        && (!requiredTier.HasValue || CaptainTierSelector.CanHandle(c, requiredTier.Value))), true);
-                }
-                if (!PersonaCaptainPrioritySelector.AllowsGeneralFallback(definition)) return groups;
-            }
-            if (requiredTier.HasValue)
-            {
-                foreach (CaptainTierEnum tier in candidates.Where(c => CaptainTierSelector.CanHandle(c, requiredTier.Value))
-                    .Select(CaptainTierSelector.EffectiveTier).Distinct().OrderBy(t => t))
-                    Add("Tier" + tier, candidates.Where(c => CaptainTierSelector.EffectiveTier(c) == tier), false);
-            }
-            else Add("EligibleCaptain", candidates, false);
-            return groups;
-        }
-
         /// <summary>
         /// Resolve and persist the preferred captain and fallback tier for a mission from an explicit value already
         /// set or the voyage-level override for the mission's persona. A persona's default captain is not persisted:
@@ -398,7 +341,7 @@ namespace Armada.Core.Services
         /// reference is left as-is and degrades to normal routing at assignment time. Best-effort: never throws for a
         /// missing persona/voyage.
         /// </summary>
-        private async Task ResolvePreferredCaptainAsync(Mission mission, CancellationToken token, bool persist = true)
+        internal async Task ResolvePreferredCaptainAsync(Mission mission, CancellationToken token, bool persist = true)
         {
             if (mission == null) return;
             if (!String.IsNullOrEmpty(mission.RequestedCaptainId)) return;
@@ -475,36 +418,19 @@ namespace Armada.Core.Services
         /// at. One indexed projection (vessel and status, no outputs or diffs), read once per vessel per dispatch pass
         /// (D17, RS-4.7).
         /// </summary>
-        private Task<List<Mission>> ActiveMissionsOnVesselAsync(string vesselId, CancellationToken token)
-            => PassRunningOnVesselAsync(vesselId, token);
+        internal Task<List<Mission>> ActiveMissionsOnVesselAsync(string vesselId, CancellationToken token)
+            => _Context.MissionDispatchPass.PassRunningOnVesselAsync(vesselId, token);
 
-        private async Task<MissionAssignmentBlocker?> EvaluateGlobalAdmissionAsync(CancellationToken token)
-            => (await PassCapacityAsync(token).ConfigureAwait(false)).GlobalBlocker();
+        internal async Task<MissionAssignmentBlocker?> EvaluateGlobalAdmissionAsync(CancellationToken token)
+            => (await _Context.MissionDispatchPass.PassCapacityAsync(token).ConfigureAwait(false)).GlobalBlocker();
 
-        private async Task<MissionAssignmentBlocker?> EvaluateVesselAdmissionAsync(Mission mission, Vessel vessel, CancellationToken token)
+        internal async Task<MissionAssignmentBlocker?> EvaluateVesselAdmissionAsync(Mission mission, Vessel vessel, CancellationToken token)
         {
-            List<MissionAdmissionSnapshot> missions = await PassAdmissionSnapshotsAsync(vessel.Id, token).ConfigureAwait(false);
+            List<MissionAdmissionSnapshot> missions = await _Context.MissionDispatchPass.PassAdmissionSnapshotsAsync(vessel.Id, token).ConfigureAwait(false);
             return VesselAdmission.EvaluateSnapshots(mission, vessel, missions);
         }
 
-        private static List<Mission> BranchHolders(Mission mission, IEnumerable<Mission> vesselMissions)
-        {
-            if (String.IsNullOrEmpty(mission.BranchName)) return new List<Mission>();
-            return vesselMissions.Where(m => m.Id != mission.Id
-                && (m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress)
-                && String.Equals(m.BranchName, mission.BranchName, StringComparison.Ordinal)).ToList();
-        }
-
-        private async Task<string?> PersonaDefaultCaptainIdAsync(Mission mission, string? routingPersona, CancellationToken token)
-        {
-            if (String.IsNullOrEmpty(routingPersona)) return null;
-            Persona? persona = await PassPersonaAsync(mission.TenantId, routingPersona, mission.UserId, token).ConfigureAwait(false);
-            // A nonempty hierarchy supersedes the legacy default captain.
-            if (persona == null || persona.CaptainPriorities.Count > 0 || String.IsNullOrEmpty(persona.DefaultCaptainId)) return null;
-            return persona.DefaultCaptainId;
-        }
-
-        private async Task<Persona?> ReadPersonaByNameAsync(string? tenantId, string personaName, CancellationToken token, string? userId = null)
+        internal async Task<Persona?> ReadPersonaByNameAsync(string? tenantId, string personaName, CancellationToken token, string? userId = null)
         {
             if (!String.IsNullOrEmpty(tenantId))
             {
@@ -517,18 +443,10 @@ namespace Armada.Core.Services
                 (shared.UserId == null || shared.UserId == userId || shared.Scope == Armada.Core.Enums.ScopeEnum.TenantWide) ? shared : null;
         }
 
-        private async Task<CaptainTierEnum?> CaptainEffectiveTierAsync(string captainId, CancellationToken token)
-        {
-            if (String.IsNullOrEmpty(captainId)) return null;
-            Captain? captain = await PassCaptainAsync(captainId, token).ConfigureAwait(false);
-            if (captain == null) return null;
-            return CaptainTierSelector.EffectiveTier(captain);
-        }
-
-        private async Task<List<CaptainAssignmentOverride>> ReadVoyageCaptainOverridesAsync(string? voyageId, CancellationToken token)
+        internal async Task<List<CaptainAssignmentOverride>> ReadVoyageCaptainOverridesAsync(string? voyageId, CancellationToken token)
         {
             if (String.IsNullOrEmpty(voyageId)) return new List<CaptainAssignmentOverride>();
-            Voyage? voyage = await PassVoyageAsync(voyageId, token).ConfigureAwait(false);
+            Voyage? voyage = await _Context.MissionDispatchPass.PassVoyageAsync(voyageId, token).ConfigureAwait(false);
             if (voyage == null) return new List<CaptainAssignmentOverride>();
             return DeserializeCaptainOverrides(voyage.CaptainOverridesJson);
         }
@@ -539,7 +457,7 @@ namespace Armada.Core.Services
         /// </summary>
         /// <param name="json">Serialized override array, or null.</param>
         /// <returns>The parsed overrides, or an empty list.</returns>
-        public static List<CaptainAssignmentOverride> DeserializeCaptainOverrides(string? json)
+        internal static List<CaptainAssignmentOverride> DeserializeCaptainOverrides(string? json)
         {
             if (String.IsNullOrWhiteSpace(json)) return new List<CaptainAssignmentOverride>();
             try
@@ -559,13 +477,13 @@ namespace Armada.Core.Services
         /// </summary>
         /// <param name="overrides">The overrides to serialize, or null.</param>
         /// <returns>The serialized JSON array, or null.</returns>
-        public static string? SerializeCaptainOverrides(List<CaptainAssignmentOverride>? overrides)
+        internal static string? SerializeCaptainOverrides(List<CaptainAssignmentOverride>? overrides)
         {
             if (overrides == null || overrides.Count == 0) return null;
             return JsonSerializer.Serialize(overrides);
         }
 
-        private static bool CaptainAllowsPersona(Captain captain, string persona)
+        internal static bool CaptainAllowsPersona(Captain captain, string persona)
         {
             if (captain == null) throw new ArgumentNullException(nameof(captain));
             if (String.IsNullOrEmpty(persona)) return true;
@@ -594,19 +512,198 @@ namespace Armada.Core.Services
             return false;
         }
 
+        internal async Task RecordRoutingNotesAsync(Mission mission, Captain captain, CaptainAdmissionSelection selection, CancellationToken token)
+        {
+            CaptainEligibilityContext context = selection.Eligibility;
+            List<ArmadaEvent> events = new List<ArmadaEvent>();
+            if (context.JudgePolicy == JudgeStrengthPolicyEnum.ProceedAndFlag && !JudgeStrengthRule.Meets(captain, context.JudgeRequiredTier))
+            {
+                string message = "Judge strength exception: " + captain.Name + " (tier " + CaptainTierSelector.EffectiveTier(captain)
+                    + ") judges work of tier " + context.JudgeRequiredTier!.Value + " because no captain that meets the rule was available.";
+                _Logging.Warn(_Header + "mission " + mission.Id + ": " + message);
+                events.Add(RoutingEvent(mission, captain, JudgeStrengthRule.ExceptionEventType, message, null));
+            }
+            CaptainRoutingBucket? bucket = selection.RoutingBuckets.FirstOrDefault(b => b.Captains.Any(c => c.Id == captain.Id));
+            if (bucket != null && bucket.Captains.Any(c => context.OutcomeScores.ContainsKey(c.Id)))
+            {
+                List<CaptainOutcomeRank> ranks = bucket.Captains.Take(CaptainOutcomeRank.MaxListed).Select(c => CaptainOutcomeRank.From(c,
+                    context.OutcomeScores.TryGetValue(c.Id, out PersonaOutcomeScore? score) ? score : null)).ToList();
+                string message = "Outcome ranking (" + context.RoutingPersona + ", " + bucket.ReasonCode + ") chose " + captain.Name + ": "
+                    + String.Join("; ", ranks.Select(r => r.Describe()));
+                _Logging.Info(_Header + "mission " + mission.Id + ": " + message);
+                events.Add(RoutingEvent(mission, captain, CaptainOutcomeRank.EventType, message, JsonSerializer.Serialize(ranks)));
+            }
+            foreach (ArmadaEvent evt in events)
+            {
+                try
+                {
+                    await _Database.Events.CreateAsync(evt, token).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
+                {
+                    _Logging.Warn(_Header + "could not record " + evt.EventType + " for mission " + mission.Id + ": " + ex.Message);
+                }
+            }
+        }
+
+        internal static bool UsesSharedLocalAndWorkingDirectory(Vessel vessel)
+        {
+            if (vessel == null) return false;
+            if (String.IsNullOrWhiteSpace(vessel.LocalPath) || String.IsNullOrWhiteSpace(vessel.WorkingDirectory))
+                return false;
+
+            try
+            {
+                string localPath = Path.GetFullPath(vessel.LocalPath)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                string workingDirectory = Path.GetFullPath(vessel.WorkingDirectory)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                return String.Equals(localPath, workingDirectory, StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return String.Equals(vessel.LocalPath.Trim(), vessel.WorkingDirectory.Trim(), StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private async Task<HashSet<string>> ReviewAuthorCaptainIdsAsync(Mission mission, CancellationToken token)
+        {
+            HashSet<string> authors = new HashSet<string>(StringComparer.Ordinal);
+            if (!PersonaCatalog.Matches(mission.Persona, PersonaCatalog.Judge)) return authors;
+            HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal) { mission.Id };
+            string? parentId = mission.DependsOnMissionId;
+            if (String.IsNullOrEmpty(parentId)) return authors;
+
+            // Parents of a voyage mission come from one summary read of the voyage instead of one read per hop (RS-10.3).
+            Dictionary<string, MissionSummary>? voyage = null;
+            if (!String.IsNullOrEmpty(mission.VoyageId))
+            {
+                voyage = new Dictionary<string, MissionSummary>(StringComparer.Ordinal);
+                foreach (MissionSummary summary in await _Database.Missions.EnumerateSummariesByVoyageAsync(mission.VoyageId, token).ConfigureAwait(false))
+                    voyage[summary.Id] = summary;
+            }
+
+            while (!String.IsNullOrEmpty(parentId) && seen.Add(parentId))
+            {
+                string? parentVoyageId;
+                string? parentPersona;
+                string? parentCaptainId;
+                string? nextId;
+                if (voyage != null)
+                {
+                    if (!voyage.TryGetValue(parentId, out MissionSummary? summary)) break;
+                    parentVoyageId = summary.VoyageId;
+                    parentPersona = summary.Persona;
+                    parentCaptainId = summary.CaptainId;
+                    nextId = summary.DependsOnMissionId;
+                }
+                else
+                {
+                    Mission? parent = await _Database.Missions.ReadAsync(parentId, token).ConfigureAwait(false);
+                    if (parent == null) break;
+                    parentVoyageId = parent.VoyageId;
+                    parentPersona = parent.Persona;
+                    parentCaptainId = parent.CaptainId;
+                    nextId = parent.DependsOnMissionId;
+                }
+                if (parentVoyageId != mission.VoyageId || PersonaCatalog.Matches(parentPersona, PersonaCatalog.Judge)) break;
+                if (!String.IsNullOrEmpty(parentCaptainId)) authors.Add(parentCaptainId);
+                if (PersonaCatalog.Matches(parentPersona, PersonaCatalog.Worker)) break;
+                parentId = nextId;
+            }
+            return authors;
+        }
+
+        private static List<CaptainRoutingBucket> BuildGeneralRoutingBuckets(Mission mission, string? persona, CaptainTierEnum? requiredTier,
+            string? requestedCaptainId, List<Captain> candidates, CaptainEligibilityContext context)
+        {
+            List<CaptainRoutingBucket> groups = new List<CaptainRoutingBucket>();
+            HashSet<string> grouped = new HashSet<string>(StringComparer.Ordinal);
+            void Add(string reason, IEnumerable<Captain> source, bool priority)
+            {
+                List<Captain> available = source.Where(c => !grouped.Contains(c.Id)).ToList();
+                // Priority definitions use active count then ID, whereas general routing also uses last update.
+                foreach (bool preferred in new[] { true, false })
+                {
+                    IEnumerable<Captain> pool = available.Where(c => (!String.IsNullOrEmpty(persona) && PersonaCatalog.Matches(c.PreferredPersona, persona)) == preferred);
+                    // RS-8.6: with outcome ranking on, captains whose model has enough results for the persona come first, best
+                    // score first; the rest keep the load and last-update order. With no scores this is the 1.4.0 order.
+                    List<Captain> ordered = priority
+                        ? pool.OrderBy(c => c.ActiveMissionCount).ThenBy(c => c.Id, StringComparer.Ordinal).ToList()
+                        : pool.OrderBy(c => context.OutcomeScores.ContainsKey(c.Id) ? 0 : 1)
+                            .ThenByDescending(c => context.OutcomeScores.TryGetValue(c.Id, out PersonaOutcomeScore? score) ? score.Score : 0)
+                            .ThenBy(c => c.ActiveMissionCount).ThenBy(c => c.LastUpdateUtc).ThenBy(c => c.Id, StringComparer.Ordinal).ToList();
+                    if (ordered.Count == 0) continue;
+                    foreach (Captain captain in ordered) grouped.Add(captain.Id);
+                    groups.Add(new CaptainRoutingBucket { ReasonCode = reason + (preferred ? "PreferredPersona" : ""), Captains = ordered });
+                }
+            }
+            if (String.IsNullOrEmpty(requestedCaptainId) && !String.IsNullOrEmpty(persona) && context.Persona != null && context.Persona.CaptainPriorities.Count > 0)
+            {
+                Persona definition = context.Persona;
+                if (PersonaCaptainPrioritySelector.Validate(definition) != null) return groups;
+                IEnumerable<PersonaCaptainPriority> priorities = definition.PriorityAvailability == PersonaPriorityAvailabilityEnum.WaitForFirstPriority
+                    ? definition.CaptainPriorities.Take(1) : definition.CaptainPriorities;
+                int index = 0;
+                foreach (PersonaCaptainPriority priority in priorities)
+                {
+                    Add("PersonaPriority" + (++index), candidates.Where(c => c.Active && PersonaCaptainPrioritySelector.Matches(priority, c)
+                        && (!requiredTier.HasValue || CaptainTierSelector.CanHandle(c, requiredTier.Value))), true);
+                }
+                if (!PersonaCaptainPrioritySelector.AllowsGeneralFallback(definition)) return groups;
+            }
+            if (requiredTier.HasValue)
+            {
+                foreach (CaptainTierEnum tier in candidates.Where(c => CaptainTierSelector.CanHandle(c, requiredTier.Value))
+                    .Select(CaptainTierSelector.EffectiveTier).Distinct().OrderBy(t => t))
+                    Add("Tier" + tier, candidates.Where(c => CaptainTierSelector.EffectiveTier(c) == tier), false);
+            }
+            else Add("EligibleCaptain", candidates, false);
+            return groups;
+        }
+
+        private static List<Mission> BranchHolders(Mission mission, IEnumerable<Mission> vesselMissions)
+        {
+            if (String.IsNullOrEmpty(mission.BranchName)) return new List<Mission>();
+            return vesselMissions.Where(m => m.Id != mission.Id
+                && (m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress)
+                && String.Equals(m.BranchName, mission.BranchName, StringComparison.Ordinal)).ToList();
+        }
+
+        private async Task<string?> PersonaDefaultCaptainIdAsync(Mission mission, string? routingPersona, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(routingPersona)) return null;
+            Persona? persona = await _Context.MissionDispatchPass.PassPersonaAsync(mission.TenantId, routingPersona, mission.UserId, token).ConfigureAwait(false);
+            // A nonempty hierarchy supersedes the legacy default captain.
+            if (persona == null || persona.CaptainPriorities.Count > 0 || String.IsNullOrEmpty(persona.DefaultCaptainId)) return null;
+            return persona.DefaultCaptainId;
+        }
+
+        private async Task<CaptainTierEnum?> CaptainEffectiveTierAsync(string captainId, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(captainId)) return null;
+            Captain? captain = await _Context.MissionDispatchPass.PassCaptainAsync(captainId, token).ConfigureAwait(false);
+            if (captain == null) return null;
+            return CaptainTierSelector.EffectiveTier(captain);
+        }
+
         private PersonaOutcomeStatsService OutcomeStats => _OutcomeStats ??= new PersonaOutcomeStatsService(_Database);
 
         private async Task AddJudgeRulesAsync(CaptainEligibilityContext context, Mission mission, List<Captain> visible, CancellationToken token)
         {
             if (!PersonaCatalog.Matches(mission.Persona, PersonaCatalog.Judge)) return;
-            Voyage? voyage = String.IsNullOrEmpty(mission.VoyageId) ? null : await PassVoyageAsync(mission.VoyageId, token).ConfigureAwait(false);
+            Voyage? voyage = String.IsNullOrEmpty(mission.VoyageId) ? null : await _Context.MissionDispatchPass.PassVoyageAsync(mission.VoyageId, token).ConfigureAwait(false);
             context.JudgePolicy = JudgeStrengthRule.Effective(voyage);
             if (!_Settings.ExcludeReviewAuthorsFromJudge && context.JudgePolicy == JudgeStrengthPolicyEnum.Off) return;
 
             List<Captain> authors = new List<Captain>();
             foreach (string authorId in await ReviewAuthorCaptainIdsAsync(mission, token).ConfigureAwait(false))
             {
-                Captain? author = visible.FirstOrDefault(c => c.Id == authorId) ?? await PassCaptainAsync(authorId, token).ConfigureAwait(false);
+                Captain? author = visible.FirstOrDefault(c => c.Id == authorId) ?? await _Context.MissionDispatchPass.PassCaptainAsync(authorId, token).ConfigureAwait(false);
                 if (author != null) authors.Add(author);
             }
             HashSet<string> identities = new HashSet<string>(StringComparer.Ordinal);
@@ -669,48 +766,14 @@ namespace Armada.Core.Services
         private async Task<ModelEndpoint?> CaptainEndpointAsync(Captain captain, CancellationToken token)
         {
             if (String.IsNullOrEmpty(captain.ModelEndpointId)) return null;
-            return await PassEndpointAsync(captain.ModelEndpointId, token).ConfigureAwait(false);
+            return await _Context.MissionDispatchPass.PassEndpointAsync(captain.ModelEndpointId, token).ConfigureAwait(false);
         }
 
         private async Task<ModelProfile?> CaptainProfileAsync(Captain captain, CancellationToken token)
         {
             if (String.IsNullOrEmpty(captain.ModelProfileId)) return null;
-            ModelProfile? profile = await PassProfileAsync(captain.ModelProfileId, token).ConfigureAwait(false);
+            ModelProfile? profile = await _Context.MissionDispatchPass.PassProfileAsync(captain.ModelProfileId, token).ConfigureAwait(false);
             return profile != null && String.Equals(profile.TenantId, captain.TenantId, StringComparison.Ordinal) ? profile : null;
-        }
-
-        private async Task RecordRoutingNotesAsync(Mission mission, Captain captain, CaptainAdmissionSelection selection, CancellationToken token)
-        {
-            CaptainEligibilityContext context = selection.Eligibility;
-            List<ArmadaEvent> events = new List<ArmadaEvent>();
-            if (context.JudgePolicy == JudgeStrengthPolicyEnum.ProceedAndFlag && !JudgeStrengthRule.Meets(captain, context.JudgeRequiredTier))
-            {
-                string message = "Judge strength exception: " + captain.Name + " (tier " + CaptainTierSelector.EffectiveTier(captain)
-                    + ") judges work of tier " + context.JudgeRequiredTier!.Value + " because no captain that meets the rule was available.";
-                _Logging.Warn(_Header + "mission " + mission.Id + ": " + message);
-                events.Add(RoutingEvent(mission, captain, JudgeStrengthRule.ExceptionEventType, message, null));
-            }
-            CaptainRoutingBucket? bucket = selection.RoutingBuckets.FirstOrDefault(b => b.Captains.Any(c => c.Id == captain.Id));
-            if (bucket != null && bucket.Captains.Any(c => context.OutcomeScores.ContainsKey(c.Id)))
-            {
-                List<CaptainOutcomeRank> ranks = bucket.Captains.Take(CaptainOutcomeRank.MaxListed).Select(c => CaptainOutcomeRank.From(c,
-                    context.OutcomeScores.TryGetValue(c.Id, out PersonaOutcomeScore? score) ? score : null)).ToList();
-                string message = "Outcome ranking (" + context.RoutingPersona + ", " + bucket.ReasonCode + ") chose " + captain.Name + ": "
-                    + String.Join("; ", ranks.Select(r => r.Describe()));
-                _Logging.Info(_Header + "mission " + mission.Id + ": " + message);
-                events.Add(RoutingEvent(mission, captain, CaptainOutcomeRank.EventType, message, JsonSerializer.Serialize(ranks)));
-            }
-            foreach (ArmadaEvent evt in events)
-            {
-                try
-                {
-                    await _Database.Events.CreateAsync(evt, token).ConfigureAwait(false);
-                }
-                catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
-                {
-                    _Logging.Warn(_Header + "could not record " + evt.EventType + " for mission " + mission.Id + ": " + ex.Message);
-                }
-            }
         }
 
         private static ArmadaEvent RoutingEvent(Mission mission, Captain captain, string type, string message, string? payload)
@@ -726,49 +789,6 @@ namespace Armada.Core.Services
             evt.VoyageId = mission.VoyageId;
             evt.Payload = payload;
             return evt;
-        }
-
-        private static bool UsesSharedLocalAndWorkingDirectory(Vessel vessel)
-        {
-            if (vessel == null) return false;
-            if (String.IsNullOrWhiteSpace(vessel.LocalPath) || String.IsNullOrWhiteSpace(vessel.WorkingDirectory))
-                return false;
-
-            try
-            {
-                string localPath = Path.GetFullPath(vessel.LocalPath)
-                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                string workingDirectory = Path.GetFullPath(vessel.WorkingDirectory)
-                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                return String.Equals(localPath, workingDirectory, StringComparison.OrdinalIgnoreCase);
-            }
-            catch
-            {
-                return String.Equals(vessel.LocalPath.Trim(), vessel.WorkingDirectory.Trim(), StringComparison.OrdinalIgnoreCase);
-            }
-        }
-
-        #endregion
-
-        #region Private-Types
-
-        private sealed class CaptainEligibilityContext
-        {
-            public string RoutingPersona { get; set; } = "";
-            public HashSet<string> ExcludedAuthors { get; set; } = new HashSet<string>(StringComparer.Ordinal);
-            public bool UsageFallbackAuthorized { get; set; }
-            public bool UsageFallbackRequired { get; set; }
-            public bool EscalatedToRequestedCaptain { get; set; } = false;
-            public bool StrictCaptainOverride { get; set; } = false;
-            public bool InactiveRequestedCaptain { get; set; } = false;
-            public string? DefaultCaptainId { get; set; } = null;
-            public Persona? Persona { get; set; } = null;
-            public WorkerEnvelopeGate? EnvelopeGate { get; set; } = null;
-            public Dictionary<string, string> ContextExclusions { get; } = new Dictionary<string, string>(StringComparer.Ordinal);
-            public JudgeStrengthPolicyEnum JudgePolicy { get; set; } = JudgeStrengthPolicyEnum.Off;
-            public CaptainTierEnum? JudgeRequiredTier { get; set; } = null;
-            public HashSet<string> SameFamilyAsAuthors { get; } = new HashSet<string>(StringComparer.Ordinal);
-            public Dictionary<string, PersonaOutcomeScore> OutcomeScores { get; } = new Dictionary<string, PersonaOutcomeScore>(StringComparer.Ordinal);
         }
 
         #endregion

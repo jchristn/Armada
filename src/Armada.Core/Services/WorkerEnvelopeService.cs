@@ -1,19 +1,30 @@
 namespace Armada.Core.Services
 {
     using System.Collections.Concurrent;
+    using System.Text;
     using System.Text.Json;
+    using Armada.Core;
+    using Armada.Core.BlackBox;
+    using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services.Interfaces;
+    using Armada.Core.Settings;
+    using SyslogLogging;
 
     /// <summary>
-    /// Worker eligibility envelope (docs/MODEL_HETEROGENEITY.md, 3.3): which captains may run a Worker mission, the
-    /// escalation to a stronger compatible captain instead of waiting, and the decision events.
+    /// The Worker eligibility envelope: effective envelope, captain gate, and recorded decisions.
     /// </summary>
-    public partial class MissionService
+    internal sealed class WorkerEnvelopeService
     {
         #region Private-Members
 
-        private const int _MaxEnvelopeDecisionsTracked = 10000;
+        private readonly MissionServiceContext _Context;
+        private readonly DatabaseDriver _Database;
+        private readonly string _Header;
+        private readonly LoggingModule _Logging;
+
+        internal const int _MaxEnvelopeDecisionsTracked = 10000;
 
         private readonly ConcurrentDictionary<string, string> _EnvelopeDecisionSignatures =
             new ConcurrentDictionary<string, string>(StringComparer.Ordinal);
@@ -23,7 +34,26 @@ namespace Armada.Core.Services
 
         #endregion
 
-        #region Public-Methods
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="service">The mission service facade.</param>
+        /// <param name="context">State and services shared by the mission services.</param>
+        /// <exception cref="ArgumentNullException">A parameter is null.</exception>
+        internal WorkerEnvelopeService(MissionService service, MissionServiceContext context)
+        {
+            if (service == null) throw new ArgumentNullException(nameof(service));
+            _Context = context ?? throw new ArgumentNullException(nameof(context));
+            _Database = context.Database;
+            _Header = context.Header;
+            _Logging = context.Logging;
+        }
+
+        #endregion
+
+        #region Internal-Methods
 
         /// <summary>
         /// The Worker eligibility envelope that applies to a mission: its own envelope tightened onto the vessel default,
@@ -33,7 +63,7 @@ namespace Armada.Core.Services
         /// <param name="vessel">The mission's vessel, or null when it could not be read.</param>
         /// <returns>The effective envelope, or null.</returns>
         /// <exception cref="ArgumentNullException">The mission is null.</exception>
-        public static WorkerEnvelope? EffectiveWorkerEnvelope(Mission mission, Vessel? vessel)
+        internal static WorkerEnvelope? EffectiveWorkerEnvelope(Mission mission, Vessel? vessel)
         {
             if (mission == null) throw new ArgumentNullException(nameof(mission));
             return WorkerEnvelopeRules.Effective(vessel?.WorkerEnvelope, mission.WorkerEnvelope);
@@ -50,7 +80,7 @@ namespace Armada.Core.Services
         /// <param name="templateParams">Template parameters (the rendered <c>WorkerEnvelope</c> value).</param>
         /// <returns>The persona prompt, with the envelope section when it was missing.</returns>
         /// <exception cref="ArgumentNullException">The mission or parameters are null.</exception>
-        public string EnsureWorkerEnvelopeSection(string personaPrompt, Mission mission, string templateName, Dictionary<string, string> templateParams)
+        internal string EnsureWorkerEnvelopeSection(string personaPrompt, Mission mission, string templateName, Dictionary<string, string> templateParams)
         {
             if (mission == null) throw new ArgumentNullException(nameof(mission));
             if (templateParams == null) throw new ArgumentNullException(nameof(templateParams));
@@ -64,37 +94,28 @@ namespace Armada.Core.Services
             return result;
         }
 
-        #endregion
-
-        #region Private-Methods
-
-        private async Task<Captain?> FindAvailableCaptainAsync(Mission mission, CancellationToken token)
-        {
-            return (await SelectCaptainAdmissionAsync(mission, token, recordEnvelope: true).ConfigureAwait(false)).Selected;
-        }
-
         /// <summary>
         /// The envelope gate for a mission, or null when the mission is not a Worker stage or no envelope can exclude a
         /// captain (no envelope, or one with only file and step limits): routing is then unchanged.
         /// </summary>
-        private async Task<WorkerEnvelopeGate?> BuildWorkerEnvelopeGateAsync(Mission mission, CancellationToken token)
+        internal async Task<WorkerEnvelopeGate?> BuildWorkerEnvelopeGateAsync(Mission mission, CancellationToken token)
         {
-            if (!PersonaCatalog.Matches(RoutingPersona(mission), PersonaCatalog.Worker)) return null;
-            Vessel? vessel = String.IsNullOrEmpty(mission.VesselId) ? null : await PassVesselAsync(mission.VesselId, token).ConfigureAwait(false);
+            if (!PersonaCatalog.Matches(MissionCaptainRouter.RoutingPersona(mission), PersonaCatalog.Worker)) return null;
+            Vessel? vessel = String.IsNullOrEmpty(mission.VesselId) ? null : await _Context.MissionDispatchPass.PassVesselAsync(mission.VesselId, token).ConfigureAwait(false);
             WorkerEnvelope? envelope = EffectiveWorkerEnvelope(mission, vessel);
             if (!WorkerEnvelopeRules.ConstrainsCaptains(envelope)) return null;
 
             WorkerEnvelopeGate gate = new WorkerEnvelopeGate();
             gate.Envelope = envelope!;
-            gate.Visible = (await PassCaptainsAsync(token).ConfigureAwait(false))
-                .Where(c => CaptainVisibleToMission(c, mission)).ToList();
+            gate.Visible = (await _Context.MissionDispatchPass.PassCaptainsAsync(token).ConfigureAwait(false))
+                .Where(c => MissionCaptainRouter.CaptainVisibleToMission(c, mission)).ToList();
             Dictionary<string, ModelProfile?> profiles = new Dictionary<string, ModelProfile?>(StringComparer.Ordinal);
             foreach (Captain captain in gate.Visible)
             {
                 ModelProfile? profile = null;
                 if (!String.IsNullOrEmpty(captain.ModelProfileId) && !profiles.TryGetValue(captain.ModelProfileId, out profile))
                 {
-                    profile = await PassProfileAsync(captain.ModelProfileId, token).ConfigureAwait(false);
+                    profile = await _Context.MissionDispatchPass.PassProfileAsync(captain.ModelProfileId, token).ConfigureAwait(false);
                     if (profile != null && !String.Equals(profile.TenantId, captain.TenantId, StringComparison.Ordinal)) profile = null;
                     profiles[captain.ModelProfileId] = profile;
                 }
@@ -104,15 +125,15 @@ namespace Armada.Core.Services
 
             bool escalatedRework = !String.IsNullOrEmpty(mission.RequestedCaptainId) && (IntegrationBarrier.IsEscalatedRework(mission)
                 || mission.EscalationCount > 0);
-            gate.Pinned = escalatedRework || (!String.IsNullOrEmpty(mission.RequestedCaptainId) && await HasStrictCaptainOverrideAsync(mission, token).ConfigureAwait(false));
+            gate.Pinned = escalatedRework || (!String.IsNullOrEmpty(mission.RequestedCaptainId) && await _Context.MissionCaptainRouter.HasStrictCaptainOverrideAsync(mission, token).ConfigureAwait(false));
             Persona? persona = String.IsNullOrEmpty(mission.RequestedCaptainId)
-                ? await PassPersonaAsync(mission.TenantId, RoutingPersona(mission), mission.UserId, token).ConfigureAwait(false)
+                ? await _Context.MissionDispatchPass.PassPersonaAsync(mission.TenantId, MissionCaptainRouter.RoutingPersona(mission), mission.UserId, token).ConfigureAwait(false)
                 : null;
             gate.BaselineTier = gate.ComputeBaselineTier(mission, persona);
             return gate;
         }
 
-        private async Task RecordWorkerEnvelopeDecisionAsync(Mission mission, WorkerEnvelopeGate gate, WorkerEnvelopeOutcomeEnum outcome, Captain? chosen, CancellationToken token)
+        internal async Task RecordWorkerEnvelopeDecisionAsync(Mission mission, WorkerEnvelopeGate gate, WorkerEnvelopeOutcomeEnum outcome, Captain? chosen, CancellationToken token)
         {
             WorkerEnvelopeDecision decision = new WorkerEnvelopeDecision
             {
@@ -166,7 +187,7 @@ namespace Armada.Core.Services
         /// Judge sees the same envelope). The plan may only tighten the vessel default: a looser field is clamped and an
         /// invalid envelope is dropped (the vessel default applies), and either is recorded as an event with the reason.
         /// </summary>
-        private async Task ApplyArchitectWorkerEnvelopeAsync(Mission architect, Mission worker, ParsedArchitectMission parsed, ArchitectFanOutWork work, CancellationToken token)
+        internal async Task ApplyArchitectWorkerEnvelopeAsync(Mission architect, Mission worker, ParsedArchitectMission parsed, ArchitectFanOutWork work, CancellationToken token)
         {
             if (parsed.WorkerEnvelope == null) return;
             Vessel? vessel = String.IsNullOrEmpty(worker.VesselId) ? null : await _Database.Vessels.ReadAsync(worker.VesselId, token).ConfigureAwait(false);
@@ -225,6 +246,15 @@ namespace Armada.Core.Services
             work.Events.Add(evt);
         }
 
+        #endregion
+
+        #region Private-Methods
+
+        private async Task<Captain?> FindAvailableCaptainAsync(Mission mission, CancellationToken token)
+        {
+            return (await _Context.MissionAdmissionPipeline.SelectCaptainAdmissionAsync(mission, token, recordEnvelope: true).ConfigureAwait(false)).Selected;
+        }
+
         private static string SummarizeEnvelopeDecision(Mission mission, WorkerEnvelopeDecision decision)
         {
             string excluded = decision.Excluded.Count == 0
@@ -244,84 +274,6 @@ namespace Armada.Core.Services
                 default:
                     return "Worker envelope: no captain meets the envelope or may run the Worker persona, so '" + mission.Title
                         + "' stays Pending. Give a captain a model profile that meets it, or change the vessel's envelope; " + excluded + ".";
-            }
-        }
-
-        #endregion
-
-        #region Private-Types
-
-        /// <summary>
-        /// Envelope state for one dispatch decision: the effective envelope, why each visible captain is excluded, the
-        /// idle pool routing drew from, and the escalation baseline.
-        /// </summary>
-        private sealed class WorkerEnvelopeGate
-        {
-            public WorkerEnvelope Envelope { get; set; } = new WorkerEnvelope();
-            public Dictionary<string, string> Exclusions { get; } = new Dictionary<string, string>(StringComparer.Ordinal);
-            public List<Captain> Visible { get; set; } = new List<Captain>();
-            public List<Captain> IdlePool { get; set; } = new List<Captain>();
-            public bool Pinned { get; set; } = false;
-            public CaptainTierEnum? BaselineTier { get; set; } = null;
-
-            /// <summary>
-            /// Highest tier among the envelope-compatible captains normal routing prefers (the requested captain, or the
-            /// persona's prioritized captains), whatever their state. Null when routing names no such captain.
-            /// </summary>
-            public CaptainTierEnum? ComputeBaselineTier(Mission mission, Persona? persona)
-            {
-                IEnumerable<Captain> preferred = Visible.Where(c => !Exclusions.ContainsKey(c.Id) && MayRunWorker(c));
-                if (!String.IsNullOrEmpty(mission.RequestedCaptainId))
-                    preferred = preferred.Where(c => c.Id == mission.RequestedCaptainId);
-                else if (persona != null && persona.CaptainPriorities.Count > 0)
-                    preferred = preferred.Where(c => persona.CaptainPriorities.Any(p => PersonaCaptainPrioritySelector.Matches(p, c)));
-                else
-                    return null;
-                List<Captain> list = preferred.ToList();
-                if (list.Count == 0) return null;
-                return list.Max(CaptainTierSelector.EffectiveTier);
-            }
-
-            /// <summary>
-            /// Whether escalation may pick this captain: it meets the envelope, may run the Worker persona, meets the
-            /// mission's tier floor and is stronger than the baseline. Never for a pinned (strict or escalated) mission.
-            /// </summary>
-            public bool CanEscalateTo(Captain captain, Mission mission)
-            {
-                if (!captain.Active || Pinned) return false;
-                if (Exclusions.ContainsKey(captain.Id)) return false;
-                if (!MayRunWorker(captain)) return false;
-                if (mission.Tier.HasValue && !CaptainTierSelector.CanHandle(captain, mission.Tier.Value)) return false;
-                return !BaselineTier.HasValue || CaptainTierSelector.EffectiveTier(captain) > BaselineTier.Value;
-            }
-
-            /// <summary>
-            /// The escalation captain: the lowest-tier idle captain escalation may pick (so the strongest captains are kept
-            /// for work that needs them), preferring one whose preferred persona is Worker. Null when there is none.
-            /// </summary>
-            public Captain? SelectEscalation(Mission mission)
-            {
-                List<Captain> candidates = IdlePool.Where(c => CanEscalateTo(c, mission)).ToList();
-                if (candidates.Count == 0) return null;
-                return candidates
-                    .OrderBy(CaptainTierSelector.EffectiveTier)
-                    .ThenBy(c => !String.IsNullOrEmpty(c.PreferredPersona) && PersonaCatalog.Matches(c.PreferredPersona, PersonaCatalog.Worker) ? 0 : 1)
-                    .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-                    .ThenBy(c => c.Id, StringComparer.Ordinal)
-                    .First();
-            }
-
-            /// <summary>
-            /// Whether any visible captain, in any state, meets the envelope and may run the Worker persona.
-            /// </summary>
-            public bool AnyCompatibleCaptain()
-            {
-                return Visible.Any(c => !Exclusions.ContainsKey(c.Id) && MayRunWorker(c));
-            }
-
-            private static bool MayRunWorker(Captain captain)
-            {
-                return captain.Active && (String.IsNullOrEmpty(captain.AllowedPersonas) || CaptainAllowsPersona(captain, PersonaCatalog.Worker));
             }
         }
 

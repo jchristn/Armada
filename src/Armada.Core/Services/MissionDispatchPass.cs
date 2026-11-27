@@ -1,34 +1,70 @@
 namespace Armada.Core.Services
 {
+    using System.Text;
+    using System.Text.Json;
+    using Armada.Core;
+    using Armada.Core.BlackBox;
+    using Armada.Core.Database;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services.Interfaces;
+    using Armada.Core.Settings;
+    using SyslogLogging;
 
-    // RS-4.7: inside a dispatch pass every admission read goes through one DispatchPassCache, so N pending missions
-    // cost one read of each shared table instead of N. Outside a pass (the API, the TUI, tests) these read directly.
-    public partial class MissionService
+    /// <summary>
+    /// The per-pass cache of a dispatch pass and the capacity checks made under the capacity lock.
+    /// </summary>
+    internal sealed class MissionDispatchPass
     {
-        private readonly AsyncLocal<DispatchPassCache?> _Pass = new AsyncLocal<DispatchPassCache?>();
+        #region Private-Members
+
+        private readonly MissionService _Service;
+        private readonly MissionServiceContext _Context;
+        private readonly DatabaseDriver _Database;
+        private readonly AsyncLocal<DispatchPassCache?> _Pass;
+        private readonly ArmadaSettings _Settings;
 
         // Bumped before every claim write, under _CapacityLock. A pass that sees a newer value under the lock drops its
         // claim-sensitive reads, so a claim made outside the pass (voyage creation, verification repair) is counted.
         private long _ClaimGeneration;
 
+        #endregion
+
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="service">The mission service facade.</param>
+        /// <param name="context">State and services shared by the mission services.</param>
+        /// <exception cref="ArgumentNullException">A parameter is null.</exception>
+        internal MissionDispatchPass(MissionService service, MissionServiceContext context)
+        {
+            _Service = service ?? throw new ArgumentNullException(nameof(service));
+            _Context = context ?? throw new ArgumentNullException(nameof(context));
+            _Database = context.Database;
+            _Pass = context.Pass;
+            _Settings = context.Settings;
+        }
+
+        #endregion
+
+        #region Internal-Methods
+
         /// <inheritdoc />
-        public IDisposable BeginDispatchPass()
+        internal IDisposable BeginDispatchPass()
         {
             DispatchPassCache? outer = _Pass.Value;
             _Pass.Value = new DispatchPassCache { Generation = Interlocked.Read(ref _ClaimGeneration) };
-            return new PassScope(this, outer);
+            return new DispatchPassScope(_Service, outer);
         }
 
-        /// <summary>Database reads the current dispatch pass has made, or -1 outside a pass.</summary>
-        internal int DispatchPassReads => _Pass.Value?.Reads ?? -1;
+        internal void PassStateChanged() => _Pass.Value?.AfterStateChange();
 
-        private void PassStateChanged() => _Pass.Value?.AfterStateChange();
-
-        private void NoteClaimAttempt() => Interlocked.Increment(ref _ClaimGeneration);
+        internal void NoteClaimAttempt() => Interlocked.Increment(ref _ClaimGeneration);
 
         // Call with _CapacityLock held, so no claim can land between the comparison and the reads that follow.
-        private void PassRevalidateUnderLock()
+        internal void PassRevalidateUnderLock()
         {
             DispatchPassCache? pass = _Pass.Value;
             if (pass == null) return;
@@ -38,7 +74,7 @@ namespace Armada.Core.Services
             pass.Generation = current;
         }
 
-        private async Task<CapacityModel> PassCapacityAsync(CancellationToken token)
+        internal async Task<CapacityModel> PassCapacityAsync(CancellationToken token)
         {
             DispatchPassCache? pass = _Pass.Value;
             if (pass?.Capacity != null) return pass.Capacity;
@@ -58,7 +94,7 @@ namespace Armada.Core.Services
 
         // RS-4.9: the shared caps the claim write does not enforce itself (global, runtime, endpoint), re-read for the
         // chosen captain. Call with _CapacityLock held, after PassRevalidateUnderLock.
-        private async Task<MissionAssignmentBlocker?> CapacityBlockerUnderLockAsync(Captain captain, CancellationToken token, string? harborId = null)
+        internal async Task<MissionAssignmentBlocker?> CapacityBlockerUnderLockAsync(Captain captain, CancellationToken token, string? harborId = null)
         {
             CapacityModel model = await PassCapacityAsync(token).ConfigureAwait(false);
             MissionAssignmentBlocker? global = model.GlobalBlocker();
@@ -69,14 +105,14 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<DispatchCapacity> ReadDispatchCapacityAsync(CancellationToken token = default)
+        internal async Task<DispatchCapacity> ReadDispatchCapacityAsync(CancellationToken token = default)
         {
             CapacityModel model = await PassCapacityAsync(token).ConfigureAwait(false);
             return new DispatchCapacity { GlobalLimitReached = model.GlobalBlocker() != null, AnyCaptainHasRoom = model.AnyCaptainHasRoom() };
         }
 
         // RS-8.5: every captain read for routing carries its model profile's tier, so tier decisions see it.
-        private async Task<List<Captain>> PassCaptainsAsync(CancellationToken token)
+        internal async Task<List<Captain>> PassCaptainsAsync(CancellationToken token)
         {
             DispatchPassCache? pass = _Pass.Value;
             if (pass == null) return await WithProfileTiersAsync(await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false), token).ConfigureAwait(false);
@@ -84,7 +120,7 @@ namespace Armada.Core.Services
             return new List<Captain>(pass.Captains);
         }
 
-        private async Task<Captain?> PassCaptainAsync(string captainId, CancellationToken token)
+        internal async Task<Captain?> PassCaptainAsync(string captainId, CancellationToken token)
         {
             if (_Pass.Value == null)
             {
@@ -94,6 +130,32 @@ namespace Armada.Core.Services
             }
             return (await PassCaptainsAsync(token).ConfigureAwait(false)).FirstOrDefault(c => c.Id == captainId);
         }
+
+        internal Task<List<Mission>> PassRunningOnVesselAsync(string vesselId, CancellationToken token)
+            => Cached(_Pass.Value?.RunningByVessel, vesselId, () => _Database.Missions.EnumerateRunningOnVesselAsync(vesselId, token));
+
+        internal Task<List<MissionAdmissionSnapshot>> PassAdmissionSnapshotsAsync(string vesselId, CancellationToken token)
+            => Cached(_Pass.Value?.AdmissionByVessel, vesselId, () => _Database.Missions.EnumerateAdmissionSnapshotsAsync(vesselId, token));
+
+        internal Task<Voyage?> PassVoyageAsync(string voyageId, CancellationToken token)
+            => Cached(_Pass.Value?.Voyages, voyageId, () => _Database.Voyages.ReadAsync(voyageId, token));
+
+        internal Task<Vessel?> PassVesselAsync(string vesselId, CancellationToken token)
+            => Cached(_Pass.Value?.Vessels, vesselId, () => _Database.Vessels.ReadAsync(vesselId, token));
+
+        internal Task<ModelEndpoint?> PassEndpointAsync(string endpointId, CancellationToken token)
+            => Cached(_Pass.Value?.Endpoints, endpointId, () => _Database.ModelEndpoints.ReadAsync(endpointId, token));
+
+        internal Task<ModelProfile?> PassProfileAsync(string profileId, CancellationToken token)
+            => Cached(_Pass.Value?.Profiles, profileId, () => _Database.ModelProfiles.ReadAsync(profileId, token));
+
+        internal Task<Persona?> PassPersonaAsync(string? tenantId, string personaName, string? userId, CancellationToken token)
+            => Cached(_Pass.Value?.Personas, (tenantId ?? "") + "\n" + (userId ?? "") + "\n" + personaName,
+                () => _Context.MissionCaptainRouter.ReadPersonaByNameAsync(tenantId, personaName, token, userId));
+
+        #endregion
+
+        #region Private-Methods
 
         private async Task<List<Captain>> WithProfileTiersAsync(List<Captain> captains, CancellationToken token)
         {
@@ -109,28 +171,6 @@ namespace Armada.Core.Services
             return pass.ExecutionSlots.Value;
         }
 
-        private Task<List<Mission>> PassRunningOnVesselAsync(string vesselId, CancellationToken token)
-            => Cached(_Pass.Value?.RunningByVessel, vesselId, () => _Database.Missions.EnumerateRunningOnVesselAsync(vesselId, token));
-
-        private Task<List<MissionAdmissionSnapshot>> PassAdmissionSnapshotsAsync(string vesselId, CancellationToken token)
-            => Cached(_Pass.Value?.AdmissionByVessel, vesselId, () => _Database.Missions.EnumerateAdmissionSnapshotsAsync(vesselId, token));
-
-        private Task<Voyage?> PassVoyageAsync(string voyageId, CancellationToken token)
-            => Cached(_Pass.Value?.Voyages, voyageId, () => _Database.Voyages.ReadAsync(voyageId, token));
-
-        private Task<Vessel?> PassVesselAsync(string vesselId, CancellationToken token)
-            => Cached(_Pass.Value?.Vessels, vesselId, () => _Database.Vessels.ReadAsync(vesselId, token));
-
-        private Task<ModelEndpoint?> PassEndpointAsync(string endpointId, CancellationToken token)
-            => Cached(_Pass.Value?.Endpoints, endpointId, () => _Database.ModelEndpoints.ReadAsync(endpointId, token));
-
-        private Task<ModelProfile?> PassProfileAsync(string profileId, CancellationToken token)
-            => Cached(_Pass.Value?.Profiles, profileId, () => _Database.ModelProfiles.ReadAsync(profileId, token));
-
-        private Task<Persona?> PassPersonaAsync(string? tenantId, string personaName, string? userId, CancellationToken token)
-            => Cached(_Pass.Value?.Personas, (tenantId ?? "") + "\n" + (userId ?? "") + "\n" + personaName,
-                () => ReadPersonaByNameAsync(tenantId, personaName, token, userId));
-
         private async Task<T> Cached<T>(Dictionary<string, T>? cache, string key, Func<Task<T>> read)
         {
             if (cache == null) return await read().ConfigureAwait(false);
@@ -141,18 +181,6 @@ namespace Armada.Core.Services
             return value;
         }
 
-        private sealed class PassScope : IDisposable
-        {
-            private readonly MissionService _Service;
-            private readonly DispatchPassCache? _Outer;
-            private bool _Disposed;
-            internal PassScope(MissionService service, DispatchPassCache? outer) { _Service = service; _Outer = outer; }
-            public void Dispose()
-            {
-                if (_Disposed) return;
-                _Disposed = true;
-                _Service._Pass.Value = _Outer;
-            }
-        }
+        #endregion
     }
 }
