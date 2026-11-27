@@ -2,6 +2,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
 {
     using System;
     using System.Collections.Generic;
+    using System.Data.Common;
     using System.Threading;
     using System.Threading.Tasks;
     using Microsoft.Data.SqlClient;
@@ -14,7 +15,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
     /// <summary>
     /// SQL Server implementation of mission database operations.
     /// </summary>
-    internal partial class MissionMethods : IMissionMethods
+    internal class MissionMethods : IMissionMethods
     {
         #region Private-Members
 
@@ -22,6 +23,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
         private readonly string _Header = "[MissionMethods] ";
 #pragma warning restore CS0414
         private readonly SqlServerDatabaseDriver _Driver;
+        private readonly MissionSummaryMethods _Summaries;
         private readonly DatabaseSettings _Settings;
         private readonly LoggingModule _Logging;
 
@@ -38,6 +40,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
         internal MissionMethods(SqlServerDatabaseDriver driver, DatabaseSettings settings, LoggingModule logging)
         {
             _Driver = driver ?? throw new ArgumentNullException(nameof(driver));
+            _Summaries = new MissionSummaryMethods(_Driver);
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
         }
@@ -1241,6 +1244,100 @@ namespace Armada.Core.Database.SqlServer.Implementations
 
             return " AND status IN (" + String.Join(", ", placeholders) + ")";
         }
+
+        /// <inheritdoc />
+        public async Task<int> CountExecutionSlotsAsync(CancellationToken token = default)
+        {
+            using SqlConnection connection = new SqlConnection(_Driver.ConnectionString);
+            await connection.OpenAsync(token).ConfigureAwait(false);
+            using DbCommand command = connection.CreateCommand();
+            command.CommandText = "SELECT COUNT(*) FROM missions WHERE status IN ('Assigned','InProgress');";
+            return Convert.ToInt32(await command.ExecuteScalarAsync(token).ConfigureAwait(false));
+        }
+
+        /// <inheritdoc />
+        public Task<MissionSummary?> ReadSummaryAsync(string id, CancellationToken token = default)
+            => _Summaries.ReadSummaryAsync(id, token);
+
+        /// <inheritdoc />
+        public Task<EnumerationResult<MissionSummary>> EnumerateSummariesAsync(EnumerationQuery query, CancellationToken token = default)
+            => _Summaries.EnumerateSummariesAsync(query, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionSummary>> EnumerateSummariesByVoyageAsync(string voyageId, CancellationToken token = default)
+            => _Summaries.EnumerateSummariesByVoyageAsync(voyageId, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionSummary>> EnumerateSummariesByVesselAsync(string vesselId, CancellationToken token = default)
+            => _Summaries.EnumerateSummariesByVesselAsync(vesselId, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionSummary>> EnumerateSummariesByCaptainAsync(string captainId, CancellationToken token = default)
+            => _Summaries.EnumerateSummariesByCaptainAsync(captainId, token);
+
+        /// <inheritdoc />
+        public Task<Dictionary<MissionStatusEnum, int>> CountByStatusAsync(CancellationToken token = default)
+            => _Summaries.CountByStatusAsync(token);
+
+        /// <inheritdoc />
+        public Task<List<MissionHistoryPoint>> EnumerateHistoryPointsAsync(MissionHistoryQuery query, CancellationToken token = default)
+            => _Summaries.EnumerateHistoryPointsAsync(query, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionHistoryBucketCount>> CountHistoryBucketsAsync(MissionHistoryQuery query, CancellationToken token = default)
+            => _Summaries.CountHistoryBucketsAsync(query, token);
+
+        /// <inheritdoc />
+        public Task<MissionSummary?> ReadSummaryAsync(string tenantId, string id, CancellationToken token = default)
+            => _Summaries.ReadSummaryAsync(tenantId, id, token);
+
+        /// <inheritdoc />
+        public Task<EnumerationResult<MissionSummary>> EnumerateSummariesAsync(string tenantId, EnumerationQuery query, CancellationToken token = default)
+            => _Summaries.EnumerateSummariesAsync(tenantId, query, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionSummary>> EnumerateSummariesByVoyageAsync(string tenantId, string voyageId, CancellationToken token = default)
+            => _Summaries.EnumerateSummariesByVoyageAsync(tenantId, voyageId, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionSummary>> EnumerateSummariesByVesselAsync(string tenantId, string vesselId, CancellationToken token = default)
+            => _Summaries.EnumerateSummariesByVesselAsync(tenantId, vesselId, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionSummary>> EnumerateSummariesByCaptainAsync(string tenantId, string captainId, CancellationToken token = default)
+            => _Summaries.EnumerateSummariesByCaptainAsync(tenantId, captainId, token);
+
+        /// <inheritdoc />
+        public Task<Dictionary<MissionStatusEnum, int>> CountByStatusAsync(string tenantId, CancellationToken token = default)
+            => _Summaries.CountByStatusAsync(tenantId, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionHistoryPoint>> EnumerateHistoryPointsAsync(string tenantId, MissionHistoryQuery query, CancellationToken token = default)
+            => _Summaries.EnumerateHistoryPointsAsync(tenantId, query, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionHistoryBucketCount>> CountHistoryBucketsAsync(string tenantId, MissionHistoryQuery query, CancellationToken token = default)
+            => _Summaries.CountHistoryBucketsAsync(tenantId, query, token);
+
+        /// <inheritdoc />
+        public Task<MissionSummary?> ReadSummaryAsync(string tenantId, string userId, string id, CancellationToken token = default)
+            => _Summaries.ReadSummaryAsync(tenantId, userId, id, token);
+
+        /// <inheritdoc />
+        public Task<EnumerationResult<MissionSummary>> EnumerateSummariesAsync(string tenantId, string userId, EnumerationQuery query, CancellationToken token = default)
+            => _Summaries.EnumerateSummariesAsync(tenantId, userId, query, token);
+
+        /// <inheritdoc />
+        public Task<Dictionary<MissionStatusEnum, int>> CountByStatusAsync(string tenantId, string userId, CancellationToken token = default)
+            => _Summaries.CountByStatusAsync(tenantId, userId, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionHistoryPoint>> EnumerateHistoryPointsAsync(string tenantId, string userId, MissionHistoryQuery query, CancellationToken token = default)
+            => _Summaries.EnumerateHistoryPointsAsync(tenantId, userId, query, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionHistoryBucketCount>> CountHistoryBucketsAsync(string tenantId, string userId, MissionHistoryQuery query, CancellationToken token = default)
+            => _Summaries.CountHistoryBucketsAsync(tenantId, userId, query, token);
 
         #endregion
 

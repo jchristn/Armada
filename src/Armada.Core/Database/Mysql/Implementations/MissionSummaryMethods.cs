@@ -1,39 +1,52 @@
-namespace Armada.Core.Database.Postgresql.Implementations
+namespace Armada.Core.Database.Mysql.Implementations
 {
     using System;
     using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
-    using Npgsql;
+    using MySqlConnector;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using static Armada.Core.Database.Mysql.Implementations.MissionMethods;
 
-    public partial class MissionMethods
+    /// <summary>Mission summary, status count, and history queries for MySQL.</summary>
+    internal sealed class MissionSummaryMethods
     {
-        private const string MissionSummarySelectColumns = @"
+        private readonly string _ConnectionString;
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="connectionString">MySQL connection string.</param>
+        /// <exception cref="ArgumentNullException">connectionString is null.</exception>
+        internal MissionSummaryMethods(string connectionString)
+        {
+            _ConnectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
+        }
+
+        internal const string MissionSummarySelectColumns = @"
 id, tenant_id, user_id, voyage_id, vessel_id, captain_id, title, status, priority,
 parent_mission_id, branch_strategy, depth, ready_utc, assigned_utc, wait_for_voyage_workers, branch_name, dock_id, process_id, pr_url, commit_hash,
 persona, depends_on_mission_id, failure_reason, failure_kind, is_evaluation, requires_review, review_deny_action,
 review_comment, reviewed_by_user_id, review_requested_utc, review_deadline_utc, reviewed_utc,
 created_utc, started_utc, completed_utc, total_runtime_ms, last_update_utc,
-LENGTH(COALESCE(description, '')) AS description_length,
-LENGTH(COALESCE(diff_snapshot, '')) AS diff_snapshot_length,
-LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
+CHAR_LENGTH(COALESCE(description, '')) AS description_length,
+CHAR_LENGTH(COALESCE(diff_snapshot, '')) AS diff_snapshot_length,
+CHAR_LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
 
         /// <inheritdoc />
         public async Task<MissionSummary?> ReadSummaryAsync(string id, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
-            using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
-                using (NpgsqlCommand cmd = new NpgsqlCommand())
+                using (MySqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.Connection = conn;
                     cmd.CommandText = "SELECT " + MissionSummarySelectColumns + " FROM missions WHERE id = @id LIMIT 1;";
                     cmd.Parameters.AddWithValue("@id", id);
-                    using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    using (MySqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         if (await reader.ReadAsync(token).ConfigureAwait(false))
                             return MissionSummaryFromReader(reader);
@@ -110,16 +123,15 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
-            using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
-                using (NpgsqlCommand cmd = new NpgsqlCommand())
+                using (MySqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.Connection = conn;
                     cmd.CommandText = "SELECT " + MissionSummarySelectColumns + " FROM missions WHERE tenant_id = @tenant_id AND id = @id LIMIT 1;";
                     cmd.Parameters.AddWithValue("@tenant_id", tenantId);
                     cmd.Parameters.AddWithValue("@id", id);
-                    using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    using (MySqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         if (await reader.ReadAsync(token).ConfigureAwait(false))
                             return MissionSummaryFromReader(reader);
@@ -204,17 +216,16 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
             if (String.IsNullOrEmpty(userId)) throw new ArgumentNullException(nameof(userId));
             if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
-            using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
-                using (NpgsqlCommand cmd = new NpgsqlCommand())
+                using (MySqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.Connection = conn;
                     cmd.CommandText = "SELECT " + MissionSummarySelectColumns + " FROM missions WHERE tenant_id = @tenant_id AND user_id = @user_id AND id = @id LIMIT 1;";
                     cmd.Parameters.AddWithValue("@tenant_id", tenantId);
                     cmd.Parameters.AddWithValue("@user_id", userId);
                     cmd.Parameters.AddWithValue("@id", id);
-                    using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    using (MySqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         if (await reader.ReadAsync(token).ConfigureAwait(false))
                             return MissionSummaryFromReader(reader);
@@ -288,7 +299,7 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
                 token).ConfigureAwait(false);
         }
 
-        private async Task<EnumerationResult<MissionSummary>> EnumerateSummariesCoreAsync(
+        internal async Task<EnumerationResult<MissionSummary>> EnumerateSummariesCoreAsync(
             EnumerationQuery? query,
             IEnumerable<string> baseConditions,
             IEnumerable<KeyValuePair<string, object?>> baseParameters,
@@ -296,23 +307,21 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
         {
             query ??= new EnumerationQuery();
 
-            using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
 
                 List<string> countConditions = new List<string>(baseConditions);
-                using (NpgsqlCommand countCmd = new NpgsqlCommand())
+                using (MySqlCommand countCmd = conn.CreateCommand())
                 {
-                    countCmd.Connection = conn;
                     AddParameters(countCmd, baseParameters);
                     ApplyEnumerationFilters(query, countConditions, countCmd);
                     countCmd.CommandText = "SELECT COUNT(*) FROM missions" + BuildWhereClause(countConditions) + ";";
                     long totalCount = Convert.ToInt64(await countCmd.ExecuteScalarAsync(token).ConfigureAwait(false));
 
                     List<string> selectConditions = new List<string>(baseConditions);
-                    using (NpgsqlCommand selectCmd = new NpgsqlCommand())
+                    using (MySqlCommand selectCmd = conn.CreateCommand())
                     {
-                        selectCmd.Connection = conn;
                         AddParameters(selectCmd, baseParameters);
                         ApplyEnumerationFilters(query, selectConditions, selectCmd);
                         string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
@@ -322,7 +331,7 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
                             " ORDER BY created_utc " + orderDirection + ", id " + orderDirection +
                             " LIMIT " + query.PageSize + " OFFSET " + query.Offset + ";";
                         List<MissionSummary> results = new List<MissionSummary>();
-                        using (NpgsqlDataReader reader = await selectCmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                        using (MySqlDataReader reader = await selectCmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                         {
                             while (await reader.ReadAsync(token).ConfigureAwait(false))
                                 results.Add(MissionSummaryFromReader(reader));
@@ -334,21 +343,20 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
             }
         }
 
-        private async Task<List<MissionSummary>> EnumerateSummariesByColumnAsync(string column, string value, CancellationToken token)
+        internal async Task<List<MissionSummary>> EnumerateSummariesByColumnAsync(string column, string value, CancellationToken token)
         {
             List<MissionSummary> results = new List<MissionSummary>();
 
-            using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
-                using (NpgsqlCommand cmd = new NpgsqlCommand())
+                using (MySqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.Connection = conn;
                     cmd.CommandText =
                         "SELECT " + MissionSummarySelectColumns +
                         " FROM missions WHERE " + column + " = @value ORDER BY created_utc DESC;";
                     cmd.Parameters.AddWithValue("@value", value);
-                    using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    using (MySqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         while (await reader.ReadAsync(token).ConfigureAwait(false))
                             results.Add(MissionSummaryFromReader(reader));
@@ -359,22 +367,21 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
             return results;
         }
 
-        private async Task<List<MissionSummary>> EnumerateTenantSummariesByColumnAsync(string tenantId, string column, string value, CancellationToken token)
+        internal async Task<List<MissionSummary>> EnumerateTenantSummariesByColumnAsync(string tenantId, string column, string value, CancellationToken token)
         {
             List<MissionSummary> results = new List<MissionSummary>();
 
-            using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
-                using (NpgsqlCommand cmd = new NpgsqlCommand())
+                using (MySqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.Connection = conn;
                     cmd.CommandText =
                         "SELECT " + MissionSummarySelectColumns +
                         " FROM missions WHERE tenant_id = @tenant_id AND " + column + " = @value ORDER BY created_utc DESC;";
                     cmd.Parameters.AddWithValue("@tenant_id", tenantId);
                     cmd.Parameters.AddWithValue("@value", value);
-                    using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    using (MySqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         while (await reader.ReadAsync(token).ConfigureAwait(false))
                             results.Add(MissionSummaryFromReader(reader));
@@ -385,22 +392,21 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
             return results;
         }
 
-        private async Task<Dictionary<MissionStatusEnum, int>> CountByStatusCoreAsync(
+        internal async Task<Dictionary<MissionStatusEnum, int>> CountByStatusCoreAsync(
             IEnumerable<string> baseConditions,
             IEnumerable<KeyValuePair<string, object?>> baseParameters,
             CancellationToken token)
         {
             Dictionary<MissionStatusEnum, int> results = new Dictionary<MissionStatusEnum, int>();
 
-            using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
-                using (NpgsqlCommand cmd = new NpgsqlCommand())
+                using (MySqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.Connection = conn;
                     AddParameters(cmd, baseParameters);
                     cmd.CommandText = "SELECT status, COUNT(*) AS count FROM missions" + BuildWhereClause(baseConditions) + " GROUP BY status;";
-                    using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    using (MySqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         while (await reader.ReadAsync(token).ConfigureAwait(false))
                         {
@@ -417,7 +423,7 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
             return results;
         }
 
-        private async Task<List<MissionHistoryBucketCount>> CountHistoryBucketsCoreAsync(
+        internal async Task<List<MissionHistoryBucketCount>> CountHistoryBucketsCoreAsync(
             MissionHistoryQuery? query,
             IEnumerable<string> baseConditions,
             IEnumerable<KeyValuePair<string, object?>> baseParameters,
@@ -426,20 +432,19 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
             query ??= new MissionHistoryQuery();
             List<MissionHistoryBucketCount> results = new List<MissionHistoryBucketCount>();
 
-            using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
-                using (NpgsqlCommand cmd = new NpgsqlCommand())
+                using (MySqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.Connection = conn;
                     List<string> conditions = new List<string>(baseConditions)
                     {
                         "created_utc >= @from_utc",
                         "created_utc < @to_utc"
                     };
                     AddParameters(cmd, baseParameters);
-                    PostgresqlCommandHelper.AddDate(cmd, "@from_utc", query.FromUtc);
-                    PostgresqlCommandHelper.AddDate(cmd, "@to_utc", query.ToUtc);
+                    cmd.Parameters.AddWithValue("@from_utc", MysqlDatabaseDriver.ToIso8601(query.FromUtc));
+                    cmd.Parameters.AddWithValue("@to_utc", MysqlDatabaseDriver.ToIso8601(query.ToUtc));
                     cmd.Parameters.AddWithValue("@start_epoch", query.AlignedStartEpochSeconds);
                     cmd.Parameters.AddWithValue("@bucket_seconds", query.BucketSeconds);
                     if (!String.IsNullOrEmpty(query.VesselId))
@@ -457,10 +462,10 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
                     // buckets times the number of statuses, never by the number of missions.
                     cmd.CommandText =
                         "SELECT bucket_index, status, COUNT(*) AS mission_count FROM (" +
-                        "SELECT FLOOR((EXTRACT(EPOCH FROM created_utc) - @start_epoch) / @bucket_seconds) AS bucket_index, status FROM missions" +
+                        "SELECT (TIMESTAMPDIFF(SECOND, '1970-01-01 00:00:00', created_utc) - @start_epoch) DIV @bucket_seconds AS bucket_index, status FROM missions" +
                         BuildWhereClause(conditions) +
                         ") history_rows GROUP BY bucket_index, status ORDER BY bucket_index, status;";
-                    using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    using (MySqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         while (await reader.ReadAsync(token).ConfigureAwait(false))
                         {
@@ -478,7 +483,7 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
             return results;
         }
 
-        private async Task<List<MissionHistoryPoint>> EnumerateHistoryPointsCoreAsync(
+        internal async Task<List<MissionHistoryPoint>> EnumerateHistoryPointsCoreAsync(
             MissionHistoryQuery? query,
             IEnumerable<string> baseConditions,
             IEnumerable<KeyValuePair<string, object?>> baseParameters,
@@ -487,20 +492,19 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
             query ??= new MissionHistoryQuery();
             List<MissionHistoryPoint> results = new List<MissionHistoryPoint>();
 
-            using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
-                using (NpgsqlCommand cmd = new NpgsqlCommand())
+                using (MySqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.Connection = conn;
                     List<string> conditions = new List<string>(baseConditions)
                     {
                         "created_utc >= @from_utc",
                         "created_utc < @to_utc"
                     };
                     AddParameters(cmd, baseParameters);
-                    PostgresqlCommandHelper.AddDate(cmd, "@from_utc", query.FromUtc);
-                    PostgresqlCommandHelper.AddDate(cmd, "@to_utc", query.ToUtc);
+                    cmd.Parameters.AddWithValue("@from_utc", MysqlDatabaseDriver.ToIso8601(query.FromUtc));
+                    cmd.Parameters.AddWithValue("@to_utc", MysqlDatabaseDriver.ToIso8601(query.ToUtc));
                     if (!String.IsNullOrEmpty(query.VesselId))
                     {
                         conditions.Add("vessel_id = @vessel_id");
@@ -511,13 +515,13 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
                         "SELECT created_utc, status, vessel_id FROM missions" +
                         BuildWhereClause(conditions) +
                         " ORDER BY created_utc ASC;";
-                    using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    using (MySqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         while (await reader.ReadAsync(token).ConfigureAwait(false))
                         {
                             results.Add(new MissionHistoryPoint
                             {
-                                CreatedUtc = DateTime.SpecifyKind((DateTime)reader["created_utc"], DateTimeKind.Utc),
+                                CreatedUtc = DateTime.SpecifyKind(Convert.ToDateTime(reader["created_utc"]), DateTimeKind.Utc),
                                 Status = Enum.Parse<MissionStatusEnum>(reader["status"].ToString()!),
                                 VesselId = NullableString(reader["vessel_id"])
                             });
@@ -529,27 +533,27 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
             return results;
         }
 
-        private static void ApplyEnumerationFilters(EnumerationQuery query, List<string> conditions, NpgsqlCommand cmd)
+        internal static void ApplyEnumerationFilters(EnumerationQuery query, List<string> conditions, MySqlCommand cmd)
         {
             if (query.CreatedAfter.HasValue)
             {
                 conditions.Add("created_utc > @created_after");
-                PostgresqlCommandHelper.AddDate(cmd, "@created_after", query.CreatedAfter.Value);
+                cmd.Parameters.AddWithValue("@created_after", MysqlDatabaseDriver.ToIso8601(query.CreatedAfter.Value));
             }
             if (query.CreatedBefore.HasValue)
             {
                 conditions.Add("created_utc < @created_before");
-                PostgresqlCommandHelper.AddDate(cmd, "@created_before", query.CreatedBefore.Value);
+                cmd.Parameters.AddWithValue("@created_before", MysqlDatabaseDriver.ToIso8601(query.CreatedBefore.Value));
             }
             if (query.UpdatedAfter.HasValue)
             {
                 conditions.Add("last_update_utc >= @updated_after");
-                PostgresqlCommandHelper.AddDate(cmd, "@updated_after", query.UpdatedAfter.Value);
+                cmd.Parameters.AddWithValue("@updated_after", MysqlDatabaseDriver.ToIso8601(query.UpdatedAfter.Value));
             }
             if (query.UpdatedBefore.HasValue)
             {
                 conditions.Add("last_update_utc <= @updated_before");
-                PostgresqlCommandHelper.AddDate(cmd, "@updated_before", query.UpdatedBefore.Value);
+                cmd.Parameters.AddWithValue("@updated_before", MysqlDatabaseDriver.ToIso8601(query.UpdatedBefore.Value));
             }
             if (!String.IsNullOrEmpty(query.Status))
             {
@@ -589,7 +593,7 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
             }
         }
 
-        private static void AddParameters(NpgsqlCommand cmd, IEnumerable<KeyValuePair<string, object?>> parameters)
+        internal static void AddParameters(MySqlCommand cmd, IEnumerable<KeyValuePair<string, object?>> parameters)
         {
             foreach (KeyValuePair<string, object?> parameter in parameters)
             {
@@ -597,13 +601,13 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
             }
         }
 
-        private static string BuildWhereClause(IEnumerable<string> conditions)
+        internal static string BuildWhereClause(IEnumerable<string> conditions)
         {
             List<string> conditionList = new List<string>(conditions);
             return conditionList.Count > 0 ? " WHERE " + String.Join(" AND ", conditionList) : String.Empty;
         }
 
-        private static MissionSummary MissionSummaryFromReader(NpgsqlDataReader reader)
+        internal static MissionSummary MissionSummaryFromReader(MySqlDataReader reader)
         {
             MissionSummary summary = new MissionSummary
             {
@@ -619,33 +623,33 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
                 ParentMissionId = NullableString(reader["parent_mission_id"]),
                 BranchStrategy = Enum.TryParse(reader["branch_strategy"].ToString(), out MissionBranchStrategyEnum strategy) ? strategy : MissionBranchStrategyEnum.New,
                 Depth = reader["depth"] == DBNull.Value ? 0 : Math.Clamp(Convert.ToInt32(reader["depth"]), 0, 16),
-                ReadyUtc = NullableDateTime(reader["ready_utc"]),
-                AssignedUtc = NullableDateTime(reader["assigned_utc"]),
-                WaitForVoyageWorkers = reader["wait_for_voyage_workers"] != DBNull.Value && Convert.ToBoolean(reader["wait_for_voyage_workers"]),
+                ReadyUtc = FromIso8601Nullable(reader["ready_utc"]),
+                AssignedUtc = FromIso8601Nullable(reader["assigned_utc"]),
+                WaitForVoyageWorkers = reader["wait_for_voyage_workers"] != DBNull.Value && Convert.ToInt64(reader["wait_for_voyage_workers"]) == 1,
                 BranchName = NullableString(reader["branch_name"]),
                 DockId = NullableString(reader["dock_id"]),
-                ProcessId = NullableInt(reader["process_id"]),
+                ProcessId = reader["process_id"] == DBNull.Value ? null : Convert.ToInt32(reader["process_id"]),
                 PrUrl = NullableString(reader["pr_url"]),
                 CommitHash = NullableString(reader["commit_hash"]),
                 Persona = NullableString(reader["persona"]),
                 DependsOnMissionId = NullableString(reader["depends_on_mission_id"]),
                 FailureReason = NullableString(reader["failure_reason"]),
                 FailureKind = MissionFailureKindColumn.FromDbValue(reader["failure_kind"]),
-                RequiresReview = reader["requires_review"] != DBNull.Value && Convert.ToBoolean(reader["requires_review"]),
-                IsEvaluation = reader["is_evaluation"] != DBNull.Value && Convert.ToBoolean(reader["is_evaluation"]),
+                RequiresReview = reader["requires_review"] != DBNull.Value && Convert.ToInt64(reader["requires_review"]) == 1,
+                IsEvaluation = reader["is_evaluation"] != DBNull.Value && Convert.ToInt64(reader["is_evaluation"]) == 1,
                 ReviewComment = NullableString(reader["review_comment"]),
                 ReviewedByUserId = NullableString(reader["reviewed_by_user_id"]),
-                ReviewRequestedUtc = NullableDateTime(reader["review_requested_utc"]),
-                ReviewDeadlineUtc = NullableDateTime(reader["review_deadline_utc"]),
-                ReviewedUtc = NullableDateTime(reader["reviewed_utc"]),
+                ReviewRequestedUtc = FromIso8601Nullable(reader["review_requested_utc"]),
+                ReviewDeadlineUtc = FromIso8601Nullable(reader["review_deadline_utc"]),
+                ReviewedUtc = FromIso8601Nullable(reader["reviewed_utc"]),
                 DescriptionLength = Convert.ToInt32(reader["description_length"]),
                 DiffSnapshotLength = Convert.ToInt32(reader["diff_snapshot_length"]),
                 AgentOutputLength = Convert.ToInt32(reader["agent_output_length"]),
-                CreatedUtc = DateTime.SpecifyKind((DateTime)reader["created_utc"], DateTimeKind.Utc),
-                StartedUtc = NullableDateTime(reader["started_utc"]),
-                CompletedUtc = NullableDateTime(reader["completed_utc"]),
-                TotalRuntimeMs = NullableLong(reader["total_runtime_ms"]),
-                LastUpdateUtc = DateTime.SpecifyKind((DateTime)reader["last_update_utc"], DateTimeKind.Utc)
+                CreatedUtc = DateTime.SpecifyKind(Convert.ToDateTime(reader["created_utc"]), DateTimeKind.Utc),
+                StartedUtc = FromIso8601Nullable(reader["started_utc"]),
+                CompletedUtc = FromIso8601Nullable(reader["completed_utc"]),
+                TotalRuntimeMs = reader["total_runtime_ms"] == DBNull.Value ? null : Convert.ToInt64(reader["total_runtime_ms"]),
+                LastUpdateUtc = DateTime.SpecifyKind(Convert.ToDateTime(reader["last_update_utc"]), DateTimeKind.Utc)
             };
 
             string? reviewDenyAction = NullableString(reader["review_deny_action"]);
