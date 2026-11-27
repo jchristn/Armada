@@ -69,7 +69,7 @@ namespace Armada.Server.Mcp.Tools
                     string? path = PackArgument(args, "path");
                     string? content = PackArgument(args, "content");
                     string? manifest = PackArgument(args, "manifestJson");
-                    return Task.FromResult((object)service.GetPack(caller, id));
+                    return Task.FromResult((object)service.Packs.GetPack(caller, id));
                 });
 
             register("read_battery_pack_file", "Read battery pack text file. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
@@ -82,7 +82,7 @@ namespace Armada.Server.Mcp.Tools
                     string? path = PackArgument(args, "path");
                     string? content = PackArgument(args, "content");
                     string? manifest = PackArgument(args, "manifestJson");
-                    return Task.FromResult((object)service.ReadPackFile(caller, id, path));
+                    return Task.FromResult((object)service.Packs.ReadPackFile(caller, id, path));
                 });
 
             register("write_battery_pack_file", "Write battery pack text file. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
@@ -95,7 +95,7 @@ namespace Armada.Server.Mcp.Tools
                     string? path = PackArgument(args, "path");
                     string? content = PackArgument(args, "content");
                     string? manifest = PackArgument(args, "manifestJson");
-                    return Task.FromResult((object)service.WritePackFile(caller, id, path, content));
+                    return Task.FromResult((object)service.Packs.WritePackFile(caller, id, path, content));
                 });
 
             register("delete_battery_pack_file", "Delete battery pack text file. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
@@ -108,7 +108,7 @@ namespace Armada.Server.Mcp.Tools
                     string? path = PackArgument(args, "path");
                     string? content = PackArgument(args, "content");
                     string? manifest = PackArgument(args, "manifestJson");
-                    return Task.FromResult((object)service.DeletePackFile(caller, id, path));
+                    return Task.FromResult((object)service.Packs.DeletePackFile(caller, id, path));
                 });
 
             register("create_battery_pack", "Create battery pack. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
@@ -121,7 +121,7 @@ namespace Armada.Server.Mcp.Tools
                     string? path = PackArgument(args, "path");
                     string? content = PackArgument(args, "content");
                     string? manifest = PackArgument(args, "manifestJson");
-                    return Task.FromResult((object)service.CreatePack(caller, new BatteryPackEditRequest { PackId = id ?? String.Empty, ManifestJson = manifest ?? String.Empty }));
+                    return Task.FromResult((object)service.Packs.CreatePack(caller, new BatteryPackEditRequest { PackId = id ?? String.Empty, ManifestJson = manifest ?? String.Empty }));
                 });
 
             register("update_battery_pack_manifest", "Update battery pack manifest. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
@@ -134,7 +134,7 @@ namespace Armada.Server.Mcp.Tools
                     string? path = PackArgument(args, "path");
                     string? content = PackArgument(args, "content");
                     string? manifest = PackArgument(args, "manifestJson");
-                    return Task.FromResult((object)service.UpdatePackManifest(caller, id, manifest));
+                    return Task.FromResult((object)service.Packs.UpdatePackManifest(caller, id, manifest));
                 });
 
             register("delete_battery_pack", "Delete battery pack. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
@@ -147,7 +147,7 @@ namespace Armada.Server.Mcp.Tools
                     string? path = PackArgument(args, "path");
                     string? content = PackArgument(args, "content");
                     string? manifest = PackArgument(args, "manifestJson");
-                    return Task.FromResult((object)service.DeletePack(caller, id));
+                    return Task.FromResult((object)service.Packs.DeletePack(caller, id));
                 });
 
             register("validate_battery_pack", "Validate battery pack without writing. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
@@ -160,7 +160,7 @@ namespace Armada.Server.Mcp.Tools
                     string? path = PackArgument(args, "path");
                     string? content = PackArgument(args, "content");
                     string? manifest = PackArgument(args, "manifestJson");
-                    return Task.FromResult((object)service.ValidatePack(caller, id));
+                    return Task.FromResult((object)service.Packs.ValidatePack(caller, id));
                 });
 
             register(

@@ -113,7 +113,7 @@ namespace Armada.Server.Routes
                 if (denied != null) return denied;
                 try
                 {
-                    return (object)_Service.GetPack(ctx, req.Parameters["packId"]);
+                    return (object)_Service.Packs.GetPack(ctx, req.Parameters["packId"]);
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
@@ -135,7 +135,7 @@ namespace Armada.Server.Routes
                 if (denied != null) return denied;
                 try
                 {
-                    return (object)_Service.ReadPackFile(ctx, req.Parameters["packId"], ReadPackPath(req));
+                    return (object)_Service.Packs.ReadPackFile(ctx, req.Parameters["packId"], ReadPackPath(req));
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
@@ -158,7 +158,7 @@ namespace Armada.Server.Routes
                 if (denied != null) return denied;
                 try
                 {
-                    return (object)_Service.CreatePack(ctx, ReadPackBody<BatteryPackEditRequest>(req));
+                    return (object)_Service.Packs.CreatePack(ctx, ReadPackBody<BatteryPackEditRequest>(req));
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
@@ -180,7 +180,7 @@ namespace Armada.Server.Routes
                 if (denied != null) return denied;
                 try
                 {
-                    return (object)_Service.UpdatePackManifest(ctx, req.Parameters["packId"], ReadPackBody<BatteryPackEditRequest>(req).ManifestJson);
+                    return (object)_Service.Packs.UpdatePackManifest(ctx, req.Parameters["packId"], ReadPackBody<BatteryPackEditRequest>(req).ManifestJson);
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
@@ -203,7 +203,7 @@ namespace Armada.Server.Routes
                 if (denied != null) return denied;
                 try
                 {
-                    return (object)_Service.WritePackFile(ctx, req.Parameters["packId"], ReadPackPath(req), ReadPackBody<BatteryPackTextFile>(req).Content);
+                    return (object)_Service.Packs.WritePackFile(ctx, req.Parameters["packId"], ReadPackPath(req), ReadPackBody<BatteryPackTextFile>(req).Content);
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
@@ -227,7 +227,7 @@ namespace Armada.Server.Routes
                 if (denied != null) return denied;
                 try
                 {
-                    return (object)_Service.DeletePackFile(ctx, req.Parameters["packId"], ReadPackPath(req));
+                    return (object)_Service.Packs.DeletePackFile(ctx, req.Parameters["packId"], ReadPackPath(req));
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
@@ -250,7 +250,7 @@ namespace Armada.Server.Routes
                 if (denied != null) return denied;
                 try
                 {
-                    return (object)_Service.DeletePack(ctx, req.Parameters["packId"]);
+                    return (object)_Service.Packs.DeletePack(ctx, req.Parameters["packId"]);
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
@@ -272,7 +272,7 @@ namespace Armada.Server.Routes
                 if (denied != null) return denied;
                 try
                 {
-                    return (object)_Service.ValidatePack(ctx, req.Parameters["packId"]);
+                    return (object)_Service.Packs.ValidatePack(ctx, req.Parameters["packId"]);
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {

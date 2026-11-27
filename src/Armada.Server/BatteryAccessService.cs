@@ -16,7 +16,7 @@ namespace Armada.Server
     /// admin sees every tenant). Captain sessions are refused. Errors are typed exceptions the route and tool layers map
     /// to 400/403/404.
     /// </summary>
-    public partial class BatteryAccessService
+    public class BatteryAccessService
     {
         #region Private-Members
 
@@ -24,6 +24,15 @@ namespace Armada.Server
         private readonly DatabaseDriver _Database;
         private readonly BatteryRunService _Service;
         private readonly LoggingModule _Logging;
+
+        #endregion
+
+        #region Public-Members
+
+        /// <summary>
+        /// Battery pack authoring.
+        /// </summary>
+        public BatteryPackAccessService Packs { get; }
 
         #endregion
 
@@ -40,6 +49,7 @@ namespace Armada.Server
         {
             _Database = database ?? throw new ArgumentNullException(nameof(database));
             _Service = service ?? throw new ArgumentNullException(nameof(service));
+            Packs = new BatteryPackAccessService(_Service);
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
         }
 
@@ -216,7 +226,7 @@ namespace Armada.Server
 
         #region Private-Methods
 
-        private static void RequirePerson(AuthContext caller)
+        internal static void RequirePerson(AuthContext caller)
         {
             if (caller == null) throw new ArgumentNullException(nameof(caller));
             if (!caller.IsAuthenticated) throw new UnauthorizedAccessException("Authentication required.");

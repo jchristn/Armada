@@ -10,23 +10,38 @@ namespace Armada.Server
     using Armada.Core.Models;
     using Armada.Core.Services;
 
-    public partial class BatteryAccessService
+    /// <summary>
+    /// Battery pack authoring for administrators: read, create, edit, validate, and delete packs on disk. Packs a run
+    /// is using cannot change.
+    /// </summary>
+    public sealed class BatteryPackAccessService
     {
         private const int MaxPackTextBytes = 1024 * 1024;
         private readonly object _PackLock = new object();
         private static readonly UTF8Encoding _PackUtf8 = new UTF8Encoding(false, true);
+        private readonly BatteryRunService _Service;
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="service">Battery run service.</param>
+        /// <exception cref="ArgumentNullException">Thrown when service is null.</exception>
+        public BatteryPackAccessService(BatteryRunService service)
+        {
+            _Service = service ?? throw new ArgumentNullException(nameof(service));
+        }
 
         /// <summary>Read a pack and validate its current on-disk manifest.</summary>
         public BatteryPackDetail GetPack(AuthContext caller, string? packId)
         {
-            RequirePerson(caller);
+            BatteryAccessService.RequirePerson(caller);
             lock (_PackLock) return ReadPack(PackDirectory(packId));
         }
 
         /// <summary>Read a regular UTF-8 text file, refusing binary and oversized content.</summary>
         public BatteryPackTextFile ReadPackFile(AuthContext caller, string? packId, string? path)
         {
-            RequirePerson(caller);
+            BatteryAccessService.RequirePerson(caller);
             lock (_PackLock)
             {
                 string file = PackPath(PackDirectory(packId), path);
@@ -125,7 +140,7 @@ namespace Armada.Server
 
         private static void RequirePackAdmin(AuthContext caller)
         {
-            RequirePerson(caller);
+            BatteryAccessService.RequirePerson(caller);
             if (!caller.IsAdmin) throw new UnauthorizedAccessException("Only a global admin can manage server-wide battery packs.");
         }
 
