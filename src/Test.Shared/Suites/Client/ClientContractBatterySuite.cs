@@ -114,6 +114,9 @@ namespace Test.Shared.Suites.Client
                 AssertEqual(run.Id, listed.Objects.Single().Id, "list filters by captain and status");
                 AssertEqual(5, listed.PageSize, "page size sent");
                 AssertEqual(0, listed.Objects.Single().Results.Count, "the list does not embed results");
+                EnumerationResult<BatteryRun> posted = (await c.Battery.EnumerateRunsAsync(new BatteryRunQuery { CaptainId = captain.Id, Status = BatteryRunStatusEnum.Completed, PageSize = 5 }))!;
+                AssertEqual(run.Id, posted.Objects.Single().Id, "POST twin filters by captain and status");
+                AssertEqual(5, posted.PageSize, "POST twin page size sent");
                 BatteryRun unchanged = (await c.Battery.CancelRunAsync(run.Id, "too late"))!;
                 AssertEqual(BatteryRunStatusEnum.Completed, unchanged.Status, "cancelling a finished run changes nothing");
                 await ClientContract.ExpectErrorAsync(() => c.Battery.CancelRunAsync("bat_missing"), "cancel unknown run", 404, 404);

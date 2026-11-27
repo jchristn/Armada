@@ -853,13 +853,9 @@ namespace Armada.Core.Services
                 mission.ProcessId = processId;
                 mission.StartedUtc = DateTime.UtcNow;
                 mission.LaunchIntentUtc = null;
-                MissionStatusEnum statusBeforeLaunch = mission.Status;
+                // A failed attempt restores the in-memory status (MissionTransitions), so each retry sees the real edge.
                 bool launchRecorded = await RetryTransientAsync(() =>
-                {
-                    // A failed attempt leaves the in-memory status at InProgress; restore it so the retry sees the real edge.
-                    mission.Status = statusBeforeLaunch;
-                    return _Service.Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.Assigned }, MissionStatusEnum.InProgress, null, CancellationToken.None);
-                }).ConfigureAwait(false);
+                    _Service.Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.Assigned }, MissionStatusEnum.InProgress, null, CancellationToken.None)).ConfigureAwait(false);
                 Mission? currentMission = launchRecorded ? null : await _Database.Missions.ReadAsync(mission.Id, CancellationToken.None).ConfigureAwait(false);
                 if (currentMission != null)
                 {

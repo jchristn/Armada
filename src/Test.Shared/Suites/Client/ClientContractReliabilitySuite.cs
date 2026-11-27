@@ -98,6 +98,10 @@ namespace Test.Shared.Suites.Client
                 AssertEqual(stored.Id, (await c.Reliability.GetGateReportAsync(stored.Id!))?.Id, "by id");
                 EnumerationResult<GateReport> page = (await c.Reliability.ListGateReportsAsync(1, 5))!;
                 AssertEqual(stored.Id, page.Objects.First().Id, "newest first");
+                EnumerationResult<GateReport> posted = (await c.Reliability.EnumerateGateReportsAsync(new GateReportQuery { PageNumber = 1, PageSize = 5 }))!;
+                AssertEqual(stored.Id, posted.Objects.First().Id, "POST twin, newest first");
+                AssertEqual(5, posted.PageSize, "POST twin page size sent");
+                AssertNotNull(await c.Reliability.EnumerateGateReportsAsync(), "POST twin, no query");
                 await ClientContract.ExpectErrorAsync(() => c.Reliability.GetGateReportAsync("gate-00000000-000000000"), "unknown report", 404, 404);
                 await ClientContract.ExpectErrorAsync(() => c.Reliability.UploadGateReportAsync(new GateReport()), "empty report", 400, 400);
             }));

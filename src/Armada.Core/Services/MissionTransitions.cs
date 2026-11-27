@@ -122,9 +122,19 @@ namespace Armada.Core.Services
             request.Mutate?.Invoke(mission);
             mission.Status = request.To;
 
-            bool written = request.ExpectedLastUpdateUtc.HasValue
-                ? await _Database.Missions.TryUpdateIfUnchangedAsync(mission, request.ExpectedLastUpdateUtc.Value, legalFrom, token).ConfigureAwait(false)
-                : await _Database.Missions.TryUpdateIfStatusAsync(mission, legalFrom, token).ConfigureAwait(false);
+            bool written;
+            try
+            {
+                written = request.ExpectedLastUpdateUtc.HasValue
+                    ? await _Database.Missions.TryUpdateIfUnchangedAsync(mission, request.ExpectedLastUpdateUtc.Value, legalFrom, token).ConfigureAwait(false)
+                    : await _Database.Missions.TryUpdateIfStatusAsync(mission, legalFrom, token).ConfigureAwait(false);
+            }
+            catch
+            {
+                // A failed write (for example a transient deadlock the caller retries) leaves the in-memory status as stored.
+                mission.Status = previous;
+                throw;
+            }
             if (!written)
             {
                 // Match UpdateAsync: the caller sees the stored status, not the refused one.
