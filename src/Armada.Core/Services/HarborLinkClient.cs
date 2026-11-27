@@ -42,6 +42,9 @@ namespace Armada.Core.Services
         /// <summary>Whether the Admiral recommends updating this Harbor (it reported a missing capability flag).</summary>
         public bool UpdateRecommended => MissingCapabilities.Count > 0;
 
+        /// <summary>The capabilities this client advertises at handshake (a copy).</summary>
+        public List<HarborCapability> AdvertisedCapabilities => new List<HarborCapability>(_Capabilities);
+
         /// <summary>
         /// Time source. Waits (the deferred-launch health poll) and job durations are measured on its monotonic clock
         /// (<see cref="TimeProvider.GetTimestamp"/>), never on its wall clock, so a wall-clock jump (the host sleeping

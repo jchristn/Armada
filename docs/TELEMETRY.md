@@ -60,6 +60,9 @@ as `armada_*_total` series:
 | `armada_captains_recoveries_total`      | Captain auto-recovery attempts                      |
 | `armada_missions_failed_total`          | Missions that reached Failed                        |
 | `armada_stage_outcomes_total` | One per stage attempt; labels `persona`, `runtime`, `model`, `disposition`, `failure_kind`, `runtime_failure_kind`, `contract_repair`. Rates by model and persona show which models fail, need repairs, or get escalated |
+| `armada_stage_attempts_duration_seconds` | Stage attempt duration histogram; labels `persona`, `runtime`, `model`, `disposition`. Recorded when the attempt's duration is known |
+| `armada_stage_repairs_total`            | Repairs applied to stage attempts; labels `persona`, `runtime`, `model`, `kind` (a contract repair kind, or `Rerun` for an output-repair relaunch) |
+| `armada_stage_escalations_total`        | Stage attempts escalated to another captain; labels `persona`, `runtime`, `model` (escalated from), `failure_kind` |
 | `armada_missions_runtime_exceeded_total`| Missions force-failed for exceeding the max runtime |
 | `armada_reviews_overdue_total`          | Reviews released after going overdue                |
 | `armada_handoffs_redriven_total`        | Dangling pipeline handoffs re-driven                |
@@ -69,6 +72,8 @@ as `armada_*_total` series:
 | `armada_fleet_action_targets_total`     | Fleet action targets finished; labels `kind` (Command, Mission) and `outcome` (Succeeded, Failed, TimedOut, Skipped, Cancelled) |
 | `armada_health_evaluations_total`       | Vessel health evaluations, one per vessel; label `outcome` (Succeeded, Failed, Cancelled) |
 | `armada_vessel_import_items_total`      | Vessel import items processed; label `outcome` (Created, SkippedExisting, SkippedNotSelected, Failed) |
+
+The stage metrics label persona and model by name. A name longer than 64 characters or containing whitespace is reported as `Other`, and no mission, captain or tenant identifier is ever a label.
 
 Concurrency overrun monitoring runs after slot reconciliation on each health tick. Gates are `captain` (reserved mission slots), `vessel_voyages` (sticky occupied groups), `voyage_missions` (the busiest running group on a vessel), `global`, `runtime` and `endpoint`. Causes are `limit_lowered` for an observed reduction draining without growth, `unexpected` for an overrun/growth unexplained by observed limit changes, and `unknown` for startup or ambiguous ordering between samples. Initial over-capacity observations are not proof of an admission bug. The counter increments only when an overrun's count, limit or cause changes, not on every tick; it is not a current-overrun gauge. Filter `cause="unexpected"` for unexplained observations and inspect Activity > Events for entity context. IDs and names never appear in metric labels. Events do not expose mission/voyage IDs from shared resources. Runtime settings use the strictest positive duplicate setting, and endpoint aliases share usage by normalized base URL, matching admission. Aliases with different configured limits remain unknown because their shared usage may be legitimate. Aggregate events are admin-only. Global occupancy uses one SQL count of Assigned/InProgress, without loading artifacts. Wait-time metrics are described under "Mission wait time" below.
 
@@ -162,6 +167,7 @@ Config files live under `docker/armada/observability/`:
 - `loki-config.yaml` -- single-binary Loki config
 - `grafana/provisioning/` -- datasource and dashboard providers
 - `grafana/dashboards/armada-reliability.json` -- the reliability dashboard
+- `grafana/dashboards/armada-pipeline-reliability.json` -- pipeline reliability per model and persona: completion rate, failure kinds, runtime failure kinds, repairs, escalations, dispatch latency and attempt duration (filter by model and persona)
 - `grafana/dashboards/armada-fleet-operations.json` -- fleet actions, vessel health, and vessel import
 - `grafana/dashboards/armada-usage.json` -- usage capture operations
 - `grafana/dashboards/armada-captain-selection.json` -- captain selection, admission and reservations

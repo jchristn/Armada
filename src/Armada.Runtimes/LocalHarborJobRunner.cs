@@ -45,6 +45,12 @@ namespace Armada.Runtimes
         /// </summary>
         public HarborProcessLedger? ProcessLedger { get; set; } = null;
 
+        /// <summary>
+        /// Where the context windows discovered for local endpoints are recorded for the Harbor app (RS-12.19); null to
+        /// record none.
+        /// </summary>
+        public HarborDiscoveredContextLog? DiscoveredContexts { get; set; } = null;
+
         /// <inheritdoc />
         public event Action<string, Armada.Core.Models.RuntimeActivity>? ActivityReported;
 
@@ -397,11 +403,13 @@ namespace Armada.Runtimes
             {
                 // A window the Admiral shipped still applies; it is not reported back as this Harbor's own.
                 if (shipped != null) shipped.DiscoveredContextLength = null;
+                DiscoveredContexts?.Record(new HarborDiscoveredContext { EndpointName = snapshot.Name, Model = model, Reason = found.Reason });
                 _Logging.Debug("[LocalHarborJobRunner] no context window for " + snapshot.Name + ": " + found.Reason);
                 return;
             }
 
             ModelContextDiscovery.Apply(snapshot, found, DateTime.UtcNow);
+            DiscoveredContexts?.Record(new HarborDiscoveredContext { EndpointName = snapshot.Name, Model = model, ContextLength = found.ContextLength, Source = found.Source });
             if (shipped != null)
             {
                 shipped.DiscoveredContextLength = found.ContextLength;

@@ -38,6 +38,15 @@ namespace Armada.Harbor
         /// <summary>Raised with the agent runtimes detected on this computer at the start of each session.</summary>
         public Action<List<HarborCapability>>? OnRuntimesDetected { get; set; }
 
+        /// <summary>
+        /// Raised when a session connects with what this Harbor advertises and what the Admiral expects that it lacks
+        /// (RS-12.19). May be called on any thread.
+        /// </summary>
+        public Action<HarborCapabilityReport>? OnCapabilities { get; set; }
+
+        /// <summary>The context windows discovered for local endpoints, across sessions (RS-12.19).</summary>
+        public HarborDiscoveredContextLog DiscoveredContexts { get; } = new HarborDiscoveredContextLog();
+
         /// <summary>What Harbor knows about its jobs; lives as long as the host, across sessions.</summary>
         public HarborJobState JobState { get; }
 
@@ -121,6 +130,7 @@ namespace Armada.Harbor
                 // Each job's output is also kept on this computer, so its log can be read here (Status > Logs) even when
                 // the Admiral is on another machine.
                 _JobRunner.JobLogs = new HarborLogPaths(HarborAppSettings.LogDirectory());
+                _JobRunner.DiscoveredContexts = DiscoveredContexts;
                 // An agent process that outlived an earlier Harbor run (a crash, a kill) would keep editing a dock the
                 // Admiral relaunches into. Stop those before taking work, and record this run's.
                 Armada.Runtimes.HarborProcessLedger ledger = new Armada.Runtimes.HarborProcessLedger(
@@ -187,6 +197,7 @@ namespace Armada.Harbor
                             OnDetail?.Invoke(client.UpdateRecommended
                                 ? "Ready. Harbor update recommended: the Admiral expects " + String.Join(", ", client.MissingCapabilities) + ", which this Harbor does not have, and runs the earlier behavior for them."
                                 : "Ready. Work the Admiral sends to this computer runs here.");
+                            OnCapabilities?.Invoke(HarborCapabilityReport.Build(client.AdvertisedCapabilities, client.MissingCapabilities));
                             if (client.UpdateRecommended)
                                 Info("Harbor update recommended; missing " + String.Join(", ", client.MissingCapabilities), HarborLogCategoryEnum.Link, HarborLogOutcomeEnum.None);
                             OnMcp?.Invoke(client.McpBaseUrl);

@@ -225,7 +225,10 @@ Harbor build advertises. For a Harbor that lacks one, `handshakeAck.missingCapab
 when none are missing; an older Harbor ignores the field), the Harbor record's `missingCapabilities` and
 `updateRecommended` (computed, not stored) report it on REST, and a captain whose exclusive session or active mission
 runs on such a Harbor reads `harborUpdateRecommended: true`. The dashboard, TUI, and mobile app show "Harbor update
-recommended" on the Harbor and the captain; the Harbor app shows it in its connection detail.
+recommended" on the Harbor and the captain. The Harbor app shows it in its connection detail and as an update banner
+with a "How to update" link, lists its capability flags in plain language (hover the "Harbor features" line for each
+flag and whether the Admiral expects it), and shows the context window it discovered for each local endpoint and model
+(`api-context-discovery-v1`).
 
 Streaming default: an API captain endpoint whose `inferenceOptions.streamingMode` is `Automatic` streams on
 OpenAI-compatible, Ollama, and Ollama Cloud endpoints. For a Harbor launch the Admiral resolves `Automatic` before it

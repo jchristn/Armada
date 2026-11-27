@@ -1,0 +1,375 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "graphTooltip": 0,
+  "title": "Armada Pipeline Reliability",
+  "uid": "armada-pipeline-reliability",
+  "description": "Per-attempt pipeline reliability by model and persona: completion, failure kinds, repairs, escalations, dispatch latency.",
+  "tags": [
+    "armada",
+    "reliability"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "1m",
+  "templating": {
+    "list": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "armada-prometheus"
+        },
+        "query": {
+          "query": "label_values(armada_stage_outcomes_total, model)",
+          "refId": "model"
+        },
+        "definition": "label_values(armada_stage_outcomes_total, model)",
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "persona",
+        "label": "Persona",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "armada-prometheus"
+        },
+        "query": {
+          "query": "label_values(armada_stage_outcomes_total, persona)",
+          "refId": "persona"
+        },
+        "definition": "label_values(armada_stage_outcomes_total, persona)",
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "refresh": 2,
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Attempt completion rate",
+      "description": "Share of finished stage attempts in the time range that completed (disposition Completed), for the selected models and personas.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(armada_stage_outcomes_total{disposition=\"Completed\", model=~\"$model\", persona=~\"$persona\"}[$__range])) / sum(increase(armada_stage_outcomes_total{disposition!=\"Pending\", model=~\"$model\", persona=~\"$persona\"}[$__range]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Repairs",
+      "description": "Repairs Armada applied in the time range: contract repairs plus output-repair reruns.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(armada_stage_repairs_total{model=~\"$model\", persona=~\"$persona\"}[$__range]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Escalations",
+      "description": "Stage attempts escalated to another captain in the time range.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(armada_stage_escalations_total{model=~\"$model\", persona=~\"$persona\"}[$__range]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Dispatch latency p95",
+      "description": "95th percentile time a mission waited in the queue before dispatch (all missions; the queue histogram has no model label).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(armada_missions_queue_seconds_bucket[$__range])))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Completion rate by model",
+      "description": "Completed attempts divided by finished attempts per model over a rolling hour.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "targets": [
+        {
+          "expr": "sum by (model) (rate(armada_stage_outcomes_total{disposition=\"Completed\", model=~\"$model\", persona=~\"$persona\"}[1h])) / sum by (model) (rate(armada_stage_outcomes_total{disposition!=\"Pending\", model=~\"$model\", persona=~\"$persona\"}[1h]))",
+          "legendFormat": "{{model}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Completion rate by persona",
+      "description": "Completed attempts divided by finished attempts per persona over a rolling hour.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "targets": [
+        {
+          "expr": "sum by (persona) (rate(armada_stage_outcomes_total{disposition=\"Completed\", model=~\"$model\", persona=~\"$persona\"}[1h])) / sum by (persona) (rate(armada_stage_outcomes_total{disposition!=\"Pending\", model=~\"$model\", persona=~\"$persona\"}[1h]))",
+          "legendFormat": "{{persona}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Failure kinds (per hour)",
+      "description": "Attempts that ended with a mission failure kind, by kind.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "targets": [
+        {
+          "expr": "sum by (failure_kind) (increase(armada_stage_outcomes_total{failure_kind!=\"None\", model=~\"$model\", persona=~\"$persona\"}[1h]))",
+          "legendFormat": "{{failure_kind}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Runtime failure kinds (per hour)",
+      "description": "Attempts whose runtime exit was classified (for example tool-call errors, context overflow, endpoint errors), by kind.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "targets": [
+        {
+          "expr": "sum by (runtime_failure_kind) (increase(armada_stage_outcomes_total{runtime_failure_kind!=\"None\", model=~\"$model\", persona=~\"$persona\"}[1h]))",
+          "legendFormat": "{{runtime_failure_kind}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Repairs by kind (per hour)",
+      "description": "Contract repairs by kind, and Rerun for output-repair relaunches.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "targets": [
+        {
+          "expr": "sum by (kind) (increase(armada_stage_repairs_total{model=~\"$model\", persona=~\"$persona\"}[1h]))",
+          "legendFormat": "{{kind}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Escalations by model (per hour)",
+      "description": "Attempts escalated away from each model, by the failure kind that triggered the escalation.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "targets": [
+        {
+          "expr": "sum by (model, failure_kind) (increase(armada_stage_escalations_total{model=~\"$model\", persona=~\"$persona\"}[1h]))",
+          "legendFormat": "{{model}} {{failure_kind}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Dispatch latency",
+      "description": "Time missions waited in the queue before dispatch, p50 and p95.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(armada_missions_queue_seconds_bucket[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(armada_missions_queue_seconds_bucket[5m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Attempt duration p95 by model",
+      "description": "95th percentile stage attempt duration per model.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, model) (rate(armada_stage_attempts_duration_seconds_bucket{model=~\"$model\", persona=~\"$persona\"}[15m])))",
+          "legendFormat": "{{model}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

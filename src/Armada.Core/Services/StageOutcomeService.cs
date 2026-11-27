@@ -116,14 +116,7 @@ namespace Armada.Core.Services
                 Apply(outcome, FailureCauseClassifier.Classify(outcome, rules));
                 await ApplyOwnershipCheckAsync(outcome, mission, token).ConfigureAwait(false);
                 StageOutcome stored = await _Database.StageOutcomes.CreateAsync(outcome, token).ConfigureAwait(false);
-                ArmadaMetrics.StageOutcomes.Add(1,
-                    new KeyValuePair<string, object?>("persona", stored.Persona ?? "none"),
-                    new KeyValuePair<string, object?>("runtime", stored.Runtime?.ToString() ?? "none"),
-                    new KeyValuePair<string, object?>("model", String.IsNullOrWhiteSpace(stored.Model) ? "none" : stored.Model),
-                    new KeyValuePair<string, object?>("disposition", stored.Disposition.ToString()),
-                    new KeyValuePair<string, object?>("failure_kind", stored.FailureKind?.ToString() ?? "None"),
-                    new KeyValuePair<string, object?>("runtime_failure_kind", stored.RuntimeFailureKind?.ToString() ?? "None"),
-                    new KeyValuePair<string, object?>("contract_repair", stored.ContractRepairKind?.ToString() ?? "None"));
+                StageOutcomeMetrics.Record(stored);
                 if (stored.Disposition == StageDispositionEnum.Completed)
                     await LinkEscalationsAsync(stored, mission, capture.DockId, token).ConfigureAwait(false);
 
