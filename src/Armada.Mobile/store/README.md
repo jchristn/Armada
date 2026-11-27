@@ -15,7 +15,8 @@ rendered from `source/feature-graphic.html`.
 
 ## Screenshots (to capture)
 
-Not captured yet: they need a Release build signed in to the demo Admiral (RS-16.9a) so every screen shows
+Not captured yet: they need a Release build signed in to the demo Admiral (`docs/DEMO_ADMIRAL.md`, seeded by
+`src/Armada.DemoSeed`, which also writes the ids below to `demo-ids.json`) so every screen shows
 representative fleets, voyages, missions, and model profiles. No real account, host, repository, or key may appear.
 Capture with `scripts/mobile/capture-store-screenshots.sh <target>` after setting `MISSION_ID`, `VOYAGE_ID`, and
 `PROFILE_ID` (see the script header). The status bar uses the 9:41 demo values.

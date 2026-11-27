@@ -42,6 +42,7 @@ release workflow, and deploy scripts build it from source.
 - `Armada.Proxy` - Remote-access portal and tunnel relay
 - `Armada.Publisher` - Packaging orchestrator for installers (reads `publisher.json`)
 - `Armada.PerfSeed` - Seeds a throwaway data directory for the performance baseline
+- `Armada.DemoSeed` - Seeds the store reviewer demo Admiral and screenshot data (docs/DEMO_ADMIRAL.md)
 - `Armada.Gate` - Runs the reliability gate's reference pipelines against an isolated Admiral
 - `Test.Shared` (suites), `Test.Automated` (console runner), `Test.Xunit` / `Test.Nunit` (adapters)
 

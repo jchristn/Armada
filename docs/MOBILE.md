@@ -236,6 +236,8 @@ The device API (`/api/v1/push/devices`) and the payload format are documented in
 
 ## Building and store submission
 
+Store reviewers and screenshots use a demo Admiral with fictional content; see [DEMO_ADMIRAL.md](DEMO_ADMIRAL.md).
+
 Builds are made with Expo Application Services (EAS) from `src/Armada.Mobile`. `eas.json` has four profiles:
 `development` (simulator builds and an Android APK), `development-device` (a physical iPhone), `preview` (a store
 build for TestFlight and Play internal testing), and `production` (a store build for App Store review and Google

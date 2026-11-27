@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <Description>Seeds an Armada data directory with representative, fictional content for the store reviewer demo Admiral and store screenshots (docs/DEMO_ADMIRAL.md).</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Armada.Core\Armada.Core.csproj" />
+  </ItemGroup>
+
+</Project>
