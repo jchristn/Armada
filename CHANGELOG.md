@@ -353,6 +353,23 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   `ARMADA.md` (was `CLAUDE.md`). The repository's own AGENTS.md or CLAUDE.md is carried into the generated file
   (RS-8.10).
 
+- **A captain whose context cannot hold the prompt is not picked.** The estimated prompt (description, output
+  contract, a 2,048-token allowance and the handoff share for dependent stages) must fit in 75% of the served context;
+  otherwise the mission waits as `NoEligibleCaptain` with `selectionReasonCode` `context_too_small`, and each captain's
+  status says how many tokens it needs (RS-8.4).
+- **Model profiles carry a tier.** Routing uses an explicit captain tier, then the administrator-set profile tier
+  (`tiering.tier`), then the model name. With `RoutingData.SuggestTiers` on (off by default), outcome data suggests a
+  tier as a `TierSuggestion` alert in Needs You with an "Apply tier" action; suggestions are never applied on their
+  own. Migration 140 (RS-8.5).
+- **Captains can be ranked by results.** With `RoutingData.RankByOutcomes` on (off by default), captains within a tier
+  whose model has at least 20 results for the persona (14-day half-life; both settings) come first by score; the rest
+  keep the load and last-update order. Each ranked choice is a `mission.routing_ranked` event (RS-8.6).
+- **The Judge must be as strong as the work it reviews.** New pipeline field `judgeStrength` (`Off`, `Wait`,
+  `ProceedAndFlag`): a Judge below the highest tier of the reviewed stages waits with code `judge_strength`, or runs
+  and records `mission.judge_strength_exception`; a Judge from a different model family is preferred. New pipelines
+  default to `Wait`; existing pipelines and voyages stay Off. `ExcludeReviewAuthorsFromJudge` now excludes every
+  captain on an author's model, not only the author's captain (RS-8.7).
+
 ### Measurement
 
 - **Battery runs can run under a mixed pipeline.** `BatteryRunRequest` and MCP `run_battery` take `Pipeline` and

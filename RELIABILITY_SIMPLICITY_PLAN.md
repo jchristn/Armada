@@ -1034,19 +1034,19 @@ rendering. This phase closes that loop.
 - [x] **RS-8.3** Prompt variant resolution order: voyage override, captain option, model profile rendering, then
   automatic from served context (Compact below a threshold setting). `PromptVariantResolver.Resolve` consults
   context tokens. Evidence: a57a2d18c, 5215af3ef; thresholds confirmed by Joel 2026-11-26 (Compact at or below 32K, Lean at or below 64K); suite Services.PromptVariants. Merged head: 14 suites 289/289 (12 skipped).
-- [ ] **RS-8.4** Context as a hard routing filter: a captain whose served context cannot hold the estimated prompt
-  (instructions budget plus handoff plus contract) is not eligible, with a typed blocker. Evidence:
-- [ ] **RS-8.5** Tier from data. Effective tier = explicit captain tier, else the model profile's tier (set by hand or,
-  behind a setting, proposed from scorecard data once it has enough samples), else the name regex. Evidence:
-- [ ] **RS-8.6** Rank within a tier by per-persona outcomes from `StageOutcome` and `ModelScorecardService`
+- [x] **RS-8.4** Context as a hard routing filter: a captain whose served context cannot hold the estimated prompt
+  (instructions budget plus handoff plus contract) is not eligible, with a typed blocker. Evidence: 9a5bfdf2d; `MissionPromptFit` (75% of served context), reason code on `NoEligibleCaptain` instead of a new blocker value; applies to requested and pinned captains. Suite Services.CapabilityRouting.
+- [x] **RS-8.5** Tier from data. Effective tier = explicit captain tier, else the model profile's tier (set by hand or,
+  behind a setting, proposed from scorecard data once it has enough samples), else the name regex. Evidence: 9a5bfdf2d; `ModelProfileTiering`, `ModelTierSuggester` (pooled score 85% Premium, 65% Standard), `TierSuggestion` alert and `ApplyTier` action in the model alert pass; suggest-only and off by default with a Needs You item (Joel 2026-11-26). Migration 140 `RoutingDataSchema`.
+- [x] **RS-8.6** Rank within a tier by per-persona outcomes from `StageOutcome` and `ModelScorecardService`
   (Judge pass rate, no-op rate, tool-call validity, repair rate), with a minimum sample size and decay. Replaces the
   current `tier, ActiveMissionCount, LastUpdateUtc` order (`CaptainRouting.cs:305`) only when data exists. Selection
-  telemetry records why. Evidence:
-- [ ] **RS-8.7** Judge strength rule (per pipeline or persona, default on for new pipelines and off for existing ones
+  telemetry records why. Evidence: 9a5bfdf2d; `PersonaOutcomeStatsService`, 20 samples and 14-day half-life (Joel 2026-11-26), behind `RoutingData.RankByOutcomes`.
+- [x] **RS-8.7** Judge strength rule (per pipeline or persona, default on for new pipelines and off for existing ones
   to keep 1.4.0 behavior): the Judge's effective tier is at least the highest tier among the stages it reviews, and
   a different `ModelFamily` is preferred (reuse `EvaluatorSelector`). `ExcludeReviewAuthorsFromJudge` compares model
   identity, not captain id. When no captain satisfies the rule, the mission waits with a typed blocker or, if the
-  policy says so, proceeds and is flagged (G8). Evidence:
+  policy says so, proceeds and is flagged (G8). Evidence: 9a5bfdf2d; `JudgeStrengthRule`, per pipeline (copied to the voyage), wait with typed blocker by default (Joel 2026-11-26). Merged head: 12 routing suites 273/273 (12 skipped); DB suites 51/51 on PostgreSQL and MySQL, 82/82 on SQL Server in the worker.
 - [x] **RS-8.8** Per-profile timeouts: stall threshold, tool-wait hard limit, maximum runtime, and first-token time,
   with defaults scaled by measured tokens per second from probes. Global settings stay as defaults. Evidence: 866e07ebc; `TimeoutPolicyResolver` (Global, Measured or Profile per value, capped at four times global), migration 141 `ModelProfileTimeoutsSchema`, suite Services.TimeoutPolicy; Database.ModelProfile and MigrationHygiene 31/31 on PostgreSQL, MySQL and SQL Server.
 - [x] **RS-8.9** Endpoint concurrency key becomes (Harbor or Admiral, normalized URL, model) instead of the base URL
