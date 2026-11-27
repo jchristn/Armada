@@ -183,6 +183,7 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [get_model_profile](#get_model_profile)
     - [list_model_profiles](#list_model_profiles)
     - [get_model_scorecard](#get_model_scorecard)
+    - [update_model_profile](#update_model_profile)
   - **Model Alerts**
     - [list_model_alerts](#list_model_alerts)
     - [get_model_alert](#get_model_alert)
@@ -196,6 +197,13 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [run_battery](#run_battery)
     - [get_battery_run](#get_battery_run)
     - [list_battery_results](#list_battery_results)
+    - [list_battery_runs](#list_battery_runs)
+    - [cancel_battery_run](#cancel_battery_run)
+  - **Reliability**
+    - [get_mission_attempts](#get_mission_attempts)
+    - [get_reliability_summary](#get_reliability_summary)
+    - [list_gate_reports](#list_gate_reports)
+    - [get_gate_report](#get_gate_report)
   - **Black Box**
     - [get_blackbox](#get_blackbox)
     - [read_blackbox_section](#read_blackbox_section)
@@ -475,6 +483,17 @@ API-endpoint mission captains also receive `ARMADA_MCP_TOOL_SCOPE`, the Armada t
 (`armada_submit_plan`, `armada_submit_verdict` or `armada_submit_result`; see [Stage Submissions](#stage-submissions)). The rest of the catalog is
 found through `armada_discover_mcp_tools`, and any tool the token permits can still be called by name. The scope changes
 which schemas are sent, not what the token may do. CLI runtimes load MCP schemas themselves and get no scope.
+
+### Captain tools and operator tools
+
+| Kind | Tools |
+|---|---|
+| Captain (called by a mission's captain with its scoped token) | `armada_submit_plan`, `armada_submit_verdict`, `armada_submit_result` (only a captain may call these), `armada_discover_mcp_tools`, and the persona scope above (`PersonaToolScope`): `get_handoff_artifact`, `search_memory`, `mission_status`, `update_vessel_context`, `voyage_status`, `get_mission_log`, `create_memory`, `update_memory`, `delete_memory` |
+| Operator (people, scripts and Ask) | Every other tool, including the reliability and battery tools (`get_reliability_summary`, `list_gate_reports`, `get_gate_report`, `list_battery_runs`, `cancel_battery_run`, `run_battery`), `update_model_profile`, and the pipeline and persona writers. The battery and reliability summary tools refuse captain sessions |
+
+A captain token carries its mission owner's permissions, so it can technically call an operator tool the owner may
+call; the scope only decides which schemas a captain sees first. `get_mission_attempts`, found through `armada_discover_mcp_tools`, reads
+the captain's own mission and the missions of its voyage.
 
 ---
 
@@ -1617,6 +1636,23 @@ server; a non-integer page argument is refused by the schema before the tool run
 
 **Response:** `EnumerationResult<ModelProfile>` (without revisions), newest first.
 
+### update_model_profile
+
+Update the mutable parts of a profile, as `PUT /api/v1/model-profiles/{id}`. A section left out keeps its value; inside
+a section, a null value uses the global setting. Admins only (`TenantAdmin`).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | Profile ID (`mpf_`) |
+| `capabilities` | object | No | `toolsAvailable`, `mcpAvailable` |
+| `rendering` | object | No | `template` (`Current`, `Lean`, `Compact`), `repeatContractAtEnd`, `maxFilesPerMission` |
+| `recovery` | object | No | `maxResumes` 0-10, `unclassifiedResumes` 0-3, `transientGraceMinutes` 0-120, `judgeReworkRounds` 1-5, `outputRepairAttempts` 0-3, `escalateAfterResumes` |
+| `timeouts` | object | No | `stallThresholdMinutes`, `toolWaitHardLimitMinutes`, `maxRuntimeMinutes`, `firstOutputMinutes` |
+| `tiering` | object | No | `tier`: `Economy`, `Standard`, `Premium`, or null to clear. The suggested tier is read-only |
+| `notes` | string | No | At most 4000 characters; empty clears |
+
+**Response:** the profile with `effectiveRecovery` and `effectiveTimeouts`.
+
 ### get_model_scorecard
 
 The read-only scorecard of one (profile, persona), optionally one vessel, computed from stage outcomes, token usage and
@@ -1819,6 +1855,75 @@ Worker and Test Engineer, and a GPT Judge. The run records the pipeline and the 
 **Response:** `EnumerationResult<BatteryTaskResult>` paged in the database: one result per task attempt, with the
 grader's evidence (the first 256 false positives, with `falsePositiveCount`) and the raw output. `NotFound` for a
 missing run or another tenant's run.
+
+### list_battery_runs
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `tenantId` | string | No | Tenant filter (global admins only) |
+| `captainId` | string | No | Captain filter (`cpt_`) |
+| `status` | string | No | `Queued`, `Running`, `Completed`, `Failed`, `Cancelled` |
+| `pageNumber`, `pageSize` | integer | No | Paging (page size 1-1000, default 25) |
+
+**Response:** `EnumerationResult<BatteryRun>`, newest first, without per-task results.
+
+### cancel_battery_run
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | Run ID (`bat_`) |
+| `reason` | string | No | Reason recorded on the run (at most 500 characters) |
+
+Stops the run as a stopped Full Evaluate does: no further task is dispatched, the open mission is cancelled, and the
+run ends `Cancelled`. Waits up to 10 seconds, then returns the run (still `Running` while its open mission stops). A
+finished run is returned unchanged. Global admins and tenant admins of the run's tenant (`Forbidden` otherwise).
+
+---
+
+## Reliability
+
+Pipeline reliability reads, with the same rules and shapes as [REST_API.md](REST_API.md#reliability).
+
+### get_mission_attempts
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `missionId` | string | Yes | Mission ID (`msn_`) |
+
+**Response:** `MissionAttemptHistory`: the recovery counters, escalation state, persona and mode, and every attempt
+oldest first (captain, model, disposition, failure kind, runtime failure kind, contract repair kind, `isRepair`,
+`escalated`, `nextCaptainId`, Judge verdict, timing). `NotFound` when the mission is missing or out of scope.
+
+### get_reliability_summary
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `tenantId` | string | No | Tenant filter (global admins only) |
+| `model`, `persona`, `vesselId` | string | No | Filters |
+| `includeEvaluation` | boolean | No | Include battery and evaluation attempts (default false) |
+| `fromUtc`, `toUtc` | string | No | Window (ISO 8601 UTC; default the last 14 days, at most 90) |
+| `sort` | string | No | `Attempts` (default), `CompletionRate`, `UnclassifiedRate`, `Repairs`, `Escalations`, `Failures`, `Model`, `Persona` |
+| `descending` | boolean | No | Default true |
+| `pageNumber`, `pageSize` | integer | No | Paging (page size 1-1000, default 50) |
+
+**Response:** `ReliabilitySummary` with rows per (model, persona) and totals.
+
+### list_gate_reports
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `pageNumber`, `pageSize` | integer | No | Paging (page size 1-100, default 10) |
+
+**Response:** `EnumerationResult<GateReport>`, newest first. Global and tenant admins. Uploading is REST only
+(`POST /api/v1/reliability/gate-reports`, global admins).
+
+### get_gate_report
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | Report ID (`gate-`) or `latest` |
+
+**Response:** one `GateReport`. `NotFound` when none is stored.
 
 ---
 

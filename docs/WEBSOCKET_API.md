@@ -39,6 +39,7 @@ If the selected deployment disconnects or the tunnel drops, the proxy closes the
 - [Server-Pushed Events](#server-pushed-events)
   - [status.snapshot](#statussnapshot)
   - [mission.changed](#missionchanged)
+  - [mission.escalated, mission.repaired and mission.attempt_changed](#missionescalated-missionrepaired-and-missionattempt_changed)
   - [mission.activity](#missionactivity)
   - [captain-selection.changed](#captain-selectionchanged)
   - [mission.waiting_gate_changed](#missionwaiting_gate_changed)
@@ -357,7 +358,50 @@ Broadcast when a mission's status changes (e.g., assigned, started, completed, f
 | `data.status` | string | New [MissionStatusEnum](#missionstatusenum) value |
 | `data.voyageId` | string \| null | Parent voyage ID, or null for a standalone mission |
 | `data.activity` | object \| null | The captain's current activity while it runs (see [mission.activity](#missionactivity)), or null |
+| `data.persona` | string \| null | Persona the mission runs as (1.5.0) |
+| `data.mode` | string | Mission mode (1.5.0) |
+| `data.captainId` | string \| null | Current captain (1.5.0) |
+| `data.tier` | string \| null | Effective tier the mission was last routed at (1.5.0) |
+| `data.escalationCount` | integer | Escalation hops taken (1.5.0) |
+| `data.redispatchAttempts` | integer | Resumes and reruns so far (1.5.0) |
+| `data.outputRepairAttempts` | integer | Output repair reruns so far (1.5.0) |
 | `timestamp` | string | ISO 8601 UTC timestamp |
+
+---
+
+### mission.escalated, mission.repaired and mission.attempt_changed
+
+Broadcast with `mission.changed`, to the same sockets, when a change raises one of the mission's recovery counters
+(1.5.0): `mission.escalated` when `escalationCount` goes up, `mission.repaired` when `outputRepairAttempts` goes up,
+and `mission.attempt_changed` when a redispatch, no-op redispatch or stall recovery starts a new attempt. One change
+can send more than one, in that order. The Admiral derives them from successive mission changes, so the first change
+it sees for a mission after a restart sends none. Not recorded as events; the attempt detail is
+`GET /api/v1/missions/{id}/attempts`.
+
+```json
+{
+  "type": "mission.escalated",
+  "data": {
+    "missionId": "msn_abc123def456ghi789jk",
+    "voyageId": "vyg_abc123def456ghi789jk",
+    "status": "Assigned",
+    "captainId": "cpt_frontier",
+    "persona": "Worker",
+    "tier": "Premium",
+    "escalationCount": 1,
+    "escalatedFromCaptainId": "cpt_open",
+    "escalatedFromModel": "qwen3.8",
+    "redispatchAttempts": 2,
+    "outputRepairAttempts": 1,
+    "noOpRedispatchAttempts": 0,
+    "stallRecoveryAttempts": 0
+  },
+  "timestamp": "2026-11-26T12:35:00.000Z"
+}
+```
+
+The payload is `MissionAttemptChange` (`Armada.Core.Models`); the fields mean the same as on
+[mission.changed](#missionchanged) and in `MissionAttemptHistory`.
 
 ---
 

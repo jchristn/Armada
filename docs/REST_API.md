@@ -1431,7 +1431,7 @@ refresh the output heartbeat. A failed stall recovery retains the mission's dock
 (including uncommitted and untracked work); inspect or recover it before explicitly
 reclaiming it. `MaxMissionRuntimeMinutes`, when enabled, remains an independent cap.
 
-Accepts partial updates to editable server settings and saves them to `settings.json`. Editable top-level fields: `DataRetentionDays`, `RequestHistoryRetentionDays`, `AdmiralPort`, `McpPort`, `MaxCaptains`, `HeartbeatIntervalSeconds`, `StallThresholdMinutes`, `StageCheckTimeoutMinutes` (1 to 240), `BlockDependentsOfFailedStages`, `AcceptLegacyMissionMarkers`, `OutputRepairNormalizerCaptainId` (an empty string clears it), `IdleCaptainTimeoutSeconds`, `PlanningSessionInactivityTimeoutMinutes`, `PlanningSessionAbandonmentTimeoutMinutes`, `PlanningSessionRetentionDays`, `LandingMode` (the global landing mode: `LocalMerge`, `MergeAndPush`, `PullRequest`, `MergeQueue`, or `None`), `SelfVesselId`, `RebuildSlotRetentionCount`, `RemoteControl`, `Import`, `FleetActions`, `RepositoryHealth`, `Retention`, `Permissions`, `Ask`, and `Push`; omitted fields are unchanged. When `RemoteControl` is supplied, it replaces the full `RemoteControl` settings object (send `Password` or `EnrollmentToken` as `********` to keep the stored value). When `Import` is supplied, it replaces the full `Import` (vessel import) settings object; see [Vessel Import](#vessel-import) for the fields and their ranges. When `FleetActions` is supplied, it replaces the full `FleetActions` object (omitted fields take their defaults; values are clamped: `MaxConcurrency` 1-32, `DefaultTimeoutSeconds` 5-7200, `MaxOutputBytes` 1024-1048576, `RunRetentionDays` 1-3650) and applies immediately.
+Accepts partial updates to editable server settings and saves them to `settings.json`. Editable top-level fields: `DataRetentionDays`, `RequestHistoryRetentionDays`, `AdmiralPort`, `McpPort`, `MaxCaptains`, `HeartbeatIntervalSeconds`, `StallThresholdMinutes`, `StageCheckTimeoutMinutes` (1 to 240), `BlockDependentsOfFailedStages`, `AcceptLegacyMissionMarkers`, `OutputRepairNormalizerCaptainId` (an empty string clears it), `IdleCaptainTimeoutSeconds`, `PlanningSessionInactivityTimeoutMinutes`, `PlanningSessionAbandonmentTimeoutMinutes`, `PlanningSessionRetentionDays`, `LandingMode` (the global landing mode: `LocalMerge`, `MergeAndPush`, `PullRequest`, `MergeQueue`, or `None`), `SelfVesselId`, `RebuildSlotRetentionCount`, `RemoteControl`, `Import`, `FleetActions`, `RepositoryHealth`, `Retention`, `Permissions`, `Ask`, and `Push`, plus the 1.5.0 reliability settings `TimeoutScaleReferenceTokensPerSecond` (0 to 1000), `PromptVariantCompactMaxContextTokens` and `PromptVariantLeanMaxContextTokens` (0 to 2097152; out of range is `400` before anything changes), `MergeQueueRequeueLimit` (clamped 0-10), `MergeQueueBatchSize` (1-20), `MergeQueueLeaseSeconds` (5-14400), `UnclassifiedResumeLimit` (0-3), `JudgeReworkRounds` (1-5), `MaxEscalations` (0-5), `EscalateOnOpenEndpointBreaker`, and `RoutingData` (replaces the full object: `RankByOutcomes`, `SuggestTiers`, `MinimumSamples` 5-1000, `HalfLifeDays` 1-365); omitted fields are unchanged. GET returns every one of them. When `RemoteControl` is supplied, it replaces the full `RemoteControl` settings object (send `Password` or `EnrollmentToken` as `********` to keep the stored value). When `Import` is supplied, it replaces the full `Import` (vessel import) settings object; see [Vessel Import](#vessel-import) for the fields and their ranges. When `FleetActions` is supplied, it replaces the full `FleetActions` object (omitted fields take their defaults; values are clamped: `MaxConcurrency` 1-32, `DefaultTimeoutSeconds` 5-7200, `MaxOutputBytes` 1024-1048576, `RunRetentionDays` 1-3650) and applies immediately.
 
 Lists in settings are bounded (see [ENUMERATION.md](ENUMERATION.md)): `Import.AllowedRoots`, `Import.ExcludedDirectoryNames`, and `FleetActions.OfflineHarborIds` hold at most 256 entries each, and an update with more is rejected with `400` (`Data.Code` `CollectionLimitExceeded`, `Data.Field` naming the list) before anything is applied. `RepositoryHealth.ScoredCriteria` and `Push.Categories` keep one entry per defined value (duplicates and unknown values are dropped).
 
@@ -4877,6 +4877,42 @@ curl http://localhost:7890/api/v1/missions/msn_abc123/submissions -H "Authorizat
 
 ---
 
+### Reliability
+
+Pipeline reliability reads (1.5.0). Rules live in `ReliabilityAccessService`, shared with the MCP tools
+`get_mission_attempts`, `get_reliability_summary`, `list_gate_reports` and `get_gate_report`.
+
+| Method | Path | Body | Response |
+|--------|------|------|----------|
+| GET | `/api/v1/missions/{id}/attempts` | | `200` `MissionAttemptHistory`: `MissionId`, `VoyageId`, `Persona`, `Mode`, `Status`, `CaptainId`, `Tier`, `EscalationCount`, `EscalatedFromCaptainId`, `EscalatedFromModel`, `ReworkEscalated`, `RedispatchAttempts`, `OutputRepairAttempts`, `NoOpRedispatchAttempts`, `StallRecoveryAttempts`, and `Attempts` oldest first (`OutcomeId`, `Attempt`, `ReworkRound`, `CaptainId`, `CaptainName`, `Runtime`, `Model`, `ModelProvider`, `ModelEndpointId`, `Disposition`, `FailureKind`, `FailureReason`, `RuntimeFailureKind`, `ContractRepairKind`, `IsRepair`, `Escalated`, `NextCaptainId`, `JudgeVerdict`, `SuspectedCause`, `IsEvaluation`, `StartedUtc`, `EndedUtc`, `DurationMs`); `404` when the mission is missing or out of scope |
+| GET | `/api/v1/reliability/summary` | | `200` `ReliabilitySummary`: `FromUtc`, `ToUtc`, `OutcomesRead`, `Truncated`, `Totals`, paging, and `Rows` per (model, persona): `Attempts`, `Completed`, `Failed`, `Relaunched`, `Repairs`, `Escalations`, `Unclassified`, `CompletionRate`, `UnclassifiedRate`, `FailureKinds`, `RuntimeFailureKinds`, `MedianDurationMs` |
+| GET | `/api/v1/reliability/gate-reports` | | `200` `EnumerationResult<GateReport>`, newest first (`pageSize` 1-100, default 10) |
+| POST | `/api/v1/reliability/gate-reports` | `GateReport` | `201` the stored report with `Id` (`gate-` prefix) and `UploadedUtc` |
+| GET | `/api/v1/reliability/gate-reports/{id}` | | `200` one `GateReport`; `latest` returns the newest; `404` when none |
+
+Attempts follow the mission read rules: a global admin sees every tenant, a tenant admin the tenant, a user their own
+missions. Each attempt is one stage outcome. `IsRepair` is true for an output repair rerun or a deterministic or
+format-only contract repair. `Escalated` is true when the mission moved to `NextCaptainId` after the attempt.
+
+The summary counts stage outcomes in a window: the last 14 days by default (`fromUtc`, `toUtc`), at most 90.
+`CompletionRate` is completed over completed, failed and escalated attempts. `UnclassifiedRate` is the share of
+attempts whose runtime exit was `Unclassified`. Production attempts only, unless `includeEvaluation=true`. Filters:
+`tenantId` (global admins; ignored otherwise), `model`, `persona`, `vesselId`. Sort: `sort` (`Attempts` (default),
+`CompletionRate`, `UnclassifiedRate`, `Repairs`, `Escalations`, `Failures`, `Model`, `Persona`) and `descending`
+(default true), paged with `pageNumber` and `pageSize` (1-1000, default 50). At most 50,000 outcomes are read
+(newest first); past that `Truncated` is true. Captain sessions get `403`.
+
+Gate reports are the acceptance gate output of `src/Armada.Gate` (G1 to G12 with per-pipeline counts). The runner
+uploads the report it wrote to `benchmarks/results` unless run with `--no-upload`. Only a global admin uploads.
+Global and tenant admins read. The Admiral keeps the newest 200 under `<data>/gate-reports/`. A report must hold at
+least one measure or pipeline and be at most 1 MiB.
+
+```bash
+curl "http://localhost:7890/api/v1/reliability/summary?persona=Worker&sort=CompletionRate" -H "Authorization: Bearer <token>"
+```
+
+---
+
 ### Black Box
 
 A **black box entry** (`bbx_`) records where, how and why a mission or voyage failed: the failure site (phase, step,
@@ -6448,6 +6484,21 @@ curl http://localhost:7890/api/v1/battery/runs/bat_abc123 -H "Authorization: Bea
 ```
 
 ---
+
+#### List and cancel runs
+
+| Method | Path | Body | Response |
+|--------|------|------|----------|
+| GET | `/api/v1/battery/runs` | | `200` `EnumerationResult<BatteryRun>`, newest first, without per-task results. Filters `captainId`, `status` (`Queued`, `Running`, `Completed`, `Failed`, `Cancelled`), `tenantId` (global admins); `pageSize` 1-1000, default 25 |
+| POST | `/api/v1/battery/runs/{id}/cancel` | optional `{ "Reason": "..." }` (at most 500 characters) | `200` the run after the stop |
+
+Cancelling stops a run as a stopped Full Evaluate does. No further task is dispatched, the open mission is cancelled
+(releasing its dock and captain), and the run ends `Cancelled` with the finished results kept and the reason in
+`FailureReason`. The call waits up to 10 seconds. A run still stopping comes back `Running`; poll
+`GET /api/v1/battery/runs/{id}`. A run this Admiral is not executing but still recorded `Queued` or `Running` is marked
+`Cancelled` directly. A finished run is returned unchanged. Cancelling needs a global admin or a tenant admin of the
+run's tenant (`403` otherwise, `404` for another tenant's run). The gate runner cancels its run when stopped with
+Ctrl+C. CLI: `armada battery runs` and `armada battery cancel <run> [--reason]`.
 
 ### Push Notifications
 

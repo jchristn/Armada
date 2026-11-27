@@ -5468,6 +5468,95 @@
                         },
                         "description": "Captains with exactly this many mission slots (MaxConcurrency); 1 lists serial captains."
                     }
+                },
+                {
+                    "name": "List Battery Runs",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/battery/runs?status=Running&pageNumber=1&pageSize=25",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "battery",
+                                "runs"
+                            ],
+                            "query": [
+                                {
+                                    "key": "status",
+                                    "value": "Running",
+                                    "description": "Queued, Running, Completed, Failed or Cancelled"
+                                },
+                                {
+                                    "key": "pageNumber",
+                                    "value": "1",
+                                    "description": "Page number"
+                                },
+                                {
+                                    "key": "pageSize",
+                                    "value": "25",
+                                    "description": "Page size (1-1000)"
+                                }
+                            ]
+                        },
+                        "description": "One page of fixture battery runs, newest first, without their per-task results. A global admin sees every tenant (tenantId filters); everyone else sees their own tenant. Filters: captainId, status (Queued, Running, Completed, Failed, Cancelled); paging pageNumber, pageSize (1-1000, default 25). Captain sessions are refused."
+                    },
+                    "response": [
+                        {
+                            "name": "Example",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"Success\": true,\n  \"PageNumber\": 1,\n  \"PageSize\": 25,\n  \"TotalPages\": 1,\n  \"TotalRecords\": 1,\n  \"Objects\": [\n    {\n      \"Id\": \"bat_mvq0z9y8x7w6v5u4t3s2r1q0\",\n      \"TenantId\": \"default\",\n      \"CaptainId\": \"cpt_mvq0z9y8x7w6v5u4t3s2r1q0\",\n      \"Packs\": [\n        \"csharp\"\n      ],\n      \"Status\": \"Cancelled\",\n      \"Pipeline\": \"Gate-A\",\n      \"TotalTasks\": 10,\n      \"PassedCount\": 3,\n      \"FailedCount\": 0,\n      \"FailureReason\": \"The gate client was stopped.\"\n    }\n  ]\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Cancel Battery Run",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/battery/runs/{{batteryRunId}}/cancel",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "battery",
+                                "runs",
+                                "{{batteryRunId}}",
+                                "cancel"
+                            ]
+                        },
+                        "description": "Stops a fixture battery run as a stopped Full Evaluate does: no further task is dispatched, the open mission is cancelled (its dock and captain released), and the run ends Cancelled with finished results kept. Waits up to 10 seconds, then returns the run (still Running while its open mission stops). A run not executing on this Admiral but recorded Queued or Running is marked Cancelled; a finished run is returned unchanged. The body is optional (reason, at most 500 characters). Global admins and tenant admins of the run tenant only. The gate runner (src/Armada.Gate) calls this on Ctrl+C.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"Reason\": \"Wrong pack selected\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "Example",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"Id\": \"bat_mvq0z9y8x7w6v5u4t3s2r1q0\",\n  \"TenantId\": \"default\",\n  \"CaptainId\": \"cpt_mvq0z9y8x7w6v5u4t3s2r1q0\",\n  \"Packs\": [\n    \"csharp\"\n  ],\n  \"Status\": \"Cancelled\",\n  \"Pipeline\": \"Gate-A\",\n  \"TotalTasks\": 10,\n  \"PassedCount\": 3,\n  \"FailedCount\": 0,\n  \"FailureReason\": \"The gate client was stopped.\"\n}"
+                        }
+                    ]
                 }
             ]
         },
@@ -9342,7 +9431,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"Name\": \"ProductFullPipeline\",\n  \"Description\": \"Product manager, architect, worker, usability, test, and judge flow.\",\n  \"Stages\": [\n    {\n      \"Order\": 1,\n      \"PersonaName\": \"Product Manager\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"RetryStage\"\n    },\n    {\n      \"Order\": 2,\n      \"PersonaName\": \"Architect\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"RetryStage\"\n    },\n    {\n      \"Order\": 3,\n      \"PersonaName\": \"Worker\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"RetryStage\"\n    },\n    {\n      \"Order\": 4,\n      \"PersonaName\": \"Usability Engineer\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"RetryStage\"\n    },\n    {\n      \"Order\": 5,\n      \"PersonaName\": \"Test Engineer\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"RetryStage\"\n    },\n    {\n      \"Order\": 6,\n      \"PersonaName\": \"Judge\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"FailPipeline\"\n    }\n  ]\n}"
+                            "raw": "{\n  \"Name\": \"ProductFullPipeline\",\n  \"Description\": \"Product manager, architect, worker, usability, test, and judge flow.\",\n  \"Stages\": [\n    {\n      \"Order\": 1,\n      \"PersonaName\": \"Product Manager\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"RetryStage\"\n    },\n    {\n      \"Order\": 2,\n      \"PersonaName\": \"Architect\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"RetryStage\"\n    },\n    {\n      \"Order\": 3,\n      \"PersonaName\": \"Worker\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"RetryStage\"\n    },\n    {\n      \"Order\": 4,\n      \"PersonaName\": \"Usability Engineer\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"RetryStage\"\n    },\n    {\n      \"Order\": 5,\n      \"PersonaName\": \"Test Engineer\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"RetryStage\"\n    },\n    {\n      \"Order\": 6,\n      \"PersonaName\": \"Judge\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"FailPipeline\"\n    }\n  ],\n  \"JudgeStrength\": \"Wait\"\n}"
                         },
                         "url": {
                             "raw": "{{baseUrl}}/api/v1/pipelines",
@@ -9355,7 +9444,7 @@
                                 "pipelines"
                             ]
                         },
-                        "description": "Create a pipeline and save its Name to pipelineName."
+                        "description": "Create a pipeline and save its Name to pipelineName. JudgeStrength (Off, Wait or ProceedAndFlag) is the Judge strength rule: a Judge must be at least the highest tier among the stages it reviews. Wait (the default for new pipelines) holds the Judge with a judge_strength blocker until such a captain is free; ProceedAndFlag runs the best available Judge and records an exception; Off disables the rule. Update keeps the stored value when omitted."
                     }
                 },
                 {
@@ -9390,7 +9479,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"Description\": \"Updated product-oriented multi-stage pipeline.\",\n  \"Stages\": [\n    {\n      \"Order\": 1,\n      \"PersonaName\": \"Product Manager\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"RetryStage\"\n    },\n    {\n      \"Order\": 2,\n      \"PersonaName\": \"Architect\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"RetryStage\"\n    },\n    {\n      \"Order\": 3,\n      \"PersonaName\": \"Worker\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"RetryStage\"\n    },\n    {\n      \"Order\": 4,\n      \"PersonaName\": \"Usability Engineer\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"RetryStage\"\n    },\n    {\n      \"Order\": 5,\n      \"PersonaName\": \"Test Engineer\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"RetryStage\"\n    },\n    {\n      \"Order\": 6,\n      \"PersonaName\": \"Judge\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"FailPipeline\"\n    }\n  ]\n}"
+                            "raw": "{\n  \"Description\": \"Updated product-oriented multi-stage pipeline.\",\n  \"Stages\": [\n    {\n      \"Order\": 1,\n      \"PersonaName\": \"Product Manager\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"RetryStage\"\n    },\n    {\n      \"Order\": 2,\n      \"PersonaName\": \"Architect\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"RetryStage\"\n    },\n    {\n      \"Order\": 3,\n      \"PersonaName\": \"Worker\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"RetryStage\"\n    },\n    {\n      \"Order\": 4,\n      \"PersonaName\": \"Usability Engineer\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"RetryStage\"\n    },\n    {\n      \"Order\": 5,\n      \"PersonaName\": \"Test Engineer\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"RetryStage\"\n    },\n    {\n      \"Order\": 6,\n      \"PersonaName\": \"Judge\",\n      \"RequiresReview\": true,\n      \"ReviewDenyAction\": \"FailPipeline\"\n    }\n  ],\n  \"JudgeStrength\": \"Wait\"\n}"
                         },
                         "url": {
                             "raw": "{{baseUrl}}/api/v1/pipelines/{{pipelineName}}",
@@ -9404,7 +9493,7 @@
                                 "{{pipelineName}}"
                             ]
                         },
-                        "description": "Update a pipeline by name."
+                        "description": "Update a pipeline by name. JudgeStrength (Off, Wait or ProceedAndFlag) is the Judge strength rule: a Judge must be at least the highest tier among the stages it reviews. Wait (the default for new pipelines) holds the Judge with a judge_strength blocker until such a captain is free; ProceedAndFlag runs the best available Judge and records an exception; Off disables the rule. Update keeps the stored value when omitted."
                     }
                 },
                 {
@@ -14481,7 +14570,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"Capabilities\": {\n    \"ToolsAvailable\": true,\n    \"McpAvailable\": false\n  },\n  \"Rendering\": {\n    \"Template\": \"Compact\",\n    \"RepeatContractAtEnd\": true,\n    \"MaxFilesPerMission\": 3\n  },\n  \"Recovery\": {\n    \"MaxResumes\": 5,\n    \"UnclassifiedResumes\": 1,\n    \"TransientGraceMinutes\": 20,\n    \"JudgeReworkRounds\": 3,\n    \"OutputRepairAttempts\": 2,\n    \"EscalateAfterResumes\": 1\n  },\n  \"Notes\": \"Keep each mission to one objective.\"\n}"
+                            "raw": "{\n  \"Capabilities\": {\n    \"ToolsAvailable\": true,\n    \"McpAvailable\": false\n  },\n  \"Rendering\": {\n    \"Template\": \"Compact\",\n    \"RepeatContractAtEnd\": true,\n    \"MaxFilesPerMission\": 3\n  },\n  \"Recovery\": {\n    \"MaxResumes\": 5,\n    \"UnclassifiedResumes\": 1,\n    \"TransientGraceMinutes\": 20,\n    \"JudgeReworkRounds\": 3,\n    \"OutputRepairAttempts\": 2,\n    \"EscalateAfterResumes\": 1\n  },\n  \"Timeouts\": {\n    \"StallThresholdMinutes\": 20,\n    \"ToolWaitHardLimitMinutes\": null,\n    \"MaxRuntimeMinutes\": 180,\n    \"FirstOutputMinutes\": null\n  },\n  \"Tiering\": {\n    \"Tier\": \"Standard\"\n  },\n  \"Notes\": \"Keep each mission to one objective.\"\n}"
                         },
                         "url": {
                             "raw": "{{baseUrl}}/api/v1/model-profiles/{{modelProfileId}}",
@@ -14495,7 +14584,7 @@
                                 "{{modelProfileId}}"
                             ]
                         },
-                        "description": "Update Capabilities, Rendering (explicit overrides; null means no override), Recovery (per-model recovery policy: MaxResumes 0-10, UnclassifiedResumes 0-3, TransientGraceMinutes 0-120, JudgeReworkRounds 1-5 which can raise but never lower the global value, OutputRepairAttempts 0-3, EscalateAfterResumes 0-10 which hands a task failure to the persona escalation ladder after that many resumes; null uses the global setting) and Notes (empty clears). An omitted section keeps its value. The response includes EffectiveRecovery, the policy in effect. Global admin or tenant admin."
+                        "description": "Update Capabilities, Rendering (explicit overrides; null means no override), Recovery (per-model recovery policy: MaxResumes 0-10, UnclassifiedResumes 0-3, TransientGraceMinutes 0-120, JudgeReworkRounds 1-5 which can raise but never lower the global value, OutputRepairAttempts 0-3, EscalateAfterResumes 0-10 which hands a task failure to the persona escalation ladder after that many resumes; null uses the global setting) and Notes (empty clears). An omitted section keeps its value. The response includes EffectiveRecovery, the policy in effect. Global admin or tenant admin. Timeouts sets per-profile stall threshold, tool-wait hard limit, maximum runtime and first-output minutes (null uses the global value, scaled for measured slow models by TimeoutScaleReferenceTokensPerSecond). Tiering.Tier (Economy, Standard, Premium or null) is the administrator tier for captains on this model; the suggested tier from outcome data is read-only and applied through the TierSuggestion model alert."
                     }
                 },
                 {
@@ -20011,6 +20100,202 @@
                                     "if (pm.response.code === 409) pm.test(\"Conflict names the group\", () => pm.expect(body.Data.Field).to.eql(\"UsageSelection\"));"
                                 ]
                             }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Reliability",
+            "description": "Pipeline reliability (RELIABILITY_SIMPLICITY_PLAN.md RS-12.1): a mission attempt history (failure kind, repairs, escalations), reliability per model and persona from stage outcomes, and the acceptance gate reports the Armada.Gate runner uploads. See docs/REST_API.md, Reliability.",
+            "item": [
+                {
+                    "name": "Get Mission Attempts",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/missions/{{missionId}}/attempts",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "missions",
+                                "{{missionId}}",
+                                "attempts"
+                            ]
+                        },
+                        "description": "The mission recovery counters, escalation state, persona and mode, and every recorded attempt oldest first (captain, model, disposition, failure kind, runtime failure kind, contract repair kind, isRepair, escalated, nextCaptainId, Judge verdict, timing). A global admin sees every tenant, a tenant admin the tenant, a user their own missions; 404 otherwise."
+                    },
+                    "response": [
+                        {
+                            "name": "Example",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"MissionId\": \"msn_mvq0z9y8x7w6v5u4t3s2r1q0\",\n  \"Persona\": \"Worker\",\n  \"Mode\": \"Implementation\",\n  \"Status\": \"Complete\",\n  \"Tier\": \"Premium\",\n  \"EscalationCount\": 1,\n  \"EscalatedFromCaptainId\": \"cpt_open\",\n  \"EscalatedFromModel\": \"qwen3.8\",\n  \"RedispatchAttempts\": 1,\n  \"OutputRepairAttempts\": 1,\n  \"Attempts\": [\n    {\n      \"OutcomeId\": \"sto_a\",\n      \"Attempt\": 1,\n      \"CaptainId\": \"cpt_open\",\n      \"Model\": \"qwen3.8\",\n      \"Disposition\": \"OutputRepair\",\n      \"IsRepair\": true,\n      \"Escalated\": false,\n      \"DurationMs\": 240000\n    },\n    {\n      \"OutcomeId\": \"sto_b\",\n      \"Attempt\": 2,\n      \"CaptainId\": \"cpt_open\",\n      \"Model\": \"qwen3.8\",\n      \"Disposition\": \"Escalated\",\n      \"RuntimeFailureKind\": \"Unclassified\",\n      \"IsRepair\": false,\n      \"Escalated\": true,\n      \"NextCaptainId\": \"cpt_frontier\",\n      \"DurationMs\": 180000\n    },\n    {\n      \"OutcomeId\": \"sto_c\",\n      \"Attempt\": 3,\n      \"CaptainId\": \"cpt_frontier\",\n      \"Model\": \"claude-opus-5-5\",\n      \"Disposition\": \"Completed\",\n      \"IsRepair\": false,\n      \"Escalated\": false,\n      \"DurationMs\": 300000\n    }\n  ]\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Reliability Summary",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/reliability/summary?persona=Worker&sort=CompletionRate&descending=false&pageSize=50",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "reliability",
+                                "summary"
+                            ],
+                            "query": [
+                                {
+                                    "key": "persona",
+                                    "value": "Worker",
+                                    "description": "Persona name (exact, case-insensitive)"
+                                },
+                                {
+                                    "key": "sort",
+                                    "value": "CompletionRate",
+                                    "description": "Sort field"
+                                },
+                                {
+                                    "key": "descending",
+                                    "value": "false",
+                                    "description": "Sort direction"
+                                },
+                                {
+                                    "key": "pageSize",
+                                    "value": "50",
+                                    "description": "Page size (1-1000)"
+                                }
+                            ]
+                        },
+                        "description": "Reliability per (model, persona) over a window (default the last 14 days, at most 90) from stage outcomes: completion rate, failure kinds, repairs, escalations and the Unclassified rate, plus totals. Production attempts only unless includeEvaluation=true. Filters: tenantId (global admins), model, persona, vesselId, fromUtc, toUtc. Sort: Attempts (default), CompletionRate, UnclassifiedRate, Repairs, Escalations, Failures, Model, Persona; descending (default true); paging pageNumber, pageSize (1-1000, default 50)."
+                    },
+                    "response": [
+                        {
+                            "name": "Example",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"FromUtc\": \"2026-11-12T12:00:00Z\",\n  \"ToUtc\": \"2026-11-26T12:00:00Z\",\n  \"OutcomesRead\": 40,\n  \"Truncated\": false,\n  \"Totals\": {\n    \"Model\": \"(all)\",\n    \"Persona\": \"(all)\",\n    \"Attempts\": 40,\n    \"Completed\": 30,\n    \"Failed\": 2,\n    \"Relaunched\": 4,\n    \"Repairs\": 5,\n    \"Escalations\": 4,\n    \"Unclassified\": 1,\n    \"CompletionRate\": 0.8333,\n    \"UnclassifiedRate\": 0.025,\n    \"FailureKinds\": {\n      \"NoOp\": 1,\n      \"InvalidOutput\": 1\n    },\n    \"RuntimeFailureKinds\": {\n      \"Transient\": 3,\n      \"Unclassified\": 1\n    },\n    \"MedianDurationMs\": 210000\n  },\n  \"PageNumber\": 1,\n  \"PageSize\": 50,\n  \"TotalRecords\": 1,\n  \"TotalPages\": 1,\n  \"Rows\": [\n    {\n      \"Model\": \"qwen3.8\",\n      \"Persona\": \"Worker\",\n      \"Attempts\": 40,\n      \"Completed\": 30,\n      \"Failed\": 2,\n      \"Relaunched\": 4,\n      \"Repairs\": 5,\n      \"Escalations\": 4,\n      \"Unclassified\": 1,\n      \"CompletionRate\": 0.8333,\n      \"UnclassifiedRate\": 0.025,\n      \"FailureKinds\": {\n        \"NoOp\": 1,\n        \"InvalidOutput\": 1\n      },\n      \"RuntimeFailureKinds\": {\n        \"Transient\": 3,\n        \"Unclassified\": 1\n      },\n      \"MedianDurationMs\": 210000\n    }\n  ]\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Upload Gate Report",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/reliability/gate-reports",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "reliability",
+                                "gate-reports"
+                            ]
+                        },
+                        "description": "Stores an acceptance gate report (G1 to G12 with per-pipeline counts). The Armada.Gate runner uploads the report it wrote to benchmarks/results unless run with --no-upload. The Admiral assigns Id and UploadedUtc and keeps the newest 200. At least one measure or pipeline, at most 1 MiB, no endpoint addresses or credentials. Global admins only.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"StartedUtc\": \"2026-11-26T10:00:00Z\",\n  \"FinishedUtc\": \"2026-11-26T12:00:00Z\",\n  \"ArmadaVersion\": \"1.5.0\",\n  \"Packs\": [\n    \"csharp\"\n  ],\n  \"Pipelines\": [\n    {\n      \"Pipeline\": \"Gate-A\",\n      \"RunId\": \"bat_mvq0z9y8x7w6v5u4t3s2r1q0\",\n      \"Status\": \"Completed\",\n      \"Passed\": 99,\n      \"Failed\": 1,\n      \"CouldNotRun\": 0,\n      \"PendingEvaluation\": 0\n    }\n  ],\n  \"Measures\": [\n    {\n      \"Id\": \"G1\",\n      \"Name\": \"Completion rate\",\n      \"Value\": \"99%\",\n      \"Threshold\": \">= 95%\",\n      \"Status\": \"Pass\",\n      \"Detail\": \"99 of 100\"\n    }\n  ],\n  \"Passed\": true\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "Example",
+                            "status": "Created",
+                            "code": 201,
+                            "body": "{\n  \"StartedUtc\": \"2026-11-26T10:00:00Z\",\n  \"FinishedUtc\": \"2026-11-26T12:00:00Z\",\n  \"ArmadaVersion\": \"1.5.0\",\n  \"Packs\": [\n    \"csharp\"\n  ],\n  \"Pipelines\": [\n    {\n      \"Pipeline\": \"Gate-A\",\n      \"RunId\": \"bat_mvq0z9y8x7w6v5u4t3s2r1q0\",\n      \"Status\": \"Completed\",\n      \"Passed\": 99,\n      \"Failed\": 1,\n      \"CouldNotRun\": 0,\n      \"PendingEvaluation\": 0\n    }\n  ],\n  \"Measures\": [\n    {\n      \"Id\": \"G1\",\n      \"Name\": \"Completion rate\",\n      \"Value\": \"99%\",\n      \"Threshold\": \">= 95%\",\n      \"Status\": \"Pass\",\n      \"Detail\": \"99 of 100\"\n    }\n  ],\n  \"Passed\": true,\n  \"Id\": \"gate-20261126-120001000\",\n  \"UploadedUtc\": \"2026-11-26T12:00:01Z\"\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "List Gate Reports",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/reliability/gate-reports?pageNumber=1&pageSize=10",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "reliability",
+                                "gate-reports"
+                            ],
+                            "query": [
+                                {
+                                    "key": "pageNumber",
+                                    "value": "1",
+                                    "description": "Page number"
+                                },
+                                {
+                                    "key": "pageSize",
+                                    "value": "10",
+                                    "description": "Page size (1-100)"
+                                }
+                            ]
+                        },
+                        "description": "Stored gate reports, newest first. Global and tenant admins. Paging pageNumber, pageSize (1-100, default 10)."
+                    },
+                    "response": [
+                        {
+                            "name": "Example",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"Success\": true,\n  \"PageNumber\": 1,\n  \"PageSize\": 10,\n  \"TotalPages\": 1,\n  \"TotalRecords\": 1,\n  \"Objects\": [\n    {\n      \"StartedUtc\": \"2026-11-26T10:00:00Z\",\n      \"FinishedUtc\": \"2026-11-26T12:00:00Z\",\n      \"ArmadaVersion\": \"1.5.0\",\n      \"Packs\": [\n        \"csharp\"\n      ],\n      \"Pipelines\": [\n        {\n          \"Pipeline\": \"Gate-A\",\n          \"RunId\": \"bat_mvq0z9y8x7w6v5u4t3s2r1q0\",\n          \"Status\": \"Completed\",\n          \"Passed\": 99,\n          \"Failed\": 1,\n          \"CouldNotRun\": 0,\n          \"PendingEvaluation\": 0\n        }\n      ],\n      \"Measures\": [\n        {\n          \"Id\": \"G1\",\n          \"Name\": \"Completion rate\",\n          \"Value\": \"99%\",\n          \"Threshold\": \">= 95%\",\n          \"Status\": \"Pass\",\n          \"Detail\": \"99 of 100\"\n        }\n      ],\n      \"Passed\": true,\n      \"Id\": \"gate-20261126-120001000\",\n      \"UploadedUtc\": \"2026-11-26T12:00:01Z\"\n    }\n  ]\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Get Latest Gate Report",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/reliability/gate-reports/latest",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "reliability",
+                                "gate-reports",
+                                "latest"
+                            ]
+                        },
+                        "description": "The newest stored gate report (or one by its gate- id). Global and tenant admins; 404 when none is stored."
+                    },
+                    "response": [
+                        {
+                            "name": "Example",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"StartedUtc\": \"2026-11-26T10:00:00Z\",\n  \"FinishedUtc\": \"2026-11-26T12:00:00Z\",\n  \"ArmadaVersion\": \"1.5.0\",\n  \"Packs\": [\n    \"csharp\"\n  ],\n  \"Pipelines\": [\n    {\n      \"Pipeline\": \"Gate-A\",\n      \"RunId\": \"bat_mvq0z9y8x7w6v5u4t3s2r1q0\",\n      \"Status\": \"Completed\",\n      \"Passed\": 99,\n      \"Failed\": 1,\n      \"CouldNotRun\": 0,\n      \"PendingEvaluation\": 0\n    }\n  ],\n  \"Measures\": [\n    {\n      \"Id\": \"G1\",\n      \"Name\": \"Completion rate\",\n      \"Value\": \"99%\",\n      \"Threshold\": \">= 95%\",\n      \"Status\": \"Pass\",\n      \"Detail\": \"99 of 100\"\n    }\n  ],\n  \"Passed\": true,\n  \"Id\": \"gate-20261126-120001000\",\n  \"UploadedUtc\": \"2026-11-26T12:00:01Z\"\n}"
                         }
                     ]
                 }
