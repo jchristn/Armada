@@ -593,7 +593,7 @@ See [SCHEDULING.md](SCHEDULING.md#capacity) for how the hierarchy interacts with
 
 ## 10. Prompt Template Resolution
 
-Each persona references a prompt template by name. When `GenerateClaudeMdAsync` builds the mission instructions file (`CLAUDE.md`, `CODEX.md`, `CURSOR.md`, `GEMINI.md`, or `MUX.md`, depending on the captain's runtime):
+Each persona references a prompt template by name. When `GenerateClaudeMdAsync` builds the mission instructions file (the file each runtime loads natively: `CLAUDE.md` for Claude Code, `AGENTS.override.md` for Codex and pi, `AGENTS.md` for OpenCode, `CURSOR.md`, `GEMINI.md`, `MUX.md`, and `ARMADA.md` for the API endpoint runtime, a Custom command and any runtime without a context file of its own; a generated file that hides the repository's `AGENTS.md` or `CLAUDE.md` carries it):
 
 ```
 1. Build template parameter dictionary from mission/vessel/captain context

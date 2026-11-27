@@ -493,7 +493,7 @@ namespace Test.Shared.Suites.Services
             cases.Add(Case("instructions_file_is_agents_override", "pi missions write AGENTS.override.md", TestTags.Positive, () =>
             {
                 AssertEqual("AGENTS.override.md", MissionPromptBuilder.GetInstructionsFileName("Pi"));
-                AssertEqual("CLAUDE.md", MissionPromptBuilder.GetInstructionsFileName("OpenCode"), "other runtimes are unchanged");
+                AssertEqual("CLAUDE.md", MissionPromptBuilder.GetInstructionsFileName("ClaudeCode"), "other runtimes keep their own file");
             }));
 
             return new TestSuiteDescriptor(

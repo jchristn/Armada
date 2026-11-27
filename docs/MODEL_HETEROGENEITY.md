@@ -760,8 +760,17 @@ Measure first, then change handoffs and contracts, then prompts, then add profil
    (`persona.<name>`, `persona.<name>.lean`, `persona.<name>.compact`) for the Worker, Test Engineer, Judge and
    Architect; other personas render Current. Every variant carries no output contract of its own: the one generated
    contract (`StageOutputContract`, see docs/PIPELINES.md) follows it, so Lean no longer states the contract first and
-   last. Selection order: the voyage captain override's `PromptVariant` for the
-   persona (exact, then `*`), the captain's `promptVariant` runtime option, then Current. To compare, run the same
+   last. Selection order (RS-8.3): the voyage captain override's `PromptVariant` for the
+   persona (exact, then `*`), the captain's `promptVariant` runtime option, the captain's model profile
+   `Rendering.Template`, then the served context (the endpoint's configured window, else its discovered one, else the
+   profile's served context): Compact at or below `promptVariantCompactMaxContextTokens` (default 32768), Lean at or below
+   `promptVariantLeanMaxContextTokens` (default 65536; 0 turns either off), then Current. A captain whose context is not
+   known (a vendor CLI) keeps Current. The profile's `RepeatContractAtEnd` repeats the output contract at the end of the
+   launch prompt, and `MaxFilesPerMission` adds a `## File Limit` section (the smaller of it and the Worker envelope's
+   `maxFiles`) to the instructions of every persona that writes a change (RS-8.2). A passing tool-calling probe records
+   `ProbedToolsAvailable` and `ProbedMcpAvailable` on the profile (a failing one records false); the Worker envelope's
+   `requiredTools` reads the administrator's value, else the probed one, and a served window the probe reads becomes the
+   endpoint's discovered context when it configures none (RS-8.1). To compare, run the same
    captain, packs, run count and seed once per variant, for example `run_battery` with `promptVariant` Current, Lean
    and Compact; the variant is recorded in each run's configuration (and revision), so compare the runs' counts.
 2. If the lean default does not hurt strong models, replace the default instead of forking it.

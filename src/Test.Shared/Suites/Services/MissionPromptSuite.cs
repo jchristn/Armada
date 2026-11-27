@@ -883,7 +883,7 @@ namespace Test.Shared.Suites.Services
                         AssertTrue(!String.IsNullOrWhiteSpace(contract), "the role has a required contract independently of custom instructions");
                         AssertEqual(String.Empty, MissionPromptBuilder.BuildTemplateParams(mission, vessel, captain)["CaptainInstructions"], "captain instructions do not repeat the contract");
                         await service.GenerateClaudeMdAsync(tempDir, mission, vessel, captain);
-                        string instructions = await File.ReadAllTextAsync(Path.Combine(tempDir, "CLAUDE.md"));
+                        string instructions = await File.ReadAllTextAsync(Path.Combine(tempDir, MissionPromptBuilder.GetInstructionsFileName(captain?.Runtime.ToString())));
                         AssertContains(contract, instructions, "the generated artifact must deliver the complete role contract even without custom captain instructions");
                     }
                     finally { try { Directory.Delete(tempDir, true); } catch { } }

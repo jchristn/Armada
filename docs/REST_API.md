@@ -3945,7 +3945,7 @@ curl http://localhost:8080/api/v1/missions/msn_abc123/log?offset=100&lines=100 \
 
 #### GET /api/v1/missions/{id}/instructions
 
-Return the instructions file the captain was given for a mission. Resolves the live dock/worktree first (using the runtime-specific instructions file name, then common fallbacks such as `CLAUDE.md`, `CODEX.md`, `AGENTS.md`), and falls back to a saved instructions snapshot when no live worktree exists.
+Return the instructions file the captain was given for a mission. Resolves the live dock/worktree first (using the runtime-specific instructions file name, then common fallbacks such as `CLAUDE.md`, `AGENTS.override.md`, `ARMADA.md`, `AGENTS.md`), and falls back to a saved instructions snapshot when no live worktree exists.
 
 **Permission:** Authenticated
 
@@ -6256,7 +6256,7 @@ never edited. Profile ids use the `mdl_` prefix.
 | GET | `/api/v1/model-profiles` | | `200` `EnumerationResult<ModelProfile>` (without revisions), newest first. Query: `tenantId` (global admins), `runtime`, `provider` (case-insensitive), `model` (contains, case-insensitive), `pageNumber`, `pageSize` (1-1000, default 100); `400` for a page value that does not parse |
 | POST | `/api/v1/model-profiles/enumerate` | `ModelProfileQuery` (optional): `TenantId` (global admins), `Runtime`, `Provider`, `ModelContains`, `PageNumber`, `PageSize` | `200` the same page as the GET; `400` for a body that does not parse |
 | GET | `/api/v1/model-profiles/{id}` | | `200` `ModelProfile` with `Identity`, `Capabilities`, `Rendering`, `Recovery`, `EffectiveRecovery`, `Notes`, `Revisions` (oldest first) and `Measured` (see below); `404` when missing or in another tenant |
-| PUT | `/api/v1/model-profiles/{id}` | `ModelProfileUpdateRequest`: `Capabilities` (`ToolsAvailable`, `McpAvailable`), `Rendering` (`Template`, `RepeatContractAtEnd`, `MaxFilesPerMission` 1 or more; null means no override), `Recovery` (see below; null values use the global setting), `Notes` (empty clears). An omitted section keeps its value | `200` the profile with revisions; `400` invalid value; `403` not an admin; `404` |
+| PUT | `/api/v1/model-profiles/{id}` | `ModelProfileUpdateRequest`: `Capabilities` (`ToolsAvailable`, `McpAvailable`; the read-only `ProbedToolsAvailable`, `ProbedMcpAvailable` and `ProbedUtc` are written by model probes and kept, and `EffectiveToolsAvailable` / `EffectiveMcpAvailable` are the administrator's value, else the probed one), `Rendering` (`Template`: `Current`, `Lean` or `Compact`, case-insensitive and stored in its canonical spelling: the persona prompt variant the profile's captains render; `RepeatContractAtEnd`: true repeats the output contract at the end of the launch prompt; `MaxFilesPerMission` 1 or more: writing personas are told to change at most that many files; null means no override), `Recovery` (see below; null values use the global setting), `Notes` (empty clears). An omitted section keeps its value | `200` the profile with revisions; `400` invalid value (including an unknown `Template`); `403` not an admin; `404` |
 | PUT | `/api/v1/model-profiles/{id}/revisions/{revisionId}/compatible-with` | `ModelProfileCompatibilityRequest`: `CompatibleWith` (revision ids of the same tenant; empty removes every mark). Symmetric | `200` `ModelProfileRevision` with `CompatibleWith`; `400` missing list or unknown revision; `403`; `404` profile or revision (of that profile) not found |
 | GET | `/api/v1/model-profiles/{id}/scorecard` | | `200` `ModelScorecard` for one persona (see [Model scorecard](#model-scorecard)). Query: `persona` (required), `vesselId`, `windowDays` (1-365, default 30), `windowMissions` (1-500, default 50); `400` missing persona, a window value out of range or not an integer; `404` when missing or in another tenant (checked before the query is validated) |
 
@@ -6359,7 +6359,7 @@ recorded in the alert's `Actions`):
 |---|---|
 | `MoveDown` | Moves the persona's captain priority entries that name a model and select only this profile's captains to the bottom of the list (persona update) |
 | `RemoveFromPersona` | Removes those entries and clears the persona's default captain when it is on this profile (persona update) |
-| `CompactTemplate` | Unavailable: there is no prompt variant per model profile and persona (variants come from a voyage captain override or the captain's `promptVariant`, which applies to every persona) |
+| `CompactTemplate` | Unavailable as an action: set the profile's `Rendering.Template` to `Compact` instead (it applies to every persona the profile's captains run, after a voyage captain override and the captain's `promptVariant`) |
 | `Reevaluate` | Starts a Quick Evaluate of a captain on this profile (`evaluate_captain`), within the evaluation budgets |
 | `Ignore` | Hides the alert from the inbox for `Days` (1-365, default `ModelAlerts.DefaultIgnoreDays`, 7) |
 
