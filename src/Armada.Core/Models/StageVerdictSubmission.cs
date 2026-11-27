@@ -4,12 +4,18 @@ namespace Armada.Core.Models
     using System.ComponentModel;
     using System.ComponentModel.DataAnnotations;
     using System.Text.Json.Serialization;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A Judge verdict submitted through <c>armada_submit_verdict</c> (RELIABILITY_SIMPLICITY_PLAN.md RS-6.2, RS-6.7).
     /// </summary>
     public class StageVerdictSubmission
     {
+        /// <summary>
+        /// Most findings a submission may carry.
+        /// </summary>
+        public const int MaxFindings = 200;
+
         /// <summary>
         /// Verdict token: PASS, FAIL, NEEDS_REVISION or SPEC_CONFLICT.
         /// </summary>
@@ -55,6 +61,7 @@ namespace Armada.Core.Models
         /// </summary>
         [JsonPropertyName("findings")]
         [Description("Each defect you found. FAIL or NEEDS_REVISION needs at least one blocking finding with a file or a concrete scenario.")]
+        [CollectionBound(MaxFindings, Reason = "StageSubmissionValidator rejects more")]
         public List<StageFinding> Findings { get; set; } = new List<StageFinding>();
 
         /// <summary>

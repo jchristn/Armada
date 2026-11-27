@@ -123,6 +123,7 @@ namespace Armada.Core.Models
         /// <see cref="Armada.Core.Harbor.HarborCapabilityFlags.Advertised"/>). The Admiral runs the earlier behavior for each.
         /// Empty for a Harbor that is current or has never connected. Computed; not stored.
         /// </summary>
+        [CollectionBound(64, Reason = "At most one per HarborCapabilityFlags value")]
         public List<string> MissingCapabilities => String.IsNullOrWhiteSpace(ProtocolVersion) ? new List<string>() : Armada.Core.Harbor.HarborCapabilityFlags.Missing(_Capabilities);
 
         /// <summary>

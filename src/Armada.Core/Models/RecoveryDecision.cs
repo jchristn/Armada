@@ -4,6 +4,7 @@ namespace Armada.Core.Models
     using System.Collections.Generic;
     using System.Linq;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// What <see cref="Armada.Core.Services.RecoveryPolicyEngine"/> decided (RS-5.10): the actions to try, in order. The
@@ -13,6 +14,7 @@ namespace Armada.Core.Models
     public class RecoveryDecision
     {
         /// <summary>The actions to try, in order.</summary>
+        [CollectionBound(16, Reason = "At most one per RecoveryActionEnum value")]
         public List<RecoveryStep> Steps { get; set; } = new List<RecoveryStep>();
 
         /// <summary>The first action to try.</summary>

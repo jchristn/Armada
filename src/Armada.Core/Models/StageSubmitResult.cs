@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System.Collections.Generic;
     using System.Text.Json.Serialization;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// What a submit tool call returns to the model: accepted with the stored id, or the errors to fix and resubmit.
@@ -31,6 +32,7 @@ namespace Armada.Core.Models
         /// Errors in the order found; empty when accepted.
         /// </summary>
         [JsonPropertyName("errors")]
+        [CollectionBound(StageSubmissionCheck.MaxErrors + 1, Reason = "Copied from StageSubmissionCheck.Errors")]
         public List<string> Errors { get; set; } = new List<string>();
 
         /// <summary>

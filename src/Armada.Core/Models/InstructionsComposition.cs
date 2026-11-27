@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A composed mission instructions file: the text, its estimated size, the budget it was held to, and the sections
@@ -28,6 +29,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Names of the sections trimmed to fit, in the order they were trimmed.
         /// </summary>
+        [CollectionBound(64, Reason = "At most one per instructions section")]
         public List<string> TrimmedSections { get; set; } = new List<string>();
 
         /// <summary>

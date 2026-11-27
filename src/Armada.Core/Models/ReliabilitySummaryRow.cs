@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Reliability of one (model, persona) pair over the summary window, counted from stage outcomes (one per attempt).
@@ -66,11 +67,13 @@ namespace Armada.Core.Models
         /// <summary>
         /// Count per mission failure kind (Compile, TestFail, NoOp, InvalidOutput, ...).
         /// </summary>
+        [CollectionBound(64, Reason = "One per mission failure kind")]
         public Dictionary<string, int> FailureKinds { get; set; } = new Dictionary<string, int>(StringComparer.Ordinal);
 
         /// <summary>
         /// Count per runtime failure kind (UsageLimit, Crash, Transient, Unclassified, ...), Clean excluded.
         /// </summary>
+        [CollectionBound(64, Reason = "One per runtime failure kind")]
         public Dictionary<string, int> RuntimeFailureKinds { get; set; } = new Dictionary<string, int>(StringComparer.Ordinal);
 
         /// <summary>

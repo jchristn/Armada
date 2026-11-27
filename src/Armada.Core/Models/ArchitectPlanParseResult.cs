@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// The result of reading an Architect's output for a structured plan: a status, the plan when valid, and the ordered,
@@ -30,6 +31,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Contract errors in the order found: at most <see cref="MaxErrors"/>, plus one entry counting the rest.
         /// </summary>
+        [CollectionBound(MaxErrors + 1, Reason = "At most MaxErrors, plus one line counting the rest")]
         public List<string> Errors
         {
             get => _Errors;

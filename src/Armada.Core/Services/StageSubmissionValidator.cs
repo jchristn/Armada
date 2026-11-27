@@ -60,11 +60,11 @@ namespace Armada.Core.Services
                     break;
                 case StageSubmissionKindEnum.Verdict:
                     envelope.Verdict = Read<StageVerdictSubmission>(argumentsJson!, check.Errors);
-                    if (envelope.Verdict != null) CheckVerdict(envelope, persona, check.Errors);
+                    if (envelope.Verdict != null && CheckBounds(envelope.Verdict, check.Errors)) CheckVerdict(envelope, persona, check.Errors);
                     break;
                 case StageSubmissionKindEnum.Result:
                     envelope.Result = Read<StageResultSubmission>(argumentsJson!, check.Errors);
-                    if (envelope.Result != null) CheckResult(envelope, persona, check.Errors);
+                    if (envelope.Result != null && CheckBounds(envelope.Result, check.Errors)) CheckResult(envelope, persona, check.Errors);
                     break;
             }
 
@@ -81,6 +81,20 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private static bool CheckBounds(object submission, List<string> errors)
+        {
+            try
+            {
+                CollectionBounds.Validate(submission);
+                return true;
+            }
+            catch (CollectionLimitExceededException ex)
+            {
+                errors.Add(ex.Message);
+                return false;
+            }
+        }
 
         private static ArchitectPlan? CheckPlan(string argumentsJson, int maxHierarchyDepth, List<string> errors)
         {

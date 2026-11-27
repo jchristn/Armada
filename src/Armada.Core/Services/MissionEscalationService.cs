@@ -142,7 +142,7 @@ namespace Armada.Core.Services
             try
             {
                 IReadOnlyList<string> changed = await git.GetChangedFilesSinceAsync(dock.WorktreePath!, startCommit!, token).ConfigureAwait(false);
-                return changed.Where(path => !ScratchFileMatcher.IsScratchFile(path)).ToList();
+                return changed.Where(path => !ScratchFileMatcher.IsScratchFile(path)).Take(EscalationMemory.MaxChangedFiles).ToList();
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             {

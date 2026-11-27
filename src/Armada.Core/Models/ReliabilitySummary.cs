@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Pipeline reliability per model and persona over a window (GET /api/v1/reliability/summary, MCP
@@ -59,6 +60,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// This page's rows.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxPageSize, Reason = "One page of rows")]
         public List<ReliabilitySummaryRow> Rows { get; set; } = new List<ReliabilitySummaryRow>();
 
         /// <summary>

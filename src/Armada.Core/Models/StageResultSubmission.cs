@@ -4,6 +4,7 @@ namespace Armada.Core.Models
     using System.ComponentModel;
     using System.ComponentModel.DataAnnotations;
     using System.Text.Json.Serialization;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A work or verifier stage result submitted through <c>armada_submit_result</c> (RELIABILITY_SIMPLICITY_PLAN.md
@@ -11,6 +12,11 @@ namespace Armada.Core.Models
     /// </summary>
     public class StageResultSubmission
     {
+        /// <summary>
+        /// Most report sections a submission may carry.
+        /// </summary>
+        public const int MaxSections = 50;
+
         /// <summary>
         /// Status token for finished work.
         /// </summary>
@@ -43,6 +49,7 @@ namespace Armada.Core.Models
         /// </summary>
         [JsonPropertyName("sections")]
         [Description("The report sections your output contract lists, each with its heading and text.")]
+        [CollectionBound(MaxSections, Reason = "StageSubmissionValidator rejects more")]
         public List<StageReportSection> Sections { get; set; } = new List<StageReportSection>();
 
         /// <summary>
@@ -50,6 +57,7 @@ namespace Armada.Core.Models
         /// </summary>
         [JsonPropertyName("findings")]
         [Description("Defects you found. A blocked result needs at least one blocking finding with a file or a concrete scenario.")]
+        [CollectionBound(StageVerdictSubmission.MaxFindings, Reason = "StageSubmissionValidator rejects more")]
         public List<StageFinding> Findings { get; set; } = new List<StageFinding>();
 
         /// <summary>

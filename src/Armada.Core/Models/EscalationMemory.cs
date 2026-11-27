@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// What an escalated attempt learns from the attempt it replaces (RS-5.7): why the previous captain stopped, the
@@ -12,6 +13,11 @@ namespace Armada.Core.Models
     /// </summary>
     public class EscalationMemory
     {
+        /// <summary>
+        /// Most changed file paths kept on the memory; the escalation note shows fewer.
+        /// </summary>
+        public const int MaxChangedFiles = 200;
+
         /// <summary>Why the previous captain could not finish, in one line.</summary>
         public string Reason
         {
@@ -41,6 +47,7 @@ namespace Armada.Core.Models
         public string? OutputTail { get; set; } = null;
 
         /// <summary>Files the previous attempt changed on the branch, or null when they could not be read.</summary>
+        [CollectionBound(MaxChangedFiles, Reason = "MissionEscalationService keeps the first MaxChangedFiles paths")]
         public List<string>? ChangedFiles { get; set; } = null;
 
         /// <summary>Id of the black box rule behind <see cref="Hint"/>, or null.</summary>

@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A mission's attempt history (GET /api/v1/missions/{id}/attempts, MCP get_mission_attempts): the mission's
@@ -87,6 +88,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Recorded attempts, oldest first.
         /// </summary>
+        [CollectionBound(5000, Reason = "ReliabilityAccessService reads at most 5 pages of 1000 stage outcomes")]
         public List<MissionAttempt> Attempts { get; set; } = new List<MissionAttempt>();
 
         /// <summary>

@@ -48,6 +48,13 @@ namespace Test.Shared.Suites.E2E
             ["GET /api/v1/doctor"] = 13,
         };
 
+        // Bare-list responses capped in code (newest first), with their cap. Arrays inside their items are still checked.
+        private static readonly Dictionary<string, int> _CappedListResponses = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["GET /api/v1/missions/{id}/submissions"] = StageSubmissionAccessService.MaxSubmissions,
+            ["MCP get_mission_submissions"] = StageSubmissionAccessService.MaxSubmissions,
+        };
+
         // Models in Armada.Core.Models that no REST route, MCP tool or WebSocket command returns, with why. They are not
         // roots of the declared-bounds check, but a response model that reaches one makes it checked again.
         private static readonly Dictionary<string, string> _InternalModels = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -371,6 +378,11 @@ namespace Test.Shared.Suites.E2E
 
                 if (array.Name == "[]" && array.Path.Length == 0)
                 {
+                    if (_CappedListResponses.TryGetValue(label, out int cap))
+                    {
+                        if (array.Count > cap) problems.Add(label + ": capped list holds " + array.Count + ", over " + cap);
+                        continue;
+                    }
                     problems.Add(label + ": the response is a bare list");
                     continue;
                 }
