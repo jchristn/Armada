@@ -1104,7 +1104,7 @@ the job and keep it from coming back.
 - [x] **RS-11.3** Rename `SlotManager` to describe what it manages (binary rebuild slots). Evidence: `RebuildSlotManager`/`IRebuildSlotManager`, suite Services.RebuildSlotManager 7/7.
 - [x] **RS-11.4** Source-scan tests that keep the simplifications in place: no direct mission status writes (RS-3.6),
   no reads of control markers from `Description`, no `ex.Message.Contains` in Core, no second dispatcher. Evidence: Suite Services.SourceGuards (no control markers read from descriptions, no exception message matching in Core with two reasoned allow-list entries, one dispatcher); direct status writes already guarded by Services.MissionTransitions `no_direct_status_writes`. Fixed CaptainSelectionMethods, CaptainSlotStore (provider error codes) and GitService.CommitAllAsync (`git var` identity check). Guards plus rename 10/10 on the merged head; 113 affected tests SQLite, 28/28 PostgreSQL. Outside the Core scan: `McpAskTools` still matches "not found" text.
-- [ ] **RS-11.5** Warning-free Release build on both frameworks after all changes. Evidence:
+- [x] **RS-11.5** Warning-free Release build on both frameworks after all changes. Evidence: 7d09769c1 plus 1c40d8ec4: Release `Armada.sln` 0 warnings and 0 errors (net8.0 and net10.0); Verify Test.Automated 0 warnings; 582 suite tests passed on the fork, SourceGuards, StageCheckResumeSafety, StallRecovery, CollectionSurface 46/46 on the merged head.
 
 ## Phase 12: Product surfaces
 
@@ -1206,23 +1206,23 @@ humanizer pass and a manual check against the Signs of AI writing page before an
 - [x] **RS-13.4** `docs/CAPTAIN_ROUTING.md`, `docs/PERSONAS.md`, `docs/PERSONAS_GUIDE.md`, `docs/PIPELINES.md`:
   escalation ladders, judge strength rule, capability filters, ranking, the admission gate order, typed blockers.
   Evidence: c5c7ba2e4: admission order and typed blockers, escalation ladders, Judge strength, service source pointers.
-- [ ] **RS-13.5** `docs/REST_API.md`, `docs/MCP_API.md` (including the submit tools and their schemas),
-  `docs/WEBSOCKET_API.md`, `docs/PROXY_API.md` if changed, `docs/HARBOR_PROTOCOL.md`. Evidence:
-- [ ] **RS-13.6** `docs/OPERATIONS.md` (every new setting with default, minimum, maximum, and effect),
+- [x] **RS-13.5** `docs/REST_API.md`, `docs/MCP_API.md` (including the submit tools and their schemas),
+  `docs/WEBSOCKET_API.md`, `docs/PROXY_API.md` if changed, `docs/HARBOR_PROTOCOL.md`. Evidence: 848ac569c; new enumerate routes documented in 1c40d8ec4. CollectionSurface, Client.RouteSurface, ApiContract, SurfaceScoping, Docs.Deprecation 37/37.
+- [x] **RS-13.6** `docs/OPERATIONS.md` (every new setting with default, minimum, maximum, and effect),
   `docs/UPGRADING.md` (migration 133 and its backfill, behavior changes, Harbor version advice, the legacy plan
-  format deprecation), `DEPRECATION.md`. Evidence:
-- [ ] **RS-13.7** `docs/MERGING.md` (requeue on non-fast-forward, single reconciler, batching), `docs/BLACKBOX.md`
+  format deprecation), `DEPRECATION.md`. Evidence: 848ac569c: OPERATIONS reliability settings table, UPGRADING 1.5.0 migrations and behavior changes, DEPRECATION prose section.
+- [x] **RS-13.7** `docs/MERGING.md` (requeue on non-fast-forward, single reconciler, batching), `docs/BLACKBOX.md`
   if rule hints change, `docs/CONCURRENCY_TESTING.md` and `docs/PERFORMANCE.md` (single dispatcher, snapshot,
-  new benchmarks). Evidence:
-- [ ] **RS-13.8** `docs/TESTING.md`: the open-model simulator, crash-point harness, seeded-defect tasks, gate report,
+  new benchmarks). Evidence: 848ac569c: MERGING lease setting, BLACKBOX service pointers, CONCURRENCY_TESTING one dispatcher, PERFORMANCE 1.5.0 numbers.
+- [x] **RS-13.8** `docs/TESTING.md`: the open-model simulator, crash-point harness, seeded-defect tasks, gate report,
   and how to run each. `docs/RELEASING.md`: add the reliability gate as a release step; fix its statement that the
-  dashboard `dist/` is committed (it is git-ignored, per `CLAUDE.md`). Evidence:
-- [ ] **RS-13.9** `docs/TUI.md`, `docs/MOBILE.md` (new screens; store submission section rewritten from what
+  dashboard `dist/` is committed (it is git-ignored, per `CLAUDE.md`). Evidence: 848ac569c: TESTING crash-point harness, seeded defects, gate report, comma-separated suites; RELEASING drift-check text removed.
+- [x] **RS-13.9** `docs/TUI.md`, `docs/MOBILE.md` (new screens; store submission section rewritten from what
   Phase 16 actually did, without private ids), `docs/DASHBOARD_NAVIGATION.md`, `src/Armada.VSCode/README.md`,
   `docs/INSTRUCTIONS_FOR_*.md` and `docs/*_AS_ORCHESTRATOR.md` where the submit tools or contracts change what an
-  orchestrator sees. Evidence:
-- [ ] **RS-13.10** `README.md`, `DOCKERHUB_README.md`, `GETTING_STARTED.md`, `FAST_TRACK_SETUP.md`: mention mixed
-  open and frontier pipelines and link `docs/OPEN_MODELS.md`. Evidence:
+  orchestrator sees. Evidence: 848ac569c: TUI.md, MOBILE.md and the VS Code README checked and already current; orchestrator and instructions guides updated.
+- [x] **RS-13.10** `README.md`, `DOCKERHUB_README.md`, `GETTING_STARTED.md`, `FAST_TRACK_SETUP.md`: mention mixed
+  open and frontier pipelines and link `docs/OPEN_MODELS.md`. Evidence: 848ac569c: README, DOCKERHUB_README, GETTING_STARTED and FAST_TRACK_SETUP mention mixed pipelines and link OPEN_MODELS.md.
 - [ ] **RS-13.11** `CHANGELOG.md`: every user-visible change, setting, migration, deprecation, and behavior change
   under the 1.5.0 entries, with the before and after gate numbers. Evidence:
 - [x] **RS-13.12** Update `CLAUDE.md` and `AGENTS.md` architecture notes where this plan changed the architecture they

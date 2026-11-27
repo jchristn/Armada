@@ -421,6 +421,7 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
 - **Unique-violation and git identity handling no longer match exception text.** Captain selection and captain slot
   writes use provider error codes; a failed commit retries as Armada only when `git var` reports no author or committer
   identity (RS-11.4).
+- The Release build of `Armada.sln` is warning-free on net8.0 and net10.0 (RS-11.5). The verification resume stamp and tool lifecycle lines are deserialized into typed classes instead of read through `JsonDocument`, and em-dashes are gone from product C# code.
 
 - **Battery runs can be listed and cancelled.** `GET /api/v1/battery/runs` (paged; tenant, captain, status filters)
   and `POST /api/v1/battery/runs/{id}/cancel` (stops open missions and releases docks), with MCP `list_battery_runs`
@@ -473,7 +474,9 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
 - New `docs/OPEN_MODELS.md`: running Qwen3.8 and other open models in pipelines with Opus and GPT-6.1 (endpoint setup, served context and prompt variants, streaming and timeouts, concurrency caps, escalation ladder, Judge strength, tiers and outcome ranking, reference pipelines, known limits).
 - `docs/MODEL_GUIDANCE.md`, `docs/MODEL_HETEROGENEITY.md`, `docs/CAPTAIN_ROUTING.md`, `docs/PERSONAS.md`, `docs/PERSONAS_GUIDE.md` and `docs/PIPELINES.md` describe the 1.5.0 behavior: what the ApiEndpoint runtime absorbs, admission order and typed blockers, escalation ladders, Judge strength, and source pointers to the services that replaced the MissionService partial files.
 - `CLAUDE.md` and `AGENTS.md` describe the MissionService facade and its services, the SourceGuards scans, SDK sub-clients, and the no-partial-classes rule.
+- `docs/REST_API.md`, `docs/MCP_API.md`, `docs/OPERATIONS.md` (every 1.5.0 reliability setting with default, range and effect), `docs/UPGRADING.md` (migrations 133 to 143, behavior changes and how to reverse each), `DEPRECATION.md`, `docs/MERGING.md`, `docs/BLACKBOX.md`, `docs/CONCURRENCY_TESTING.md`, `docs/PERFORMANCE.md`, `docs/TESTING.md`, `docs/RELEASING.md` (reliability gate step; the stale dist drift check text removed), `docs/DASHBOARD_NAVIGATION.md`, the orchestrator and instructions guides, `README.md`, `DOCKERHUB_README.md`, `GETTING_STARTED.md` and `FAST_TRACK_SETUP.md` cover 1.5.0 and link `docs/OPEN_MODELS.md`.
 
+- `POST /api/v1/battery/runs/enumerate` and `POST /api/v1/reliability/gate-reports/enumerate` (new `GateReportQuery`) are the POST forms of the two GET lists, with SDK methods `Battery.EnumerateRunsAsync` and `Reliability.EnumerateGateReportsAsync` and Postman requests. `GET /api/v1/missions/{id}/submissions` returns at most the newest 200 submissions.
 ### Tests
 
 - Cases that set a skip reason now also set Touchstone's skip flag; five suites ran cases that were meant to skip,
