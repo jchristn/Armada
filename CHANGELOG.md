@@ -314,6 +314,16 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   CONFLICT**` with a non-empty `## Spec Conflict` section is repaired like the other verdicts; without the section it
   is still refused (RS-2.12).
 
+- **Slow models get longer timeouts.** Model profiles take overrides for the stall threshold, tool-wait hard limit,
+  maximum runtime and a new first-output time, and record their measured speed from probe runs (migration 141). An
+  unset value on a model measured slower than `TimeoutScaleReferenceTokensPerSecond` (default 30, 0 turns it off) is
+  the global value scaled up, at most four times: a Qwen at 10 tokens/s gets a 30 minute stall threshold instead of 10.
+  The first-output time applies until a mission's first output. Profile reads return `effectiveTimeouts` (RS-8.8).
+- **Endpoint concurrency caps count real servers.** The key is scope, normalized URL and model instead of the raw base
+  URL: `localhost`, `127.0.0.1` and `::1`, with or without a trailing slash or `/v1`, are one server; a loopback
+  endpoint has its own budget on each Harbor and on the Admiral; two models on one server count separately, and a
+  circuit breaker opened by one model no longer blocks the other (RS-8.9).
+
 ### Measurement
 
 - **Battery runs can run under a mixed pipeline.** `BatteryRunRequest` and MCP `run_battery` take `Pipeline` and

@@ -1047,11 +1047,11 @@ rendering. This phase closes that loop.
   a different `ModelFamily` is preferred (reuse `EvaluatorSelector`). `ExcludeReviewAuthorsFromJudge` compares model
   identity, not captain id. When no captain satisfies the rule, the mission waits with a typed blocker or, if the
   policy says so, proceeds and is flagged (G8). Evidence:
-- [ ] **RS-8.8** Per-profile timeouts: stall threshold, tool-wait hard limit, maximum runtime, and first-token time,
-  with defaults scaled by measured tokens per second from probes. Global settings stay as defaults. Evidence:
-- [ ] **RS-8.9** Endpoint concurrency key becomes (Harbor or Admiral, normalized URL, model) instead of the base URL
+- [x] **RS-8.8** Per-profile timeouts: stall threshold, tool-wait hard limit, maximum runtime, and first-token time,
+  with defaults scaled by measured tokens per second from probes. Global settings stay as defaults. Evidence: 866e07ebc; `TimeoutPolicyResolver` (Global, Measured or Profile per value, capped at four times global), migration 141 `ModelProfileTimeoutsSchema`, suite Services.TimeoutPolicy; Database.ModelProfile and MigrationHygiene 31/31 on PostgreSQL, MySQL and SQL Server.
+- [x] **RS-8.9** Endpoint concurrency key becomes (Harbor or Admiral, normalized URL, model) instead of the base URL
   (`ConcurrencyCapacityPolicy.EndpointKey`), so `localhost` on two Harbors are two limits and `127.0.0.1` and
-  `localhost` are one. Evidence:
+  `localhost` are one. Evidence: 866e07ebc; host scope only for loopback URLs, trailing `/v1` dropped, admission rechecks the placed Harbor before the claim; suite Services.EndpointConcurrencyKey.
 - [ ] **RS-8.10** Default instructions file per runtime: map Codex to `AGENTS.md` if that is what it reads natively
   (verify), and stop defaulting unknown runtimes to `CLAUDE.md` (`MissionPromptBuilder.cs:74-86`). Evidence:
 
