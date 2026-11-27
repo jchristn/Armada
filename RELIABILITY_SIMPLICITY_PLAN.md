@@ -1181,9 +1181,9 @@ shipped locale per `I18N.md`, and is checked in light and dark themes at desktop
 
 ### VS Code extension, Harbor, Proxy
 
-- [ ] **RS-12.18** VS Code extension (`src/Armada.VSCode`): mission views show attempts, failure kinds, escalations,
+- [x] **RS-12.18** VS Code extension (`src/Armada.VSCode`): mission views show attempts, failure kinds, escalations,
   and blockers; dashboard pages in editor tabs pick up the new views. Unit and integration tests. Update its
-  `CHANGELOG.md` and `README.md`. Evidence:
+  `CHANGELOG.md` and `README.md`. Evidence: src/Armada.VSCode mission view attempts, recovery block, typed blockers; Model Profiles routes; parity.json regenerated (0 planned); unit tests 198/198, typecheck, lint, bundle, parity check green. Integration tests need a VS Code window and were not run. Reliability view route to add once the dashboard view lands.
 - [x] **RS-12.19** Harbor app: shows Harbor capability flags (RS-7.13) and an update prompt when the Admiral needs a
   newer Harbor; discovered context for local endpoints. Evidence: `HarborCapabilityReport`, `HarborCapabilityCatalog`, `HarborDiscoveredContextLog`, Harbor MainWindow banner and status lines; suite Services.HarborAppStatus 4/4, Harbor suites 33/33. Window controls build-checked only, not viewed.
 - [x] **RS-12.20** Proxy: confirm every new REST, WebSocket, and MCP route passes through the tunnel and portal

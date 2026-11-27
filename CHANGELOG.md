@@ -438,6 +438,10 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   mission create form has Persona and Dispatch has Mode. Localized in all eight locales (RS-12.11, RS-12.12,
   RS-12.14).
 
+- **VS Code extension:** mission views show the typed reason a mission is waiting with the advice that clears it,
+  a recovery block (tier, escalations, redispatch and repair counts), and an attempts list; Model Profiles pages open
+  in editor tabs (RS-12.18).
+
 ### Tests
 
 - Cases that set a skip reason now also set Touchstone's skip flag; five suites ran cases that were meant to skip,
