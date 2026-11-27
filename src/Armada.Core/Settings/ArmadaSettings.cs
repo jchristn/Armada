@@ -291,7 +291,45 @@ namespace Armada.Core.Settings
         }
 
         private int _MergeQueueLeaseSeconds = 900;
+        private int _MergeQueueRequeueLimit = 3;
+        private int _MergeQueueBatchSize = 1;
         private int _StageCheckConcurrencyPerHarbor = 1;
+
+        /// <summary>
+        /// How many times landing work is requeued before it fails: a merge queue push the remote refuses because the
+        /// target branch moved (not a fast-forward) is retried from a fresh fetch up to this many times per processing
+        /// run, and a WorkProduced merge-queue mission whose landing handoff was lost is enqueued again up to this many
+        /// times before it is flagged LandingFailed. Default 3. 0 fails at once, as before 1.5.0. Values outside [0, 10]
+        /// are clamped.
+        /// </summary>
+        public int MergeQueueRequeueLimit
+        {
+            get => _MergeQueueRequeueLimit;
+            set
+            {
+                if (value < 0) value = 0;
+                if (value > 10) value = 10;
+                _MergeQueueRequeueLimit = value;
+            }
+        }
+
+        /// <summary>
+        /// Batched landing: the merge queue merges up to this many queued entries of one vessel and target branch into
+        /// one integration worktree, verifies the result once, and publishes it with one push. A batch whose
+        /// verification fails is split in half and each half is retried, down to single entries, so a failing entry is
+        /// found without failing the others. Default 1 (off: each entry is merged, verified, and landed on its own).
+        /// Values outside [1, 20] are clamped.
+        /// </summary>
+        public int MergeQueueBatchSize
+        {
+            get => _MergeQueueBatchSize;
+            set
+            {
+                if (value < 1) value = 1;
+                if (value > 20) value = 20;
+                _MergeQueueBatchSize = value;
+            }
+        }
 
         /// <summary>
         /// Lifetime in seconds of the merge queue's processing lease. The Admiral that holds it renews it before every

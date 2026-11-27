@@ -16,7 +16,8 @@ namespace Armada.Core.Services
     using SyslogLogging;
 
     /// <summary>
-    /// Health-loop sweep that keeps unlanded work landable. It recreates a missing dock worktree from its branch for
+    /// Keeps unlanded work landable; its two cases run inside the landing reconciler's sweep (RS-9.2), which passes the
+    /// missions it scanned. It recreates a missing dock worktree from its branch for
     /// missions that still need it (WorkProduced, LandingFailed, Review, PullRequestOpen), and retries a LocalMerge
     /// landing that was refused because the target checkout had tracked changes once that checkout is clean again,
     /// until <see cref="ArmadaSettings.LandingDeferralDeadlineHours"/> after the first refusal. Work per sweep is bounded.
@@ -192,47 +193,62 @@ namespace Armada.Core.Services
         /// <returns>Docks repaired.</returns>
         public async Task<int> RepairMissingDocksAsync(CancellationToken token = default)
         {
+            List<MissionSummary> candidates = new List<MissionSummary>();
+            foreach (MissionStatusEnum status in _UnlandedStatuses)
+                candidates.AddRange(await ReadMissionsAsync(status, token).ConfigureAwait(false));
+            return await RepairMissingDocksAsync(candidates, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Recreate the missing worktree of each given unlanded mission's dock whose branch still exists, in the order
+        /// given. Bounded by <see cref="MaxDockChecksPerSweep"/> and <see cref="MaxDockRepairsPerSweep"/>.
+        /// </summary>
+        /// <param name="candidates">Unlanded missions (WorkProduced, LandingFailed, Review, PullRequestOpen).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Docks repaired.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when candidates is null.</exception>
+        public async Task<int> RepairMissingDocksAsync(IEnumerable<MissionSummary> candidates, CancellationToken token = default)
+        {
+            if (candidates == null) throw new ArgumentNullException(nameof(candidates));
             DateTime now = DateTime.UtcNow;
             int checks = 0;
             int repaired = 0;
-            foreach (MissionStatusEnum status in _UnlandedStatuses)
+            foreach (MissionSummary mission in candidates)
             {
-                foreach (MissionSummary mission in await ReadMissionsAsync(status, token).ConfigureAwait(false))
+                if (checks >= MaxDockChecksPerSweep || repaired >= MaxDockRepairsPerSweep) return repaired;
+                if (!_UnlandedStatuses.Contains(mission.Status)) continue;
+                if (String.IsNullOrEmpty(mission.DockId)) continue;
+                if (IsCompletionInFlight != null && IsCompletionInFlight(mission.Id)) continue;
+                if (mission.Status == MissionStatusEnum.WorkProduced && mission.LastUpdateUtc > now - SettleTime) continue;
+                if (_DockCheckedUtc.TryGetValue(mission.DockId, out DateTime lastChecked) && lastChecked > now - DockRecheckInterval) continue;
+
+                Dock? dock = await _Database.Docks.ReadAsync(mission.DockId, token).ConfigureAwait(false);
+                // A reclaimed dock was released on purpose (a pipeline handoff or a published pull request).
+                if (dock == null || !dock.Active || String.IsNullOrEmpty(dock.WorktreePath) || String.IsNullOrEmpty(dock.BranchName)) continue;
+
+                checks++;
+                bool? exists = await _Docks.WorktreeExistsAsync(dock, token).ConfigureAwait(false);
+                if (exists != false)
                 {
-                    if (checks >= MaxDockChecksPerSweep || repaired >= MaxDockRepairsPerSweep) return repaired;
-                    if (String.IsNullOrEmpty(mission.DockId)) continue;
-                    if (IsCompletionInFlight != null && IsCompletionInFlight(mission.Id)) continue;
-                    if (mission.Status == MissionStatusEnum.WorkProduced && mission.LastUpdateUtc > now - SettleTime) continue;
-                    if (_DockCheckedUtc.TryGetValue(mission.DockId, out DateTime lastChecked) && lastChecked > now - DockRecheckInterval) continue;
-
-                    Dock? dock = await _Database.Docks.ReadAsync(mission.DockId, token).ConfigureAwait(false);
-                    // A reclaimed dock was released on purpose (a pipeline handoff or a published pull request).
-                    if (dock == null || !dock.Active || String.IsNullOrEmpty(dock.WorktreePath) || String.IsNullOrEmpty(dock.BranchName)) continue;
-
-                    checks++;
-                    bool? exists = await _Docks.WorktreeExistsAsync(dock, token).ConfigureAwait(false);
-                    if (exists != false)
-                    {
-                        if (exists == true) _DockCheckedUtc[dock.Id] = now;
-                        continue;
-                    }
-
-                    DockRestoreResult result = await _Docks.RestoreWorktreeAsync(dock.Id, "integrity sweep for mission " + mission.Id + " (" + mission.Status + ")", false, token).ConfigureAwait(false);
-                    if (result.Restored)
-                    {
-                        repaired++;
-                        _DockCheckedUtc[dock.Id] = now;
-                        _ReportedRepairFailures.TryRemove(dock.Id, out string? _);
-                        continue;
-                    }
-
-                    string reason = result.Reason ?? "unknown";
-                    if (_ReportedRepairFailures.TryGetValue(dock.Id, out string? reported) && reported == reason) continue;
-                    _ReportedRepairFailures[dock.Id] = reason;
-                    _Logging.Warn(_Header + "dock " + dock.Id + " of mission " + mission.Id + " (" + mission.Status + ") is missing at " + dock.WorktreePath + " and could not be recreated: " + reason);
-                    await EmitAsync("dock.repair_failed", "Dock " + dock.Id + " is missing at " + dock.WorktreePath + " and could not be recreated from branch "
-                        + dock.BranchName + ": " + reason, mission, "dock", dock.Id, null, token).ConfigureAwait(false);
+                    if (exists == true) _DockCheckedUtc[dock.Id] = now;
+                    continue;
                 }
+
+                DockRestoreResult result = await _Docks.RestoreWorktreeAsync(dock.Id, "integrity sweep for mission " + mission.Id + " (" + mission.Status + ")", false, token).ConfigureAwait(false);
+                if (result.Restored)
+                {
+                    repaired++;
+                    _DockCheckedUtc[dock.Id] = now;
+                    _ReportedRepairFailures.TryRemove(dock.Id, out string? _);
+                    continue;
+                }
+
+                string reason = result.Reason ?? "unknown";
+                if (_ReportedRepairFailures.TryGetValue(dock.Id, out string? reported) && reported == reason) continue;
+                _ReportedRepairFailures[dock.Id] = reason;
+                _Logging.Warn(_Header + "dock " + dock.Id + " of mission " + mission.Id + " (" + mission.Status + ") is missing at " + dock.WorktreePath + " and could not be recreated: " + reason);
+                await EmitAsync("dock.repair_failed", "Dock " + dock.Id + " is missing at " + dock.WorktreePath + " and could not be recreated from branch "
+                    + dock.BranchName + ": " + reason, mission, "dock", dock.Id, null, token).ConfigureAwait(false);
             }
             return repaired;
         }
@@ -249,11 +265,27 @@ namespace Armada.Core.Services
         public async Task<int> RetryDeferredLandingsAsync(CancellationToken token = default)
         {
             if (_Settings.LandingDeferralDeadlineHours <= 0) return 0;
+            return await RetryDeferredLandingsAsync(await ReadMissionsAsync(MissionStatusEnum.LandingFailed, token).ConfigureAwait(false), token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// <see cref="RetryDeferredLandingsAsync(CancellationToken)"/> over the given LandingFailed missions, in the
+        /// order given.
+        /// </summary>
+        /// <param name="landingFailed">LandingFailed missions.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Landings retried.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when landingFailed is null.</exception>
+        public async Task<int> RetryDeferredLandingsAsync(IEnumerable<MissionSummary> landingFailed, CancellationToken token = default)
+        {
+            if (landingFailed == null) throw new ArgumentNullException(nameof(landingFailed));
+            if (_Settings.LandingDeferralDeadlineHours <= 0) return 0;
             DateTime now = DateTime.UtcNow;
             int retried = 0;
-            foreach (MissionSummary mission in await ReadMissionsAsync(MissionStatusEnum.LandingFailed, token).ConfigureAwait(false))
+            foreach (MissionSummary mission in landingFailed)
             {
                 if (retried >= MaxLandingRetriesPerSweep) break;
+                if (mission.Status != MissionStatusEnum.LandingFailed) continue;
                 if (mission.FailureKind != MissionFailureKindEnum.Infra) continue;
                 if (_LandingRetriedUtc.TryGetValue(mission.Id, out DateTime lastRetry) && lastRetry > now - LandingRetryInterval) continue;
 

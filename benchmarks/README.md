@@ -81,3 +81,11 @@ Conductor models run freely, Ollama Cloud models sparingly, Opus and GPT-6.1 onl
 - No telemetry collector is started. Server-side stage latency is available from the `armada.selection.stage.duration`
   histogram when the bundled observability stack is running (see [docs/TELEMETRY.md](../docs/TELEMETRY.md)).
 - Results come from one machine and are a regression baseline, not a cross-product comparison.
+
+## Landing benchmark (1.5.0)
+
+`run-landing-batch.sh` compares batched merge queue landing (`MergeQueueBatchSize` 4) against serial landing on
+throwaway git repositories, with and without one failing entry, using a simulated verification of fixed length
+(`--entries`, default 8; `--check-ms`, default 1500). It runs the opt-in `Services.LandingBatchBenchmark` suite, uses
+no model, server or network, and writes `results/landing-batch.json` with landed and failed entries, verification
+runs, fetches and wall time per arm.

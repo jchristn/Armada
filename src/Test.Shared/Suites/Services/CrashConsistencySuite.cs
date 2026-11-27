@@ -134,6 +134,11 @@ namespace Test.Shared.Suites.Services
             await Task.Delay(TimeSpan.FromSeconds(6)).ConfigureAwait(false);
             MergeQueueService after = CreateQueue(testDb.Driver);
             await after.ProcessQueueAsync().ConfigureAwait(false);
+            // The landing reconciler's sweep completes a mission whose entry Landed before the crash (RS-2.3, RS-9.2).
+            LoggingModule logging = new LoggingModule();
+            logging.Settings.EnableConsole = false;
+            LandingReconciler reconciler = new LandingReconciler(testDb.Driver, new GitService(logging), logging) { MergeQueue = after };
+            await reconciler.SweepAsync().ConfigureAwait(false);
 
             MergeEntry? finalEntry = await testDb.Driver.MergeEntries.ReadAsync(entry.Id).ConfigureAwait(false);
             Mission? finalMission = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);

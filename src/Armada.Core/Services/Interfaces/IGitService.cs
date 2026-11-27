@@ -40,6 +40,20 @@ namespace Armada.Core.Services.Interfaces
         Task CreateWorktreeAsync(string repoPath, string worktreePath, string branchName, string baseBranch = "main", CancellationToken token = default);
 
         /// <summary>
+        /// Create a git worktree like <see cref="CreateWorktreeAsync"/>, but from refs the caller fetched already: the
+        /// repository is not fetched again. The merge queue fetches once per vessel and target branch in a pass and
+        /// builds each entry's integration worktree with this. Implementations without a separate fetch step create the
+        /// worktree the usual way.
+        /// </summary>
+        /// <param name="repoPath">Path to the repository.</param>
+        /// <param name="worktreePath">Path for the new worktree.</param>
+        /// <param name="branchName">Branch name to create and checkout.</param>
+        /// <param name="baseBranch">Base branch to create from.</param>
+        /// <param name="token">Cancellation token.</param>
+        Task CreateWorktreeFromFetchedRefsAsync(string repoPath, string worktreePath, string branchName, string baseBranch, CancellationToken token = default)
+            => CreateWorktreeAsync(repoPath, worktreePath, branchName, baseBranch, token);
+
+        /// <summary>
         /// Remove a git worktree.
         /// </summary>
         /// <param name="worktreePath">Path to the worktree to remove.</param>

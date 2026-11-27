@@ -286,6 +286,61 @@ namespace Test.Shared.Suites.Services
                 }));
             }
 
+            foreach (bool exhausted in new[] { false, true })
+            {
+                bool usedUp = exhausted;
+                cases.Add(Case("lost_merge_handoff_" + (usedUp ? "requeue_limit_flags" : "is_requeued"), async () =>
+                {
+                    using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                    DatabaseDriver db = testDb.Driver;
+                    LoggingModule logging = new LoggingModule();
+                    logging.Settings.EnableConsole = false;
+                    ArmadaSettings settings = new ArmadaSettings { LandingMode = LandingModeEnum.MergeQueue, MergeQueueRequeueLimit = 2 };
+                    StubGitService git = new StubGitService();
+                    DockService docks = new DockService(logging, db, settings, git);
+                    CaptainService captains = new CaptainService(logging, db, settings, git, docks);
+                    MissionService missions = new MissionService(logging, db, settings, docks, captains);
+                    AdmiralService admiral = new AdmiralService(logging, db, settings, captains, missions, new VoyageService(logging, db), docks);
+                    Vessel vessel = await db.Vessels.CreateAsync(new Vessel("lost-handoff", "https://example.invalid/repo.git")
+                    {
+                        LandingMode = LandingModeEnum.MergeQueue, DefaultBranch = "trunk"
+                    }).ConfigureAwait(false);
+                    Mission mission = await db.Missions.CreateAsync(new Mission("lost handoff")
+                    {
+                        VesselId = vessel.Id, Status = MissionStatusEnum.WorkProduced, BranchName = "armada/lost",
+                        LastUpdateUtc = DateTime.UtcNow.AddMinutes(-10)
+                    }).ConfigureAwait(false);
+                    await db.Events.CreateAsync(StageCheckEvents.Build(mission, new Captain("check", AgentRuntimeEnum.Mux),
+                        new StageCheckResult { Status = StageCheckStatusEnum.Passed, CheckedUtc = DateTime.UtcNow })).ConfigureAwait(false);
+                    if (usedUp)
+                    {
+                        for (int i = 0; i < 2; i++)
+                            await db.Events.CreateAsync(new ArmadaEvent(AdmiralService.LandingHandoffRequeuedEventType, "earlier requeue") { MissionId = mission.Id }).ConfigureAwait(false);
+                    }
+
+                    await (Task)typeof(AdmiralService).GetMethod("FlagMissingMergeHandoffsAsync", BindingFlags.Instance | BindingFlags.NonPublic)!
+                        .Invoke(admiral, new object[] { DateTime.UtcNow.AddMinutes(10), CancellationToken.None })!;
+
+                    Mission stored = (await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
+                    EnumerationResult<MergeEntry> entries = await db.MergeEntries.EnumerateAsync(new EnumerationQuery { MissionId = mission.Id }).ConfigureAwait(false);
+                    if (usedUp)
+                    {
+                        AssertEqual(MissionStatusEnum.LandingFailed, stored.Status, "flagged once the requeues are used up");
+                        AssertEqual(0, entries.Objects.Count, "no further entry");
+                        return;
+                    }
+
+                    AssertEqual(MissionStatusEnum.WorkProduced, stored.Status, "the mission waits on its new entry");
+                    AssertEqual(1, entries.Objects.Count, "one entry enqueued");
+                    MergeEntry entry = entries.Objects[0];
+                    AssertEqual("armada/lost", entry.BranchName);
+                    AssertEqual("trunk", entry.TargetBranch);
+                    AssertEqual(MergeStatusEnum.Queued, entry.Status);
+                    AssertEqual(1, (await db.Events.EnumerateByMissionAsync(mission.Id).ConfigureAwait(false))
+                        .Count(e => e.EventType == AdmiralService.LandingHandoffRequeuedEventType), "the requeue is recorded");
+                }));
+            }
+
             cases.Add(Case("unknown_orphan_exit_preserves_unlanded_work", async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

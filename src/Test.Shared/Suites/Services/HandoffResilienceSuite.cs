@@ -159,7 +159,7 @@ namespace Test.Shared.Suites.Services
                 captains.OnLaunchAgent = (_, _, _) => Task.FromResult(9200);
                 MissionService missions = new MissionService(logging, db, settings, docks, captains, git: git);
                 AdmiralService admiral = new AdmiralService(logging, db, settings, captains, missions, new VoyageService(logging, db), docks);
-                admiral.OnReconcileManualLandings = _ => throw new InvalidOperationException("simulated reconciliation failure");
+                admiral.OnLandingReconciliation = _ => throw new InvalidOperationException("simulated reconciliation failure");
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
                 await CaptainAssignmentFixture.CreateAsync(db, new Captain("dispatch-after-failure")).ConfigureAwait(false);

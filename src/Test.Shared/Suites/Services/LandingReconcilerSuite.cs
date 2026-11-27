@@ -11,6 +11,7 @@ namespace Test.Shared.Suites.Services
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
+    using Armada.Core.Settings;
     using SyslogLogging;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -177,6 +178,60 @@ namespace Test.Shared.Suites.Services
                 }
 
                 AssertEqual(5, total, "later sweeps reach every mission");
+                foreach (string id in ids)
+                    AssertEqual(MissionStatusEnum.Complete, (await testDb.Driver.Missions.ReadAsync(id).ConfigureAwait(false))!.Status, id);
+            }));
+
+            cases.Add(CaseAsync("sweep_runs_every_case_on_one_scan", "SweepAsync completes a mission whose merge entry Landed (RS-2.3) and a LandingFailed mission proven on main in one sweep (RS-9.2)", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string repo = TestTemp.NewDirectory("landing-reconcile");
+                StubGitService git = new StubGitService();
+                git.IsAncestorHandler = (ancestor, descendant) => ancestor == "8321ac09c" && descendant == OriginMain;
+                Vessel vessel = await CreateVesselAsync(testDb, repo).ConfigureAwait(false);
+                Mission proven = await CreateLandingFailedAsync(testDb, vessel, "8321ac09c").ConfigureAwait(false);
+                Mission landedEntry = await testDb.Driver.Missions.CreateAsync(new Mission("landed entry", "work")
+                {
+                    VesselId = vessel.Id, BranchName = "armada/landed", Status = MissionStatusEnum.WorkProduced
+                }).ConfigureAwait(false);
+                await testDb.Driver.MergeEntries.CreateAsync(new MergeEntry("armada/landed", "main")
+                {
+                    VesselId = vessel.Id, MissionId = landedEntry.Id, Status = MergeStatusEnum.Landed
+                }).ConfigureAwait(false);
+                Mission waiting = await testDb.Driver.Missions.CreateAsync(new Mission("still queued", "work")
+                {
+                    VesselId = vessel.Id, BranchName = "armada/queued", Status = MissionStatusEnum.WorkProduced
+                }).ConfigureAwait(false);
+                await testDb.Driver.MergeEntries.CreateAsync(new MergeEntry("armada/queued", "main")
+                {
+                    VesselId = vessel.Id, MissionId = waiting.Id, Status = MergeStatusEnum.Queued
+                }).ConfigureAwait(false);
+
+                LandingReconciler reconciler = CreateReconciler(testDb, git);
+                reconciler.MergeQueue = new MergeQueueService(CreateLogging(), testDb.Driver, new ArmadaSettings(), git);
+
+                AssertEqual(2, await reconciler.SweepAsync().ConfigureAwait(false), "two missions completed in one sweep");
+                AssertEqual(MissionStatusEnum.Complete, (await testDb.Driver.Missions.ReadAsync(proven.Id).ConfigureAwait(false))!.Status, "landed elsewhere");
+                AssertEqual(MissionStatusEnum.Complete, (await testDb.Driver.Missions.ReadAsync(landedEntry.Id).ConfigureAwait(false))!.Status, "landed entry");
+                AssertEqual(MissionStatusEnum.WorkProduced, (await testDb.Driver.Missions.ReadAsync(waiting.Id).ConfigureAwait(false))!.Status, "an entry still queued keeps its mission waiting");
+                AssertEqual(0, await reconciler.SweepAsync().ConfigureAwait(false), "idempotent");
+            }));
+
+            cases.Add(CaseAsync("sweep_without_case_services_runs_remote_case_only", "A sweep without a merge queue, manual reconciler or integrity service still runs the landed-elsewhere case", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string repo = TestTemp.NewDirectory("landing-reconcile");
+                StubGitService git = new StubGitService();
+                git.IsAncestorHandler = (ancestor, descendant) => descendant == OriginMain;
+                Vessel vessel = await CreateVesselAsync(testDb, repo).ConfigureAwait(false);
+                List<string> ids = new List<string>();
+                for (int i = 0; i < 3; i++)
+                    ids.Add((await CreateLandingFailedAsync(testDb, vessel, "c0ffee" + i).ConfigureAwait(false)).Id);
+
+                LandingReconciler reconciler = CreateReconciler(testDb, git);
+                reconciler.MaxPerCycle = 2;
+                AssertEqual(2, await reconciler.SweepAsync().ConfigureAwait(false), "the window is bounded by MaxPerCycle");
+                AssertEqual(1, await reconciler.SweepAsync().ConfigureAwait(false), "the next sweep reaches the rest");
                 foreach (string id in ids)
                     AssertEqual(MissionStatusEnum.Complete, (await testDb.Driver.Missions.ReadAsync(id).ConfigureAwait(false))!.Status, id);
             }));

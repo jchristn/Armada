@@ -271,6 +271,7 @@ namespace Test.Smoke
             "Services.JobStateMachine",
             "Services.JudgeContract",
             "Services.JudgeVerdictParser",
+            "Services.LandingBatchBenchmark",
             "Services.LandingConflict",
             "Services.LandingPaths",
             "Services.LandingPipeline",

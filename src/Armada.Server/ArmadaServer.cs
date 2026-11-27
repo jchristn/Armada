@@ -400,9 +400,11 @@ namespace Armada.Server
                 _WebSocketHub?.BroadcastMissionChange(mission, mission.Status.ToString());
                 return Task.CompletedTask;
             };
-            admiralService.OnReconcileManualLandings = (ct) => _ManualLandingReconciler.ReconcileAsync(null, ct);
+            // The one landing reconciler (RS-9.2): its sweep runs every landing case on one scan per health tick.
             _LandingReconciler = new LandingReconciler(_Database, _Git, _Logging);
             _LandingReconciler.Transitions = _Transitions;
+            _LandingReconciler.Manual = _ManualLandingReconciler;
+            _LandingReconciler.MergeQueue = _MergeQueue as MergeQueueService;
             _LandingReconciler.OnMissionReconciled = (mission, evt) =>
             {
                 _WebSocketHub?.BroadcastMissionChange(mission, mission.Status.ToString());
@@ -416,7 +418,7 @@ namespace Armada.Server
                 });
                 return Task.CompletedTask;
             };
-            admiralService.OnReconcileLandingFailures = (ct) => _LandingReconciler.ReconcileAsync(ct);
+            admiralService.OnLandingReconciliation = (ct) => _LandingReconciler.SweepAsync(ct);
             _HistoricalTimelineService = new HistoricalTimelineService(_Database);
             _ModelEndpointService = new ModelEndpointService(_Database, _Logging);
             _HarborService = new HarborService(_Database, _Logging, _Settings.Harbor);
@@ -620,7 +622,7 @@ namespace Armada.Server
                 Hosts = dockHosts,
                 IsCompletionInFlight = missionService.IsCompletionInFlight
             };
-            admiralService.OnLandingIntegritySweep = landingIntegrity.SweepAsync;
+            _LandingReconciler.Integrity = landingIntegrity;
 
             // Every service that writes a mission or voyage failure records it in the black box.
             Armada.Core.BlackBox.IBlackBoxCapture blackBoxCapture = _BlackBox!.Capture;

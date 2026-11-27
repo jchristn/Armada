@@ -20,6 +20,12 @@ namespace Armada.Core.Services
         #region Public-Members
 
         /// <summary>
+        /// Event recorded when the branch of a WorkProduced merge-queue mission whose landing handoff was lost is enqueued
+        /// again (RS-9.1); counted against <see cref="ArmadaSettings.MergeQueueRequeueLimit"/>.
+        /// </summary>
+        public const string LandingHandoffRequeuedEventType = "mission.landing_handoff_requeued";
+
+        /// <summary>
         /// Black box capture for the failures the Admiral writes, or null (no capture).
         /// </summary>
         public IBlackBoxCapture? BlackBox { get; set; } = null;
@@ -114,25 +120,13 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Optional health-check hook that completes WorkProduced manual-landing (Landing Mode None) missions whose branch
-        /// was merged into the target by hand. Returns the number reconciled. Concrete hook, like
-        /// <see cref="OnGetRemoteTunnelStatus"/>, so the orchestration interface does not change.
+        /// Optional health-check hook for the one landing reconciler (<see cref="LandingReconciler.SweepAsync"/>, RS-9.2):
+        /// one scan of unlanded missions per tick, then its cases (missions whose merge entry landed, manual-landing
+        /// missions merged by hand, missing dock worktrees, deferred landings, LandingFailed missions whose work is on
+        /// the remote). Returns the number of missions changed. Concrete hook, like <see cref="OnGetRemoteTunnelStatus"/>,
+        /// so the orchestration interface does not change.
         /// </summary>
-        public Func<CancellationToken, Task<int>>? OnReconcileManualLandings { get; set; }
-
-        /// <summary>
-        /// Optional health-check hook that keeps unlanded work landable (LandingIntegrityService): it recreates missing
-        /// dock worktrees of unlanded missions from their branches and retries landings deferred on a dirty checkout.
-        /// Returns the number of repairs and retries. Concrete hook, so the orchestration interface does not change.
-        /// </summary>
-        public Func<CancellationToken, Task<int>>? OnLandingIntegritySweep { get; set; }
-
-        /// <summary>
-        /// Optional health-check hook that completes LandingFailed missions whose work is proven to be on the vessel's
-        /// remote default branch (see <see cref="LandingReconciler"/>). Returns the number reconciled. Concrete hook, like
-        /// <see cref="OnReconcileManualLandings"/>, so the orchestration interface does not change.
-        /// </summary>
-        public Func<CancellationToken, Task<int>>? OnReconcileLandingFailures { get; set; }
+        public Func<CancellationToken, Task<int>>? OnLandingReconciliation { get; set; }
 
         /// <summary>
         /// Optional hook reporting whether an agent process was launched by this admiral and is still running under
@@ -636,28 +630,15 @@ namespace Armada.Core.Services
             // Reconcile PullRequestOpen missions — check if their PRs have been merged
             await RunHealthPhaseAsync("pull request reconciliation", () => ReconcilePullRequestMissionsAsync(token), token).ConfigureAwait(false);
 
-            // Reconcile manual-landing (Landing Mode None) missions whose branch was merged by hand.
-            if (OnReconcileManualLandings != null)
+            // One landing reconciliation sweep (RS-9.2): one scan of unlanded missions, then each case.
+            if (OnLandingReconciliation != null)
             {
-                await RunHealthPhaseAsync("manual landing reconciliation", async () =>
+                await RunHealthPhaseAsync("landing reconciliation", async () =>
                 {
-                    int reconciledManual = await OnReconcileManualLandings.Invoke(token).ConfigureAwait(false);
-                    if (reconciledManual > 0) _Logging.Info(_Header + "completed " + reconciledManual + " manually merged mission(s)");
+                    int changed = await OnLandingReconciliation.Invoke(token).ConfigureAwait(false);
+                    if (changed > 0) _Logging.Info(_Header + "landing reconciliation changed " + changed + " mission(s) or dock(s)");
                 }, token).ConfigureAwait(false);
             }
-
-            if (OnLandingIntegritySweep != null)
-            {
-                await RunHealthPhaseAsync("landing integrity", async () =>
-                {
-                    int repaired = await OnLandingIntegritySweep.Invoke(token).ConfigureAwait(false);
-                    if (repaired > 0) _Logging.Info(_Header + "landing integrity repaired or retried " + repaired + " mission dock(s) or landing(s)");
-                }, token).ConfigureAwait(false);
-            }
-
-            // Complete stale LandingFailed missions whose work reached the remote default branch by another path.
-            if (OnReconcileLandingFailures != null)
-                await RunHealthPhaseAsync("landing failure reconciliation", () => OnReconcileLandingFailures.Invoke(token), token).ConfigureAwait(false);
 
             // Release captains held by missions whose review has gone overdue (dock preserved).
             await RunHealthPhaseAsync("overdue review recovery", () => RecoverOverdueReviewsAsync(token), token).ConfigureAwait(false);
@@ -1961,8 +1942,9 @@ namespace Armada.Core.Services
             }
         }
 
-        // A restart or an exception after WorkProduced was persisted can lose the landing callback.
-        // Flag rather than retry: the dock may already be reclaimed or the branch may need review.
+        // A restart or an exception after WorkProduced was persisted can lose the landing callback. The mission's branch is
+        // enqueued again, at most MergeQueueRequeueLimit times (RS-9.1; counted from events so a restart does not reset
+        // it); after that, or without a branch, it is flagged LandingFailed for the operator.
         private async Task FlagMissingMergeHandoffsAsync(DateTime utcNow, CancellationToken token)
         {
             List<Mission> produced = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.WorkProduced, token).ConfigureAwait(false);
@@ -1985,6 +1967,7 @@ namespace Armada.Core.Services
                 }, token).ConfigureAwait(false);
                 StageCheckResult? check = StageCheckEvents.Read(checks.Objects.FirstOrDefault());
                 if (check == null || check.IsBlocking) continue;
+                if (await RequeueLostMergeHandoffAsync(mission, vessel, token).ConfigureAwait(false)) continue;
                 DateTime version = mission.LastUpdateUtc;
                 mission.FailureKind = FailureKindMapper.FromLostLandingHandoff();
                 mission.FailureReason = "Stage check was nonblocking, but no merge queue entry was recorded within five minutes. Inspect the preserved branch and enqueue landing manually.";
@@ -2003,6 +1986,38 @@ namespace Armada.Core.Services
                     }, token).ConfigureAwait(false);
                 }
             }
+        }
+
+        // Enqueue the branch of a mission whose merge queue handoff was lost, unless it has been requeued
+        // MergeQueueRequeueLimit times already. Returns true when an entry was created.
+        private async Task<bool> RequeueLostMergeHandoffAsync(Mission mission, Vessel? vessel, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(mission.BranchName) || _Settings.MergeQueueRequeueLimit <= 0) return false;
+            EnumerationResult<ArmadaEvent> requeues = await _Database.Events.EnumerateAsync(new EnumerationQuery
+            {
+                MissionId = mission.Id, EventType = LandingHandoffRequeuedEventType, PageSize = 1
+            }, token).ConfigureAwait(false);
+            if (requeues.TotalRecords >= _Settings.MergeQueueRequeueLimit) return false;
+
+            string targetBranch = String.IsNullOrWhiteSpace(vessel?.DefaultBranch) ? "main" : vessel!.DefaultBranch!;
+            MergeEntry entry = new MergeEntry(mission.BranchName!, targetBranch)
+            {
+                MissionId = mission.Id,
+                VesselId = mission.VesselId,
+                TenantId = mission.TenantId,
+                UserId = mission.UserId,
+                Status = MergeStatusEnum.Queued,
+                CreatedUtc = DateTime.UtcNow,
+                LastUpdateUtc = DateTime.UtcNow
+            };
+            await _Database.MergeEntries.CreateAsync(entry, token).ConfigureAwait(false);
+            string message = "No merge queue entry was recorded within five minutes of a passing stage check; enqueued "
+                + mission.BranchName + " -> " + targetBranch + " as " + entry.Id + " (" + (requeues.TotalRecords + 1) + " of " + _Settings.MergeQueueRequeueLimit + ").";
+            _Logging.Info(_Header + "mission " + mission.Id + ": " + message);
+            await EmitEventAsync(LandingHandoffRequeuedEventType, message,
+                entityType: "mission", entityId: mission.Id, missionId: mission.Id, vesselId: mission.VesselId,
+                voyageId: mission.VoyageId, tenantId: mission.TenantId, userId: mission.UserId, token: token).ConfigureAwait(false);
+            return true;
         }
 
         /// <summary>
