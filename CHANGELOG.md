@@ -324,6 +324,23 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   endpoint has its own budget on each Harbor and on the Admiral; two models on one server count separately, and a
   circuit breaker opened by one model no longer blocks the other (RS-8.9).
 
+- **Probes fill a model's capabilities.** A tool-calling probe records on the profile whether the model's tool calls
+  and MCP tools work, so the envelope's `requiredTools` works without hand edits; values set by hand still win. A
+  served window the probe reads becomes the endpoint's discovered context when none is configured (migration 142)
+  (RS-8.1).
+- **Model profile rendering settings apply.** `Template` picks the prompt variant (Current, Lean or Compact; anything
+  else is rejected), `RepeatContractAtEnd` repeats the output contract at the end of the launch prompt, and
+  `MaxFilesPerMission` adds a file limit to the instructions of personas that write changes (RS-8.2).
+- **Small context windows get a smaller prompt automatically.** The prompt variant comes from the voyage override,
+  then the captain option, then the profile template, then the served context: Compact at or below
+  `PromptVariantCompactMaxContextTokens` (default 32768), Lean at or below `PromptVariantLeanMaxContextTokens` (default
+  65536), 0 turns either off. A Qwen served at 32768 tokens now gets Compact instead of Current. Handoff budgets also
+  use the discovered context (RS-8.3).
+- **Each runtime gets the instructions file it reads.** Codex now gets `AGENTS.override.md` (was `CODEX.md`, which
+  Codex never loads), OpenCode `AGENTS.md` (was `CLAUDE.md`), and the API endpoint, Custom and unknown runtimes
+  `ARMADA.md` (was `CLAUDE.md`). The repository's own AGENTS.md or CLAUDE.md is carried into the generated file
+  (RS-8.10).
+
 ### Measurement
 
 - **Battery runs can run under a mixed pipeline.** `BatteryRunRequest` and MCP `run_battery` take `Pipeline` and

@@ -1026,14 +1026,14 @@ this phase it is Armada's job to absorb the predictable failures.
 Armada already measures models (probes, battery, profiles, scorecards). Almost none of it reaches routing or prompt
 rendering. This phase closes that loop.
 
-- [ ] **RS-8.1** Probes fill capabilities. After a passing tool-calling probe, `ModelProbeService` writes
+- [x] **RS-8.1** Probes fill capabilities. After a passing tool-calling probe, `ModelProbeService` writes
   `ToolsAvailable` and `McpAvailable`; served context from `/api/ps` or RS-7.8 is written too. Manual values still
-  win. The envelope's `requiredTools` then works without hand edits. Evidence:
-- [ ] **RS-8.2** Apply `ModelProfile.Rendering` (`Template`, `RepeatContractAtEnd`, `MaxFilesPerMission`), which is
-  stored today but never read (`ModelProfileAccessService.cs:134-140`). Evidence:
-- [ ] **RS-8.3** Prompt variant resolution order: voyage override, captain option, model profile rendering, then
+  win. The envelope's `requiredTools` then works without hand edits. Evidence: a57a2d18c; probed values in their own columns (migration 142 `ProbedCapabilitiesSchema`), MCP true only when tool calls pass and the runtime gives the captain MCP. Database.ModelProfile and MigrationHygiene 32/32 on PostgreSQL, MySQL and SQL Server after merging with RS-8.8.
+- [x] **RS-8.2** Apply `ModelProfile.Rendering` (`Template`, `RepeatContractAtEnd`, `MaxFilesPerMission`), which is
+  stored today but never read (`ModelProfileAccessService.cs:134-140`). Evidence: a57a2d18c; file limit is instruction-only (no routing effect); unknown `Template` is a 400.
+- [x] **RS-8.3** Prompt variant resolution order: voyage override, captain option, model profile rendering, then
   automatic from served context (Compact below a threshold setting). `PromptVariantResolver.Resolve` consults
-  context tokens. Evidence:
+  context tokens. Evidence: a57a2d18c, 5215af3ef; thresholds confirmed by Joel 2026-11-26 (Compact at or below 32K, Lean at or below 64K); suite Services.PromptVariants. Merged head: 14 suites 289/289 (12 skipped).
 - [ ] **RS-8.4** Context as a hard routing filter: a captain whose served context cannot hold the estimated prompt
   (instructions budget plus handoff plus contract) is not eligible, with a typed blocker. Evidence:
 - [ ] **RS-8.5** Tier from data. Effective tier = explicit captain tier, else the model profile's tier (set by hand or,
@@ -1052,8 +1052,8 @@ rendering. This phase closes that loop.
 - [x] **RS-8.9** Endpoint concurrency key becomes (Harbor or Admiral, normalized URL, model) instead of the base URL
   (`ConcurrencyCapacityPolicy.EndpointKey`), so `localhost` on two Harbors are two limits and `127.0.0.1` and
   `localhost` are one. Evidence: 866e07ebc; host scope only for loopback URLs, trailing `/v1` dropped, admission rechecks the placed Harbor before the claim; suite Services.EndpointConcurrencyKey.
-- [ ] **RS-8.10** Default instructions file per runtime: map Codex to `AGENTS.md` if that is what it reads natively
-  (verify), and stop defaulting unknown runtimes to `CLAUDE.md` (`MissionPromptBuilder.cs:74-86`). Evidence:
+- [x] **RS-8.10** Default instructions file per runtime: map Codex to `AGENTS.md` if that is what it reads natively
+  (verify), and stop defaulting unknown runtimes to `CLAUDE.md` (`MissionPromptBuilder.cs:74-86`). Evidence: a57a2d18c; verified in codex-cli 0.171 and OpenCode 2.2; generated Codex override files cleaned up like pi.
 
 ## Phase 9: Landing and the merge queue
 
