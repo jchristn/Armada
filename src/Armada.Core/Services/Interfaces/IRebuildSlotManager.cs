@@ -8,7 +8,7 @@ namespace Armada.Core.Services.Interfaces
     /// small text pointer file (<see cref="CurrentPointerPath"/>) to name the active slot. See
     /// docs/SERVER_REBUILD.md.
     /// </summary>
-    public interface ISlotManager
+    public interface IRebuildSlotManager
     {
         /// <summary>
         /// Number of slots to retain when pruning. Older slots beyond this count are removed after a successful

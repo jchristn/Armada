@@ -15,7 +15,7 @@
 ### Implementation notes / deviations from the original plan
 
 - `ServerRebuildService` lives in `Armada.Server` (not `Armada.Core`) so it can reuse the Server-side
-  `McpToolHelpers.PerformBackupAsync`/`PerformRestoreAsync`; `SlotManager` stays in `Armada.Core` (pure,
+  `McpToolHelpers.PerformBackupAsync`/`PerformRestoreAsync`; `RebuildSlotManager` stays in `Armada.Core` (pure,
   unit-tested).
 - The build streams into a persisted `ServerRebuildStatus` (`<dataDir>/rebuild-status.json`) polled via
   `GET /api/v1/server/rebuild/status`, rather than reusing the CheckRun WebSocket channel. The dashboard tails
@@ -205,7 +205,7 @@ than a failed build, which is already safe) needs a manual relaunch of the previ
 slot until Phase 2 lands.
 
 - [x] **T1 -- Slot layout + `current` pointer helper.**
-  New `SlotManager` (`src/Armada.Core/Services/`, interface `ISlotManager` in
+  New `RebuildSlotManager` (`src/Armada.Core/Services/`, interface `IRebuildSlotManager` in
   `.../Interfaces/`): resolve slot dir, read/write `current` atomically, enumerate
   and prune slots to the retention count. Retention count is a configurable public
   member with a backing field defaulting to 3 (not a constant). Include an async
@@ -241,7 +241,7 @@ slot until Phase 2 lands.
   `dotnet publish src/Armada.Server -c Release -o slots\<new>` and the Vite
   dashboard build from that worktree via `IHostCommandExecutor` (Local for MVP);
   streams output to the existing CheckRun log channel; removes the throwaway
-  worktree in a `finally`; on success writes `current` (via `ISlotManager`) then
+  worktree in a `finally`; on success writes `current` (via `IRebuildSlotManager`) then
   hands back to the caller to trigger the restart; on failure marks the rebuild
   `Failed` and leaves `current` untouched. All async methods take `CancellationToken`
   and check it around the long publish step. Throw specific exceptions (e.g. a
@@ -364,10 +364,10 @@ slot until Phase 2 lands.
   and `CancellationToken` on async; a specific exception type (`RebuildException`) with
   `<exception>` tags; guard clauses; one class/enum per file; no `Console.WriteLine` in
   library code. Verified by a clean 0-warning build.
-- [x] **Tests** added per BACKEND_TEST_ARCHITECTURE -- `SlotManagerSuite` (pointer
+- [x] **Tests** added per BACKEND_TEST_ARCHITECTURE -- `RebuildSlotManagerSuite` (pointer
   swap, prune-keeps-active, enumerate) and `HarborDeferredLaunchProtocolSuite` (message
   round-trips); **6/6 passing** (`dotnet run --project src/Test.Automated`, suite
-  filter `Services.SlotManager,Services.HarborDeferredLaunchProtocol`). A
+  filter `Services.RebuildSlotManager,Services.HarborDeferredLaunchProtocol`). A
   build-failure and a live Harbor-rollback E2E remain to add.
 - [x] **i18n / dashboard style** for T8: all new strings route through `t()`, no
   hard-coded copy; typechecks clean (`tsc --noEmit`).

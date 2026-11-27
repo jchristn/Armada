@@ -128,7 +128,7 @@ namespace Armada.Core.Database
                 await tx.CommitAsync(token).ConfigureAwait(false);
                 return true;
             }
-            catch (DbException ex) when (ex.Message.Contains("unique", StringComparison.OrdinalIgnoreCase) || ex.Message.Contains("duplicate", StringComparison.OrdinalIgnoreCase))
+            catch (DbException ex) when (UniqueConstraintViolation.IsUniqueViolation(ex))
             {
                 await tx.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
                 return false;

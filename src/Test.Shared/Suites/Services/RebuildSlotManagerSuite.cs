@@ -12,17 +12,17 @@ namespace Test.Shared.Suites.Services
     using static Test.Shared.Infrastructure.Asserts;
 
     /// <summary>
-    /// Descriptors for <see cref="SlotManager"/>: chronological slot-name composition, atomic pointer
+    /// Descriptors for <see cref="RebuildSlotManager"/>: chronological slot-name composition, atomic pointer
     /// read/write, newest-first enumeration, retention-based pruning that never removes the active slot, and the
     /// rollback contract (the slot a rebuild replaced survives pruning so RollbackAsync can relaunch it).
     /// These underpin the Admiral self-rebuild A/B slot layout (docs/SERVER_REBUILD.md).
     /// </summary>
-    public sealed class SlotManagerSuite : IArmadaTestSuite
+    public sealed class RebuildSlotManagerSuite : IArmadaTestSuite
     {
         #region Public-Methods
 
         /// <summary>
-        /// Build the descriptor for the SlotManager suite.
+        /// Build the descriptor for the RebuildSlotManager suite.
         /// </summary>
         /// <returns>The suite descriptor.</returns>
         public TestSuiteDescriptor Build()
@@ -31,7 +31,7 @@ namespace Test.Shared.Suites.Services
 
             cases.Add(Case("compose_slot_name_is_chronological", "Slot names sort chronologically", TestTags.Positive, () =>
             {
-                SlotManager manager = new SlotManager(NewTempDir());
+                RebuildSlotManager manager = new RebuildSlotManager(NewTempDir());
                 string earlier = manager.ComposeSlotName(new DateTime(2026, 9, 11, 10, 0, 0, DateTimeKind.Utc), "abc123def456");
                 string later = manager.ComposeSlotName(new DateTime(2026, 9, 11, 12, 0, 0, DateTimeKind.Utc), "999888777666");
                 AssertTrue(String.CompareOrdinal(earlier, later) < 0, "Expected the earlier build to sort before the later build.");
@@ -44,7 +44,7 @@ namespace Test.Shared.Suites.Services
                 string binRoot = NewTempDir();
                 try
                 {
-                    SlotManager manager = new SlotManager(binRoot);
+                    RebuildSlotManager manager = new RebuildSlotManager(binRoot);
                     AssertNull(await manager.ReadCurrentAsync().ConfigureAwait(false), "Expected no pointer initially.");
                     await manager.WriteCurrentAsync("2026-09-11_120000_abc123def456").ConfigureAwait(false);
                     AssertEqual("2026-09-11_120000_abc123def456", await manager.ReadCurrentAsync().ConfigureAwait(false));
@@ -58,7 +58,7 @@ namespace Test.Shared.Suites.Services
                 string binRoot = NewTempDir();
                 try
                 {
-                    SlotManager manager = new SlotManager(binRoot, executableName: "Armada.Server", retentionCount: 1);
+                    RebuildSlotManager manager = new RebuildSlotManager(binRoot, executableName: "Armada.Server", retentionCount: 1);
                     string older = "2026-09-01_100000_aaaaaaaaaaaa";
                     string previous = "2026-09-02_100000_bbbbbbbbbbbb";
                     string rebuilt = "2026-09-03_100000_cccccccccccc";
@@ -93,7 +93,7 @@ namespace Test.Shared.Suites.Services
                 string binRoot = NewTempDir();
                 try
                 {
-                    SlotManager manager = new SlotManager(binRoot, retentionCount: 1);
+                    RebuildSlotManager manager = new RebuildSlotManager(binRoot, retentionCount: 1);
                     string previous = "2026-09-02_100000_bbbbbbbbbbbb";
                     string rebuilt = "2026-09-03_100000_cccccccccccc";
                     Directory.CreateDirectory(manager.GetSlotDirectory(previous));
@@ -110,7 +110,7 @@ namespace Test.Shared.Suites.Services
                 string binRoot = NewTempDir();
                 try
                 {
-                    SlotManager manager = new SlotManager(binRoot);
+                    RebuildSlotManager manager = new RebuildSlotManager(binRoot);
                     List<string> names = new List<string>();
                     List<Task> writes = new List<Task>();
                     for (int i = 0; i < 24; i++)
@@ -153,7 +153,7 @@ namespace Test.Shared.Suites.Services
                 string binRoot = NewTempDir();
                 try
                 {
-                    SlotManager manager = new SlotManager(binRoot, retentionCount: 2);
+                    RebuildSlotManager manager = new RebuildSlotManager(binRoot, retentionCount: 2);
                     string[] slots = new string[]
                     {
                         "2026-09-01_100000_aaaaaaaaaaaa",
@@ -181,7 +181,7 @@ namespace Test.Shared.Suites.Services
                 string binRoot = NewTempDir();
                 try
                 {
-                    SlotManager manager = new SlotManager(binRoot);
+                    RebuildSlotManager manager = new RebuildSlotManager(binRoot);
                     Directory.CreateDirectory(manager.GetSlotDirectory("2026-09-01_100000_aaaaaaaaaaaa"));
                     Directory.CreateDirectory(manager.GetSlotDirectory("2026-09-03_100000_cccccccccccc"));
                     Directory.CreateDirectory(manager.GetSlotDirectory("2026-09-02_100000_bbbbbbbbbbbb"));
@@ -195,7 +195,7 @@ namespace Test.Shared.Suites.Services
             }));
 
             return new TestSuiteDescriptor(
-                suiteId: "Services.SlotManager",
+                suiteId: "Services.RebuildSlotManager",
                 displayName: "Slot Manager",
                 cases: cases);
         }
@@ -220,7 +220,7 @@ namespace Test.Shared.Suites.Services
         private static TestCaseDescriptor Case(string caseId, string displayName, string tag, Func<Task> body)
         {
             return new TestCaseDescriptor(
-                suiteId: "Services.SlotManager",
+                suiteId: "Services.RebuildSlotManager",
                 caseId: caseId,
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),

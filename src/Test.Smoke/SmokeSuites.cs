@@ -359,7 +359,7 @@ namespace Test.Smoke
             "Services.SessionTokenService",
             "Services.Settings",
             "Services.Skill",
-            "Services.SlotManager",
+            "Services.RebuildSlotManager",
             "Services.StageCheckResumeSafety",
             "Services.StageOutcomes",
             "Services.StageOutputContract",

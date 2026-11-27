@@ -1354,11 +1354,10 @@ namespace Armada.Core.Services
             {
                 await RunGitAsync(worktreePath, token, "commit", "--no-verify", "-m", message).ConfigureAwait(false);
             }
-            catch (InvalidOperationException ex) when (ex.Message.Contains("user.email", StringComparison.OrdinalIgnoreCase)
-                || ex.Message.Contains("user.name", StringComparison.OrdinalIgnoreCase)
-                || ex.Message.Contains("identity", StringComparison.OrdinalIgnoreCase))
+            catch (InvalidOperationException)
             {
-                // No git identity on this host: commit as Armada rather than lose the work.
+                // No git identity on this host: commit as Armada rather than lose the work. Any other failure is rethrown.
+                if (await HasCommitIdentityAsync(worktreePath, token).ConfigureAwait(false)) throw;
                 await RunGitAsync(worktreePath, token, "-c", "user.name=Armada", "-c", "user.email=armada@localhost", "commit", "--no-verify", "-m", message).ConfigureAwait(false);
             }
 
@@ -1791,6 +1790,21 @@ namespace Armada.Core.Services
         private async Task<string> RunGitAsync(string? workingDirectory, CancellationToken token, params string[] args)
         {
             return await RunProcessAsync(workingDirectory, "git", token, args).ConfigureAwait(false);
+        }
+
+        // git var exits non-zero when it cannot determine an author or committer identity, as git commit would.
+        private async Task<bool> HasCommitIdentityAsync(string worktreePath, CancellationToken token)
+        {
+            try
+            {
+                await RunGitAsync(worktreePath, token, "var", "GIT_AUTHOR_IDENT").ConfigureAwait(false);
+                await RunGitAsync(worktreePath, token, "var", "GIT_COMMITTER_IDENT").ConfigureAwait(false);
+                return true;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
         }
 
         private async Task EnsureTrackedFilesCleanAsync(string worktreePath, CancellationToken token)

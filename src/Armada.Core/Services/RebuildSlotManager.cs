@@ -9,11 +9,11 @@ namespace Armada.Core.Services
     using Armada.Core.Services.Interfaces;
 
     /// <summary>
-    /// Filesystem implementation of <see cref="ISlotManager"/>. Owns the <c>&lt;binRoot&gt;/slots</c> directory and
+    /// Filesystem implementation of <see cref="IRebuildSlotManager"/>. Owns the <c>&lt;binRoot&gt;/slots</c> directory and
     /// the <c>&lt;binRoot&gt;/current</c> pointer file used by the Admiral self-rebuild feature. Pure file
     /// operations only, so it is unit-testable without a server. See docs/SERVER_REBUILD.md.
     /// </summary>
-    public class SlotManager : ISlotManager
+    public class RebuildSlotManager : IRebuildSlotManager
     {
         #region Public-Members
 
@@ -55,7 +55,7 @@ namespace Armada.Core.Services
         /// <param name="retentionCount">Number of slots to retain when pruning; clamped to a minimum of 1;
         /// defaults to 3.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="binRoot"/> is null or empty.</exception>
-        public SlotManager(string binRoot, string executableName = "Armada.Server.exe", int retentionCount = 3)
+        public RebuildSlotManager(string binRoot, string executableName = "Armada.Server.exe", int retentionCount = 3)
         {
             if (String.IsNullOrWhiteSpace(binRoot)) throw new ArgumentNullException(nameof(binRoot));
 

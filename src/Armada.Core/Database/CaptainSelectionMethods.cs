@@ -122,7 +122,7 @@ namespace Armada.Core.Database
                         return records.Decision;
                     }, token, write: true).ConfigureAwait(false);
                 }
-                catch (DbException ex) when (retry < 2 && (ex.Message.Contains("unique", StringComparison.OrdinalIgnoreCase) || ex.Message.Contains("duplicate", StringComparison.OrdinalIgnoreCase)))
+                catch (DbException ex) when (retry < 2 && UniqueConstraintViolation.IsUniqueViolation(ex))
                 {
                     token.ThrowIfCancellationRequested();
                 }

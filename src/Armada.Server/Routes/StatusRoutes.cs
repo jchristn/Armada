@@ -30,7 +30,7 @@ namespace Armada.Server.Routes
         private readonly DateTime _startUtc;
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly LoggingModule _logging;
-        private readonly ISlotManager _slots;
+        private readonly IRebuildSlotManager _slots;
         private readonly ServerRebuildService _rebuild;
         private readonly Func<RemoteTunnelStatus>? _getRemoteTunnelStatus;
         private readonly Func<Task>? _onRemoteControlSettingsChanged;
@@ -75,7 +75,7 @@ namespace Armada.Server.Routes
             DateTime startUtc,
             JsonSerializerOptions jsonOptions,
             LoggingModule logging,
-            ISlotManager slots,
+            IRebuildSlotManager slots,
             ServerRebuildService rebuild,
             Func<RemoteTunnelStatus>? getRemoteTunnelStatus = null,
             Func<Task>? onRemoteControlSettingsChanged = null,
