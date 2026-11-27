@@ -113,13 +113,26 @@ parity.json                        dashboard-to-mobile parity manifest
 
 ## Builds and store submission (EAS)
 
-`eas.json` has `development` (simulator / APK), `preview` (internal distribution), and `production` (store)
-profiles. Before the first cloud build the maintainer must:
+`eas.json` follows the family standard: `development` (simulator build and Android APK), `development-device` (a
+physical iPhone), `preview` (a store build for TestFlight and Play internal testing), and `production` (a store build
+for review). Store profiles use EAS remote versioning with `autoIncrement`, so build numbers never need a manual bump;
+the version string comes from `app.config.ts`. Each profile sets `APP_VARIANT`, which the config exposes as
+`extra.appVariant`.
 
-1. Replace the placeholder bundle id `com.armada.mobile` in `app.config.ts` (or set `ARMADA_MOBILE_BUNDLE_ID`).
-2. Run `npx eas-cli init` and set `ARMADA_MOBILE_EAS_PROJECT_ID` (or put the id in `app.config.ts`).
-3. Fill in the `submit.production` placeholders in `eas.json` (Apple ID, App Store Connect app id, team id) and
-   provide the Google Play service account key at `secrets/google-play-service-account.json` (ignored by git).
+The bundle id and Android package are `ai.latticetech.armada`. Private values stay out of the repository:
+
+1. `npx eas-cli login` and `npx eas-cli init`, then set `ARMADA_MOBILE_EAS_OWNER` and `ARMADA_MOBILE_EAS_PROJECT_ID`
+   in your shell and as EAS variables.
+2. Replace the `REPLACE_WITH_*` placeholders in `eas.json` `submit` locally when you submit (do not commit them), or
+   pass them on the command line. Put the Play service account key at `secrets/google-play-service-account.json` and
+   Firebase's `google-services.json` next to this file (both ignored by git; cloud builds read `GOOGLE_SERVICES_JSON`
+   from an EAS file variable).
+3. Keep reviewer credentials and console ids in `store-private.local.md` (ignored by git).
+
+For a device build under a free personal Apple team, set `ARMADA_MOBILE_LOCAL_TEAM_ID` to that team id: the build
+uses `ai.latticetech.armada.dev` and drops the push and associated-domains entitlements. Never use it for a store
+build. Store readiness notes are in [APP_STORE_SUBMISSION.md](APP_STORE_SUBMISSION.md) and listing assets in
+[store/](store/README.md).
 
 ## Push notifications
 
@@ -141,11 +154,11 @@ iOS simulator without any of that, push an APNs payload (Expo puts the data obje
 
 ```bash
 cat > /tmp/armada-push.apns <<'JSON'
-{"Simulator Target Bundle": "com.armada.mobile",
+{"Simulator Target Bundle": "ai.latticetech.armada",
  "aps": {"alert": {"title": "Approval needed", "body": "Dispatch a mission"}, "category": "armada_approve_deny", "badge": 1},
  "body": {"url": "/missions/msn_example", "kind": "failed", "entityId": "msn_example", "category": "MissionFailed"}}
 JSON
-xcrun simctl push booted com.armada.mobile /tmp/armada-push.apns
+xcrun simctl push booted ai.latticetech.armada /tmp/armada-push.apns
 ```
 
 ## Saved passwords and Face ID sign-in

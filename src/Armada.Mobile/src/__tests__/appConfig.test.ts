@@ -6,9 +6,19 @@ const appConfig = require('../../app.config');
 
 type PluginEntry = string | [string, Record<string, unknown>];
 type ExpoConfigLike = {
-  ios?: { infoPlist?: { NSAppTransportSecurity?: Record<string, unknown>; NSFaceIDUsageDescription?: string } };
-  android?: { permissions?: string[] };
+  version?: string;
+  owner?: string;
+  ios?: {
+    bundleIdentifier?: string;
+    appleTeamId?: string;
+    buildNumber?: string;
+    config?: { usesNonExemptEncryption?: boolean };
+    infoPlist?: { NSAppTransportSecurity?: Record<string, unknown>; NSFaceIDUsageDescription?: string };
+  };
+  android?: { package?: string; versionCode?: number; permissions?: string[]; blockedPermissions?: string[] };
   plugins?: PluginEntry[];
+  extra?: { releaseVersion?: string; appVariant?: string; eas?: { projectId?: string } };
+  mods?: Record<string, unknown>;
 };
 
 function pluginOptions(config: ExpoConfigLike, name: string): Record<string, unknown> | null {
@@ -20,6 +30,29 @@ function pluginOptions(config: ExpoConfigLike, name: string): Record<string, unk
 function resolveConfig(): ExpoConfigLike {
   const exported = appConfig.default ?? appConfig;
   return typeof exported === 'function' ? exported({ config: {} }) : exported;
+}
+
+// Loads the config afresh with the given environment variables (the config reads them when it loads).
+function resolveWithEnv(env: Record<string, string>): ExpoConfigLike {
+  const saved: Record<string, string | undefined> = {};
+  for (const key of Object.keys(env)) {
+    saved[key] = process.env[key];
+    process.env[key] = env[key];
+  }
+  try {
+    let resolved: ExpoConfigLike = {};
+    jest.isolateModules(() => {
+      const fresh = require('../../app.config');
+      const exported = fresh.default ?? fresh;
+      resolved = typeof exported === 'function' ? exported({ config: {} }) : exported;
+    });
+    return resolved;
+  } finally {
+    for (const key of Object.keys(env)) {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    }
+  }
 }
 
 describe('app config', () => {
@@ -53,5 +86,54 @@ describe('app config', () => {
     expect(patched).not.toContain('FLAG_SECURE');
     expect(addRecentsPrivacy(patched)).toBe(patched);
     expect(() => addRecentsPrivacy('class MainActivity {}')).toThrow(/template changed/);
+  });
+
+  it('uses the family store identity, version 1.5.0, and remote build numbers', () => {
+    const config = resolveConfig();
+    expect(config.ios?.bundleIdentifier).toBe('ai.latticetech.armada');
+    expect(config.android?.package).toBe('ai.latticetech.armada');
+    expect(config.version).toBe('1.5.0');
+    expect(config.extra?.releaseVersion).toBe('1.5.0');
+    expect(config.ios?.buildNumber).toBeUndefined();
+    expect(config.android?.versionCode).toBeUndefined();
+    expect(config.ios?.config?.usesNonExemptEncryption).toBe(false);
+    expect(config.ios?.appleTeamId).toBeUndefined();
+  });
+
+  it('keeps the advertising id permission out of the Android manifest', () => {
+    const config = resolveConfig();
+    expect(config.android?.blockedPermissions).toContain('com.google.android.gms.permission.AD_ID');
+    expect(config.android?.permissions ?? []).not.toContain('com.google.android.gms.permission.AD_ID');
+  });
+
+  it('reads the Expo owner, project id, and variant from the environment', () => {
+    const config = resolveWithEnv({ ARMADA_MOBILE_EAS_OWNER: 'example-owner', ARMADA_MOBILE_EAS_PROJECT_ID: 'example-project', APP_VARIANT: 'preview' });
+    expect(config.owner).toBe('example-owner');
+    expect(config.extra?.eas?.projectId).toBe('example-project');
+    expect(config.extra?.appVariant).toBe('preview');
+  });
+
+  it('builds a personal-team device build under <id>.dev without push or associated domains', () => {
+    const config = resolveWithEnv({ ARMADA_MOBILE_LOCAL_TEAM_ID: 'PERSONALTEAM' });
+    expect(config.ios?.bundleIdentifier).toBe('ai.latticetech.armada.dev');
+    expect(config.ios?.appleTeamId).toBe('PERSONALTEAM');
+    expect(config.android?.package).toBe('ai.latticetech.armada');
+    expect(config.mods).toBeDefined();
+  });
+
+  it('follows the family eas.json standard', () => {
+    const eas = require('../../eas.json');
+    expect(eas.cli.appVersionSource).toBe('remote');
+    expect(Object.keys(eas.build).sort()).toEqual(['development', 'development-device', 'preview', 'production']);
+    expect(eas.build.preview.distribution).toBe('store');
+    expect(eas.build.production.distribution).toBe('store');
+    expect(eas.build.preview.autoIncrement).toBe(true);
+    expect(eas.build.production.autoIncrement).toBe(true);
+    for (const name of ['development', 'preview', 'production']) expect(eas.build[name].env.APP_VARIANT).toBe(name);
+    for (const name of ['preview', 'production']) {
+      expect(eas.submit[name].android.track).toBe('internal');
+      expect(eas.submit[name].android.releaseStatus).toBe('draft');
+      expect(eas.submit[name].ios.appleId).toBeUndefined();
+    }
   });
 });

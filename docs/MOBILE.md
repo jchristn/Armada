@@ -236,33 +236,38 @@ The device API (`/api/v1/push/devices`) and the payload format are documented in
 
 ## Building and store submission
 
-Builds are made with Expo Application Services (EAS) from `src/Armada.Mobile`. `eas.json` has three profiles:
-`development` (simulator builds and an Android APK), `preview` (internal distribution: ad hoc iOS installs on
-registered devices and APKs), and `production` (App Store and Google Play).
+Builds are made with Expo Application Services (EAS) from `src/Armada.Mobile`. `eas.json` has four profiles:
+`development` (simulator builds and an Android APK), `development-device` (a physical iPhone), `preview` (a store
+build for TestFlight and Play internal testing), and `production` (a store build for App Store review and Google
+Play). Store profiles take their build numbers from EAS remote versioning (`autoIncrement`); the version comes from
+`app.config.ts` (`1.5.0`, with `extra.releaseVersion` for display).
 
-One-time setup by the maintainer who publishes the app:
+The bundle id and Android package are `ai.latticetech.armada`. One-time setup by the maintainer who publishes the
+app:
 
-1. **App identity.** Choose a bundle id you own (for example `com.example.armada`) and set
-   `ARMADA_MOBILE_BUNDLE_ID`, or replace the placeholder `com.armada.mobile` in `app.config.ts`.
-2. **Expo project.** Run `npx eas-cli login` and `npx eas-cli init` in `src/Armada.Mobile`, then set
-   `ARMADA_MOBILE_EAS_PROJECT_ID` (or put the id in `app.config.ts`). Without a project id the app works but cannot
-   receive push notifications.
-3. **Apple.** An Apple Developer Program membership, an App Store Connect app record for the bundle id, and an APNs
-   auth key (`.p8`). Attach the key with `npx eas-cli credentials` (iOS, Push Notifications). Fill in the
-   `submit.production.ios` placeholders in `eas.json` (Apple ID, App Store Connect app id, team id).
-4. **Google.** A Firebase project with an Android app for the bundle id: add its `google-services.json` and set
-   `android.googleServicesFile` in `app.config.ts`, and upload the FCM V1 service account key with
-   `npx eas-cli credentials` (Android, FCM V1). For Play submission, a Play Console app and a service account key at
-   `src/Armada.Mobile/secrets/google-play-service-account.json` (ignored by git).
+1. **Expo project.** Run `npx eas-cli login` and `npx eas-cli init` in `src/Armada.Mobile`, then set
+   `ARMADA_MOBILE_EAS_OWNER` and `ARMADA_MOBILE_EAS_PROJECT_ID` (shell and EAS variables). Without a project id the
+   app works but cannot receive push notifications.
+2. **Apple.** An Apple Developer Program membership, an App Store Connect app record for the bundle id, and an APNs
+   auth key (`.p8`). Attach the key with `npx eas-cli credentials` (iOS, Push Notifications). Supply the App Store
+   Connect app id and team id for `submit` at submission time (the committed `eas.json` holds placeholders).
+3. **Google.** A Firebase project with an Android app for the bundle id: put its `google-services.json` in
+   `src/Armada.Mobile` (ignored by git; EAS builds read the `GOOGLE_SERVICES_JSON` file variable) and upload the FCM
+   V1 service account key with `npx eas-cli credentials` (Android, FCM V1). For Play submission, a Play Console app
+   and a service account key at `src/Armada.Mobile/secrets/google-play-service-account.json` (ignored by git). Both
+   submit profiles send to the internal track as a draft.
+
+To build for your own iPhone under a free personal Apple team, set `ARMADA_MOBILE_LOCAL_TEAM_ID`: the build uses
+`ai.latticetech.armada.dev` and leaves out push and associated domains.
 
 Then:
 
 ```bash
 cd src/Armada.Mobile
-npx eas-cli build --profile preview --platform all      # internal builds for testers
+npx eas-cli build --profile preview --platform all      # store builds for testers
 npx eas-cli build --profile production --platform all   # store builds
-npx eas-cli submit --profile production --platform ios      # to App Store Connect / TestFlight
-npx eas-cli submit --profile production --platform android  # to the Play internal track
+npx eas-cli submit --profile preview --platform ios         # to App Store Connect / TestFlight
+npx eas-cli submit --profile preview --platform android     # to the Play internal track (draft)
 ```
 
 To run the app on your own phone from a Mac without EAS: connect it with USB, turn on Developer Mode (iOS) or USB

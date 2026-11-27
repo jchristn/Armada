@@ -53,6 +53,9 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(Constants.ProductVersion, packageLock.Version, project + " lock version");
                     AssertEqual(Constants.ProductVersion, packageLock.Packages![""].Version, project + " lock root version");
                 }
+                string mobileConfig = ReadRepositoryFile("src", "Armada.Mobile", "app.config.ts");
+                AssertContains("const RELEASE_VERSION = '" + Constants.ProductVersion + "';", mobileConfig, "Mobile extra.releaseVersion should align with the shared release version");
+                AssertContains("const STORE_VERSION = '" + Constants.ProductVersion + "';", mobileConfig, "Mobile store version should align with the shared release version");
                 MatchCollection versionMatches = Regex.Matches(propsContents, @"<Version>\s*([^<]+)\s*</Version>");
 
                 AssertTrue(versionMatches.Count == 1, "Directory.Build.props should contain exactly one Version element");
