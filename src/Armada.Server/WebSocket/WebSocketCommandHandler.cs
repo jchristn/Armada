@@ -1209,6 +1209,7 @@ namespace Armada.Server.WebSocket
 
                 case "create_pipeline":
                     Pipeline newPipeline = JsonSerializer.Deserialize<WebSocketDataCommand<Pipeline>>(rawBody, _JsonOptions)?.Data!;
+                    newPipeline.JudgeStrength ??= Armada.Core.Enums.JudgeStrengthPolicyEnum.Wait;
                     CollectionBounds.Validate(newPipeline);
                     await DuplicateEntityGuard.EnsurePipelineNameAvailableAsync(_Database, newPipeline).ConfigureAwait(false);
                     newPipeline = await _Database.Pipelines.CreateAsync(newPipeline).ConfigureAwait(false);
@@ -1223,6 +1224,7 @@ namespace Armada.Server.WebSocket
                     {
                         Pipeline patchPipeline = JsonSerializer.Deserialize<WebSocketDataCommand<Pipeline>>(rawBody, _JsonOptions)?.Data!;
                         if (patchPipeline.Description != null) existPipeline.Description = patchPipeline.Description;
+                        if (patchPipeline.JudgeStrength.HasValue) existPipeline.JudgeStrength = patchPipeline.JudgeStrength;
                         if (patchPipeline.Stages != null && patchPipeline.Stages.Count > 0)
                         {
                             existPipeline.Stages = patchPipeline.Stages;

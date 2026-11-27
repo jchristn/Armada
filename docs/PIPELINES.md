@@ -58,6 +58,7 @@ Key design decisions:
 | `Stages` | List\<PipelineStage\> | Ordered list of stages |
 | `IsBuiltIn` | bool | True for system-shipped pipelines (cannot be deleted) |
 | `Active` | bool | Whether the pipeline is active |
+| `JudgeStrength` | `JudgeStrengthPolicyEnum?` | Judge strength rule for its voyages: `Off`, `Wait` or `ProceedAndFlag`. Null reads as Off (pipelines stored before 1.5.0); a pipeline created through the API without a value gets `Wait`. See [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md#judge-strength-rule) |
 
 **Source:** `src/Armada.Core/Models/Pipeline.cs`
 
@@ -307,6 +308,10 @@ A dependency waiting in `Review` (a review gate) is neither `Complete` nor `Work
 6. Among eligible, prefer a PreferredPersona match
 7. Otherwise return the first eligible captain
 ```
+
+Since 1.5.0 a captain whose served context cannot hold the prompt is never eligible, a Judge follows the voyage's
+Judge strength rule, and captains of one tier can be ranked by their persona results. See
+[CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md#capability-aware-routing-150).
 
 The preferred captain comes from the dispatch payload, the voyage's per-persona override, or the persona's `DefaultCaptainId`. See [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md) and [SCHEDULING.md](SCHEDULING.md#why-a-mission-is-waiting).
 

@@ -10,6 +10,7 @@ namespace Armada.Server.Routes
     using Armada.Server;
     using Armada.Core;
     using Armada.Core.Database;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
@@ -134,6 +135,7 @@ namespace Armada.Server.Routes
                 pipeline.TenantId = ctx.TenantId;
                 pipeline.UserId = ctx.UserId;
                 pipeline.Scope = ScopedVisibility.ResolveCreateScope(ctx, pipeline.Scope);
+                pipeline.JudgeStrength ??= JudgeStrengthPolicyEnum.Wait; // RS-8.7: new pipelines get the Judge strength rule.
                 CollectionBounds.Validate(pipeline);
                 await DuplicateEntityGuard.EnsurePipelineNameAvailableAsync(_database, pipeline).ConfigureAwait(false);
                 pipeline = await _database.Pipelines.CreateAsync(pipeline).ConfigureAwait(false);
@@ -166,6 +168,7 @@ namespace Armada.Server.Routes
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Pipeline.");
                 if (body.Description != null) existing.Description = body.Description;
                 if (body.Stages != null && body.Stages.Count > 0) existing.Stages = body.Stages;
+                if (body.JudgeStrength.HasValue) existing.JudgeStrength = body.JudgeStrength;
                 if (ctx.IsAdmin || ctx.IsTenantAdmin) existing.Scope = body.Scope;
                 existing.LastUpdateUtc = DateTime.UtcNow;
                 CollectionBounds.Validate(existing);

@@ -226,6 +226,58 @@ example, no stronger captain is free). The decisions:
 The Admiral logs each runtime-exit decision at debug level, for example `recovery for mission msn_x after TaskFailure:
 Resume, then Escalate, then Fail`.
 
+## Capability-aware routing (1.5.0)
+
+Four rules use what Armada measures about each model (RELIABILITY_SIMPLICITY_PLAN.md RS-8.4 to RS-8.7).
+
+### Served context is a hard filter
+
+A captain whose served context cannot hold the mission's prompt is not eligible. The served context is the
+endpoint's configured context, else the context its server reported (context discovery), else the model profile's
+served context; an unknown context never excludes a captain. The prompt is estimated from the parts the
+instructions file never trims: the mission description, the persona's output contract and a 2,048-token allowance for
+the role, rules and progress signals, plus the handoff's share of the context for a stage that reads an earlier
+stage. It must fit in 75 percent of the context; the rest is kept for tool output and the reply. The rule applies to
+requested and pinned captains too. When every available captain fails it, the blocker is `NoEligibleCaptain` with
+`selectionReasonCode` `context_too_small`, and each captain's status says how many tokens the prompt needs.
+
+### Tier from data
+
+A captain's effective tier is its explicit `tier`, else its model profile's tier (`tiering.tier`, set by an
+administrator with `PUT /api/v1/model-profiles/{id}`), else the tier classified from the model name. With
+`RoutingData.SuggestTiers` on (default off), the model alert pass also scores each profile from its recent stage
+outcomes and, when the data disagrees with the tier routing uses, records a suggestion on the profile
+(`tiering.suggestedTier`, `suggestedReason`, `suggestedSamples`, `suggestedUtc`) and raises a `TierSuggestion` model
+alert in Needs You. Nothing changes until an administrator clicks Apply tier (`POST /api/v1/model-alerts/{id}/apply`
+with `action` `ApplyTier`) or dismisses it (`Ignore`, 7 days by default; a suggestion of another tier shows again at
+once). Only personas with at least `RoutingData.MinimumSamples` attempts count; a pooled score of 85 percent or more
+suggests Premium, 65 percent or more Standard, otherwise Economy.
+
+### Ranking within a tier
+
+With `RoutingData.RankByOutcomes` on (default off), captains of one routing bucket are ordered by their model's
+recorded results for the mission's persona: completion without failed checks, Judge PASS verdicts on the work, no-op
+rate, tool-call validity and repair rate, each attempt weighted by age with a `RoutingData.HalfLifeDays` half-life
+(default 14). A model needs `RoutingData.MinimumSamples` attempts for the persona (default 20); captains without
+enough data follow the ranked ones in the 1.4.0 order (load, then last update). Persona captain priorities, the Judge
+strength rule and the Judge's preference for captains that did not author the reviewed work still come first. An
+assignment from a ranked bucket records a `mission.routing_ranked` event listing each captain's score and samples.
+
+### Judge strength rule
+
+A pipeline's `judgeStrength` sets the rule for the voyages it creates (copied to the voyage at creation):
+
+| Value | Effect |
+|-------|--------|
+| `Off` (or null) | Any eligible captain judges, as in 1.4.0. Pipelines and voyages stored before 1.5.0 read as Off. |
+| `Wait` | A Judge whose effective tier is below the highest tier among the captains that ran the stages it reviews is not eligible. The mission waits with `selectionReasonCode` `judge_strength` until a strong enough captain is free. The default for pipelines created through REST, MCP or WebSocket. |
+| `ProceedAndFlag` | A Judge that meets the rule is preferred; when none is available the best available Judge runs and the mission gets a `mission.judge_strength_exception` event (gate G8). |
+
+With the rule on, a Judge of another model family than every author is preferred over one of the same family. A
+requested captain (dispatch payload or voyage override) is not held to the rule. `ExcludeReviewAuthorsFromJudge` now
+compares model identity: every captain on an author's model (the model name without a provider prefix, whatever
+runtime serves it) is excluded, not only the author's captain.
+
 ## Explicit overrides and legacy defaults
 
 An explicit mission RequestedCaptainId takes precedence, followed by the voyage's exact per-persona captain assignment, then its wildcard (`*`) assignment. Those choices retain legacy behavior: an available requested captain bypasses AllowedPersonas and tier checks; a busy or deleted one falls back through ordinary persona/tier routing. Ownership and quarantine checks still apply. These explicit overrides bypass the hierarchy.

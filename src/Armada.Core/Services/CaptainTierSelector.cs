@@ -12,8 +12,8 @@ namespace Armada.Core.Services
     /// mission's required tier, resolve the captain to assign: prefer the lowest tier that can still
     /// handle the work (so strong captains are not consumed by cheap missions), falling back UPWARD only
     /// when no captain at the required tier is idle. A captain's effective tier is its explicit
-    /// <see cref="Captain.Tier"/> when set, otherwise auto-classified from its model name, otherwise
-    /// <see cref="CaptainTierEnum.Standard"/>. A Claude Code, Codex or Gemini captain with no model and no
+    /// <see cref="Captain.Tier"/> when set, otherwise its model profile's tier (<see cref="Captain.ProfileTier"/>, RS-8.5),
+    /// otherwise auto-classified from its model name, otherwise <see cref="CaptainTierEnum.Standard"/>. A Claude Code, Codex or Gemini captain with no model and no
     /// explicit tier runs its vendor's default model, so it ranks as Standard but can take work of any tier
     /// (<see cref="CanHandle"/>). Side-effect free so it can be unit tested in isolation.
     /// </summary>
@@ -39,7 +39,8 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <summary>
-        /// The effective tier for a captain: explicit tier, else classified from the model, else Standard.
+        /// The effective tier for a captain: explicit tier, else its model profile's tier, else classified from the model,
+        /// else Standard.
         /// </summary>
         /// <param name="captain">The captain.</param>
         /// <returns>The resolved tier.</returns>
@@ -47,6 +48,7 @@ namespace Armada.Core.Services
         {
             if (captain == null) return CaptainTierEnum.Standard;
             if (captain.Tier.HasValue) return captain.Tier.Value;
+            if (captain.ProfileTier.HasValue) return captain.ProfileTier.Value;
             return ClassifyModel(captain.Model);
         }
 
@@ -112,7 +114,7 @@ namespace Armada.Core.Services
 
         private static bool RunsVendorDefaultModel(Captain captain)
         {
-            if (captain.Tier.HasValue || !String.IsNullOrWhiteSpace(captain.Model)) return false;
+            if (captain.Tier.HasValue || captain.ProfileTier.HasValue || !String.IsNullOrWhiteSpace(captain.Model)) return false;
             // Provider-neutral CLIs (OpenCode, Pi) have no single vendor default model, so they are not listed here.
             return captain.Runtime == AgentRuntimeEnum.ClaudeCode
                 || captain.Runtime == AgentRuntimeEnum.Codex

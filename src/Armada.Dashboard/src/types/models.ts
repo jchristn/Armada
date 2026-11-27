@@ -755,6 +755,8 @@ export interface Voyage {
   /** Current black box entry when the voyage failed. Absent on older servers. */
   lastBlackBoxEntryId?: string | null;
   isEvaluation?: boolean;
+  /** Judge strength rule copied from the pipeline at creation (RS-8.7); null means off. Absent on older servers. */
+  judgeStrength?: JudgeStrengthPolicy | null;
 }
 
 /**
@@ -1724,13 +1726,13 @@ export interface InboxItem {
 }
 
 /** Scorecard threshold a model alert crossed (Armada.Core.Enums.ModelAlertRuleEnum). */
-export type ModelAlertRule = 'FirstPassSuccess' | 'EscalationsInARow' | 'ProtocolRepairRate' | 'CostPerAcceptedResult';
+export type ModelAlertRule = 'FirstPassSuccess' | 'EscalationsInARow' | 'ProtocolRepairRate' | 'CostPerAcceptedResult' | 'TierSuggestion';
 
 /** Whether a model alert still holds (Armada.Core.Enums.ModelAlertStatusEnum). */
 export type ModelAlertStatus = 'Open' | 'Resolved';
 
 /** Suggested action an operator can apply to a model alert (Armada.Core.Enums.ModelAlertActionEnum). */
-export type ModelAlertAction = 'MoveDown' | 'RemoveFromPersona' | 'CompactTemplate' | 'Reevaluate' | 'Ignore';
+export type ModelAlertAction = 'MoveDown' | 'RemoveFromPersona' | 'CompactTemplate' | 'Reevaluate' | 'Ignore' | 'ApplyTier';
 
 /** One suggested action of a model alert; nothing changes until the operator applies it. */
 export interface ModelAlertSuggestedAction {
@@ -3064,9 +3066,14 @@ export interface Pipeline {
   stages: PipelineStage[];
   isBuiltIn: boolean;
   active: boolean;
+  /** Judge strength rule (RS-8.7); null means off (pipelines stored before 1.5.0). New pipelines default to Wait. */
+  judgeStrength?: JudgeStrengthPolicy | null;
   createdUtc: string;
   lastUpdateUtc: string;
 }
+
+/** Judge strength rule of a pipeline (Armada.Core.Enums.JudgeStrengthPolicyEnum). */
+export type JudgeStrengthPolicy = 'Off' | 'Wait' | 'ProceedAndFlag';
 
 export interface PipelineStage {
   id: string;

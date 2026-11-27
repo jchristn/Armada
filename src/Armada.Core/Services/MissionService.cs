@@ -358,6 +358,27 @@ namespace Armada.Core.Services
             return blocker;
         }
 
+        // RS-8.4, RS-8.7: when every available captain is excluded by the same hard routing rule, the blocker names it with a
+        // selection reason code (context_too_small or judge_strength) and says what would let the mission run.
+        private static void ApplyRoutingRuleBlocker(MissionAssignmentBlocker blocker, Mission mission, CaptainAdmissionSelection selection)
+        {
+            List<string?> codes = selection.Available.Select(c => EvaluateCaptainIneligibility(c, mission, selection.Eligibility)?.Code).ToList();
+            if (codes.Count == 0) return;
+            if (codes.All(c => c == "JudgeStrength"))
+            {
+                blocker.SelectionReasonCode = JudgeStrengthRule.BlockerCode;
+                blocker.Summary = "Waiting for a Judge: the pipeline's Judge strength rule needs a captain of tier " + selection.Eligibility.JudgeRequiredTier
+                    + " or higher (the highest tier among the stages it reviews), and no available captain has it. A stronger captain takes it when"
+                    + " one is free; set the pipeline's judgeStrength to ProceedAndFlag to run it on the best available Judge instead.";
+            }
+            else if (codes.All(c => c == "ContextTooSmall"))
+            {
+                blocker.SelectionReasonCode = MissionPromptFit.BlockerCode;
+                blocker.Summary = "Waiting for a captain: no available captain's served context can hold this mission's prompt (description, output"
+                    + " contract and handoff). Use a captain with a larger context, raise the endpoint's context length, or shorten the description.";
+            }
+        }
+
         // The captain gate (routing, eligibility, captain capacity, placement) as one typed reason (RS-4.6). Dispatch
         // records it as is; the read-only assignment blocker adds per-captain detail on top.
         private MissionAssignmentBlocker CaptainGateBlocker(Mission mission, CaptainAdmissionSelection selection, out List<Captain> full)
@@ -412,6 +433,7 @@ namespace Armada.Core.Services
                     blocker.Summary = "Waiting for a captain: no captain meets the Worker eligibility envelope or may run the Worker persona. "
                         + WorkerEnvelopeRules.Describe(selection.Eligibility.EnvelopeGate.Envelope)
                         + " Give a captain a model profile that meets it, or change the vessel's envelope.";
+                ApplyRoutingRuleBlocker(blocker, routingView, selection);
                 return blocker;
             }
             blocker.Reason = full.Count > 0 ? MissionAssignmentBlockerReasonEnum.CaptainConcurrencyLimit : MissionAssignmentBlockerReasonEnum.NoIdleCaptain;
@@ -844,6 +866,7 @@ namespace Armada.Core.Services
             vesselAdmission = null;
             try { await _WaitTracker.CompleteAssignmentAsync(mission, waitTiming, token).ConfigureAwait(false); }
             catch (Exception ex) when (!(ex is OperationCanceledException)) { _Logging.Warn(_Header + "could not close the wait of mission " + mission.Id + ": " + ex.Message); }
+            await RecordRoutingNotesAsync(mission, captain, captainSelection, token).ConfigureAwait(false);
 
             if (launchInBackground)
             {

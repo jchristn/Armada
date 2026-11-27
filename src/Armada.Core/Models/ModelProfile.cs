@@ -7,8 +7,8 @@ namespace Armada.Core.Models
     /// <summary>
     /// The model as served: a runtime, provider, model and served context shared by every captain and Harbor that runs it
     /// (docs/MODEL_HETEROGENEITY.md, The model profile). The identity is stable; what changes over time (runtime version,
-    /// model digest, sampling) is recorded as immutable <see cref="ModelProfileRevision"/>s. A profile is advisory: it does
-    /// not set a captain's tier or change routing or dispatch.
+    /// model digest, sampling) is recorded as immutable <see cref="ModelProfileRevision"/>s. Routing reads only the tier an
+    /// administrator set in <see cref="Tiering"/> (RS-8.5); a suggested tier never changes routing on its own.
     /// </summary>
     public class ModelProfile
     {
@@ -68,6 +68,16 @@ namespace Armada.Core.Models
         {
             get => _Recovery;
             set => _Recovery = value ?? new ModelProfileRecovery();
+        }
+
+        /// <summary>
+        /// The tier an administrator set and the tier the outcome data suggests (RS-8.5). Only <see cref="ModelProfileTiering.Tier"/>
+        /// is editable.
+        /// </summary>
+        public ModelProfileTiering Tiering
+        {
+            get => _Tiering;
+            set => _Tiering = value ?? new ModelProfileTiering();
         }
 
         /// <summary>
@@ -144,6 +154,7 @@ namespace Armada.Core.Models
         private ModelProfileRecovery _Recovery = new ModelProfileRecovery();
         private ModelProfileTimeouts _Timeouts = new ModelProfileTimeouts();
         private ModelProfileSpeed _Speed = new ModelProfileSpeed();
+        private ModelProfileTiering _Tiering = new ModelProfileTiering();
         private List<ModelProfileRevision> _Revisions = new List<ModelProfileRevision>();
 
         #endregion

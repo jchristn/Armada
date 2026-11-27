@@ -40,6 +40,7 @@ namespace Armada.Core.Services
             ArgumentNullException.ThrowIfNull(mission);
             ArgumentNullException.ThrowIfNull(voyageMissions);
             List<Captain> captains = await database.Captains.EnumerateAsync(token).ConfigureAwait(false);
+            await CaptainProfileTiers.ApplyAsync(database, captains, token).ConfigureAwait(false);
             Captain? failed = failedCaptainId == null ? null : captains.FirstOrDefault(c => c.Id == failedCaptainId);
             List<Captain> eligible = captains.Where(c => c.Active && c.Id != failedCaptainId && c.TenantId == mission.TenantId
                 && (c.UserId == null || c.UserId == mission.UserId)

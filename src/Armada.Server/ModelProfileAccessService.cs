@@ -184,6 +184,13 @@ namespace Armada.Server
                 };
             }
 
+            if (request.Tiering != null)
+            {
+                // RS-8.5: only the administrator's tier is editable; the suggestion is the model alert pass's.
+                if (request.Tiering.Tier.HasValue && !Enum.IsDefined(request.Tiering.Tier.Value)) throw new ArgumentException("Tiering.Tier must be Economy, Standard or Premium.");
+                profile.Tiering.Tier = request.Tiering.Tier;
+            }
+
             if (request.Notes != null)
             {
                 if (request.Notes.Length > 4000) throw new ArgumentException("Notes must be at most 4000 characters.");

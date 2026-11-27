@@ -796,6 +796,7 @@ namespace Armada.Core.Database.SqlServer
             try { voyage.CaptainOverridesJson = NullableString(reader["captain_overrides_json"]); } catch { }
             voyage.ApprovalOptions = RunApprovalOptions.FromJson(NullableString(reader["approval_options_json"]));
             try { voyage.IsEvaluation = reader["is_evaluation"] != DBNull.Value && Convert.ToBoolean(reader["is_evaluation"]); } catch { }
+            try { voyage.JudgeStrength = Armada.Core.Services.JudgeStrengthRule.Parse(reader["judge_strength"]); } catch { }
             try { voyage.LastBlackBoxEntryId = NullableString(reader["last_blackbox_entry_id"]); } catch { }
             return voyage;
         }

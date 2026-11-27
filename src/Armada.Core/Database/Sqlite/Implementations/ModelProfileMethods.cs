@@ -24,19 +24,19 @@ namespace Armada.Core.Database.Sqlite.Implementations
             (id, tenant_id, identity_key, runtime, provider, model, served_context_tokens, served_context_source, tools_available, mcp_available,
              rendering_template, rendering_repeat_contract_at_end, rendering_max_files_per_mission,
              recovery_max_resumes, recovery_unclassified_resumes, recovery_transient_grace_minutes, recovery_judge_rework_rounds, recovery_output_repair_attempts, recovery_escalate_after_resumes,
-             timeout_stall_minutes, timeout_tool_wait_minutes, timeout_max_runtime_minutes, timeout_first_output_minutes, speed_tokens_per_second, speed_first_output_ms, speed_measured_utc, notes, created_utc, last_update_utc)
+             timeout_stall_minutes, timeout_tool_wait_minutes, timeout_max_runtime_minutes, timeout_first_output_minutes, speed_tokens_per_second, speed_first_output_ms, speed_measured_utc, tier, suggested_tier, suggested_tier_reason, suggested_tier_samples, suggested_tier_utc, notes, created_utc, last_update_utc)
             VALUES
             (@id, @tenant_id, @identity_key, @runtime, @provider, @model, @served_context_tokens, @served_context_source, @tools_available, @mcp_available,
              @rendering_template, @rendering_repeat_contract_at_end, @rendering_max_files_per_mission,
              @recovery_max_resumes, @recovery_unclassified_resumes, @recovery_transient_grace_minutes, @recovery_judge_rework_rounds, @recovery_output_repair_attempts, @recovery_escalate_after_resumes,
-             @timeout_stall_minutes, @timeout_tool_wait_minutes, @timeout_max_runtime_minutes, @timeout_first_output_minutes, @speed_tokens_per_second, @speed_first_output_ms, @speed_measured_utc, @notes, @created_utc, @last_update_utc);";
+             @timeout_stall_minutes, @timeout_tool_wait_minutes, @timeout_max_runtime_minutes, @timeout_first_output_minutes, @speed_tokens_per_second, @speed_first_output_ms, @speed_measured_utc, @tier, @suggested_tier, @suggested_tier_reason, @suggested_tier_samples, @suggested_tier_utc, @notes, @created_utc, @last_update_utc);";
 
         private static readonly string _UpdateProfile = @"UPDATE model_profiles SET
             tools_available = @tools_available, mcp_available = @mcp_available, rendering_template = @rendering_template,
             rendering_repeat_contract_at_end = @rendering_repeat_contract_at_end,
             rendering_max_files_per_mission = @rendering_max_files_per_mission,
             recovery_max_resumes = @recovery_max_resumes, recovery_unclassified_resumes = @recovery_unclassified_resumes, recovery_transient_grace_minutes = @recovery_transient_grace_minutes, recovery_judge_rework_rounds = @recovery_judge_rework_rounds, recovery_output_repair_attempts = @recovery_output_repair_attempts, recovery_escalate_after_resumes = @recovery_escalate_after_resumes,
-            timeout_stall_minutes = @timeout_stall_minutes, timeout_tool_wait_minutes = @timeout_tool_wait_minutes, timeout_max_runtime_minutes = @timeout_max_runtime_minutes, timeout_first_output_minutes = @timeout_first_output_minutes, speed_tokens_per_second = @speed_tokens_per_second, speed_first_output_ms = @speed_first_output_ms, speed_measured_utc = @speed_measured_utc, notes = @notes, last_update_utc = @last_update_utc
+            timeout_stall_minutes = @timeout_stall_minutes, timeout_tool_wait_minutes = @timeout_tool_wait_minutes, timeout_max_runtime_minutes = @timeout_max_runtime_minutes, timeout_first_output_minutes = @timeout_first_output_minutes, speed_tokens_per_second = @speed_tokens_per_second, speed_first_output_ms = @speed_first_output_ms, speed_measured_utc = @speed_measured_utc, tier = @tier, suggested_tier = @suggested_tier, suggested_tier_reason = @suggested_tier_reason, suggested_tier_samples = @suggested_tier_samples, suggested_tier_utc = @suggested_tier_utc, notes = @notes, last_update_utc = @last_update_utc
             WHERE id = @id;";
 
         private static readonly string _InsertRevision = @"INSERT INTO model_profile_revisions
@@ -354,8 +354,18 @@ namespace Armada.Core.Database.Sqlite.Implementations
             SqliteCommandHelper.Add(cmd, "@speed_tokens_per_second", profile.Speed.TokensPerSecond);
             SqliteCommandHelper.Add(cmd, "@speed_first_output_ms", profile.Speed.FirstOutputMs);
             SqliteCommandHelper.AddDate(cmd, "@speed_measured_utc", profile.Speed.MeasuredUtc);
+            SqliteCommandHelper.Add(cmd, "@tier", profile.Tiering.Tier.HasValue ? profile.Tiering.Tier.Value.ToString() : null);
+            SqliteCommandHelper.Add(cmd, "@suggested_tier", profile.Tiering.SuggestedTier.HasValue ? profile.Tiering.SuggestedTier.Value.ToString() : null);
+            SqliteCommandHelper.Add(cmd, "@suggested_tier_reason", profile.Tiering.SuggestedReason);
+            SqliteCommandHelper.Add(cmd, "@suggested_tier_samples", profile.Tiering.SuggestedSamples);
+            SqliteCommandHelper.AddDate(cmd, "@suggested_tier_utc", profile.Tiering.SuggestedUtc);
             SqliteCommandHelper.Add(cmd, "@notes", profile.Notes);
             SqliteCommandHelper.AddDate(cmd, "@last_update_utc", profile.LastUpdateUtc);
+        }
+
+        private static CaptainTierEnum? ReadTier(string? value)
+        {
+            return Enum.TryParse(value, true, out CaptainTierEnum tier) && Enum.IsDefined(tier) ? tier : null;
         }
 
         private static int? ReadRecovery(int? value, int min, int max)
@@ -395,6 +405,11 @@ namespace Armada.Core.Database.Sqlite.Implementations
             profile.Speed.TokensPerSecond = SqliteCommandHelper.ReadNullableDouble(reader["speed_tokens_per_second"]);
             profile.Speed.FirstOutputMs = SqliteCommandHelper.ReadNullableLong(reader["speed_first_output_ms"]);
             profile.Speed.MeasuredUtc = SqliteCommandHelper.ReadNullableDate(reader["speed_measured_utc"]);
+            profile.Tiering.Tier = ReadTier(SqliteCommandHelper.ReadString(reader["tier"]));
+            profile.Tiering.SuggestedTier = ReadTier(SqliteCommandHelper.ReadString(reader["suggested_tier"]));
+            profile.Tiering.SuggestedReason = SqliteCommandHelper.ReadString(reader["suggested_tier_reason"]);
+            profile.Tiering.SuggestedSamples = SqliteCommandHelper.ReadNullableInt(reader["suggested_tier_samples"]);
+            profile.Tiering.SuggestedUtc = SqliteCommandHelper.ReadNullableDate(reader["suggested_tier_utc"]);
             profile.Notes = SqliteCommandHelper.ReadString(reader["notes"]);
             profile.CreatedUtc = SqliteCommandHelper.ReadDate(reader["created_utc"]);
             profile.LastUpdateUtc = SqliteCommandHelper.ReadDate(reader["last_update_utc"]);

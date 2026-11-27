@@ -2549,6 +2549,7 @@ namespace Armada.Core.Database.Postgresql.Queries
                 Armada.Core.Database.HandoffAttemptSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Postgresql),
                 Armada.Core.Database.StageSubmissionTableSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Postgresql),
                 Armada.Core.Database.ContextDiscoverySchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Postgresql),
+                Armada.Core.Database.RoutingDataSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Postgresql),
                 Armada.Core.Database.ModelProfileTimeoutsSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Postgresql),
                 Armada.Core.Database.ProbedCapabilitiesSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Postgresql),
                 Armada.Core.Database.TimeBoundedScanSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Postgresql)

@@ -15,6 +15,12 @@ namespace Armada.Core.Services
     /// </summary>
     public partial class MissionService
     {
+        #region Private-Members
+
+        private PersonaOutcomeStatsService? _OutcomeStats = null;
+
+        #endregion
+
         #region Private-Methods
 
         private async Task<bool> HasStrictCaptainOverrideAsync(Mission mission, CancellationToken token)
@@ -101,9 +107,12 @@ namespace Armada.Core.Services
                 Captain? requested = await PassCaptainAsync(mission.RequestedCaptainId, token).ConfigureAwait(false);
                 context.InactiveRequestedCaptain = requested?.Active == false;
             }
-            // Review authors only change eligibility when they are excluded; otherwise they are merely less preferred.
-            if (_Settings.ExcludeReviewAuthorsFromJudge)
-                context.ExcludedAuthors = await ReviewAuthorCaptainIdsAsync(mission, token).ConfigureAwait(false);
+            List<Captain> visible = (await PassCaptainsAsync(token).ConfigureAwait(false)).Where(c => CaptainVisibleToMission(c, mission)).ToList();
+            // Review authors only change eligibility when they are excluded; otherwise they are merely less preferred. Both the
+            // exclusion and the Judge strength rule compare models, so another captain on an author's model counts as an author.
+            await AddJudgeRulesAsync(context, mission, visible, token).ConfigureAwait(false);
+            await AddContextFitAsync(context, mission, visible, token).ConfigureAwait(false);
+            await AddOutcomeScoresAsync(context, mission, visible, token).ConfigureAwait(false);
             context.EscalatedToRequestedCaptain = !String.IsNullOrEmpty(mission.RequestedCaptainId) && (IntegrationBarrier.IsEscalatedRework(mission)
                 || mission.EscalationCount > 0);
             context.UsageFallbackAuthorized = _Settings.EffectiveUsageSelection.Mode == UsageSelectionModeEnum.Enforce && mission.UsageRecovery?.AllowFallback == true;
@@ -133,10 +142,13 @@ namespace Armada.Core.Services
             if (!CaptainVisibleToMission(captain, mission)) return Failure("CaptainScopeMismatch", "belongs to another tenant or user");
             if (captain.QuarantineUntilUtc.HasValue && captain.QuarantineUntilUtc > DateTime.UtcNow) return Failure(UsageQuotaHold.IsQuotaOwned(captain.QuarantineReason) ? "AccountQuotaExhausted" : "CaptainQuarantined", "quarantined");
             if (context.EnvelopeGate != null && context.EnvelopeGate.Exclusions.TryGetValue(captain.Id, out string? envelopeReason)) return Failure("WorkerEnvelopeIncompatible", envelopeReason);
+            if (context.ContextExclusions.TryGetValue(captain.Id, out string? contextReason)) return Failure("ContextTooSmall", contextReason);
             if (!String.IsNullOrEmpty(mission.RequestedCaptainId) && captain.Id == mission.RequestedCaptainId) return null;
             if (context.EscalatedToRequestedCaptain) return Failure("RequestedCaptainEscalation", "escalated to another captain");
             if (context.StrictCaptainOverride) return Failure("StrictCaptainOverride", "the voyage requires another captain");
             if (context.UsageFallbackRequired) return Failure("FallbackPermissionRequired", "preferred captain fallback requires administrator authorization");
+            if (context.JudgePolicy == JudgeStrengthPolicyEnum.Wait && !JudgeStrengthRule.Meets(captain, context.JudgeRequiredTier))
+                return Failure("JudgeStrength", "tier " + CaptainTierSelector.EffectiveTier(captain) + " is below the reviewed work's tier " + context.JudgeRequiredTier!.Value + " (Judge strength rule)");
             if (context.DefaultCaptainId != null && captain.Id == context.DefaultCaptainId) return null;
             if (!String.IsNullOrEmpty(captain.AllowedPersonas) && !CaptainAllowsPersona(captain, context.RoutingPersona)) return Failure("PersonaNotAllowed", "persona not allowed");
             if (mission.Tier.HasValue && !CaptainTierSelector.CanHandle(captain, mission.Tier.Value)) return Failure("TierBelowRequirement", "tier below " + mission.Tier.Value);
@@ -316,6 +328,14 @@ namespace Armada.Core.Services
             else if (context.DefaultCaptainId != null)
                 AddGroup("PersonaDefaultCaptain", idleCaptains.Where(c => c.Id == context.DefaultCaptainId));
 
+            if (context.JudgePolicy != JudgeStrengthPolicyEnum.Off)
+            {
+                // RS-8.7: a Judge that meets the rule and is of another model family than every author first, then one that
+                // meets the rule (ProceedAndFlag also falls through to the rest, and the assignment is flagged).
+                AddGeneral(idleCaptains.Where(c => !reviewAuthors.Contains(c.Id) && !context.SameFamilyAsAuthors.Contains(c.Id)
+                    && JudgeStrengthRule.Meets(c, context.JudgeRequiredTier)));
+                AddGeneral(idleCaptains.Where(c => !reviewAuthors.Contains(c.Id) && JudgeStrengthRule.Meets(c, context.JudgeRequiredTier)));
+            }
             if (reviewAuthors.Count > 0 && !_Settings.ExcludeReviewAuthorsFromJudge)
                 AddGeneral(idleCaptains.Where(c => !reviewAuthors.Contains(c.Id)));
             AddGeneral(idleCaptains);
@@ -334,9 +354,13 @@ namespace Armada.Core.Services
                 foreach (bool preferred in new[] { true, false })
                 {
                     IEnumerable<Captain> pool = available.Where(c => (!String.IsNullOrEmpty(persona) && PersonaCatalog.Matches(c.PreferredPersona, persona)) == preferred);
+                    // RS-8.6: with outcome ranking on, captains whose model has enough results for the persona come first, best
+                    // score first; the rest keep the load and last-update order. With no scores this is the 1.4.0 order.
                     List<Captain> ordered = priority
                         ? pool.OrderBy(c => c.ActiveMissionCount).ThenBy(c => c.Id, StringComparer.Ordinal).ToList()
-                        : pool.OrderBy(c => c.ActiveMissionCount).ThenBy(c => c.LastUpdateUtc).ThenBy(c => c.Id, StringComparer.Ordinal).ToList();
+                        : pool.OrderBy(c => context.OutcomeScores.ContainsKey(c.Id) ? 0 : 1)
+                            .ThenByDescending(c => context.OutcomeScores.TryGetValue(c.Id, out PersonaOutcomeScore? score) ? score.Score : 0)
+                            .ThenBy(c => c.ActiveMissionCount).ThenBy(c => c.LastUpdateUtc).ThenBy(c => c.Id, StringComparer.Ordinal).ToList();
                     if (ordered.Count == 0) continue;
                     foreach (Captain captain in ordered) grouped.Add(captain.Id);
                     groups.Add(new CaptainRoutingBucket { ReasonCode = reason + (preferred ? "PreferredPersona" : ""), Captains = ordered });
@@ -570,6 +594,140 @@ namespace Armada.Core.Services
             return false;
         }
 
+        private PersonaOutcomeStatsService OutcomeStats => _OutcomeStats ??= new PersonaOutcomeStatsService(_Database);
+
+        private async Task AddJudgeRulesAsync(CaptainEligibilityContext context, Mission mission, List<Captain> visible, CancellationToken token)
+        {
+            if (!PersonaCatalog.Matches(mission.Persona, PersonaCatalog.Judge)) return;
+            Voyage? voyage = String.IsNullOrEmpty(mission.VoyageId) ? null : await PassVoyageAsync(mission.VoyageId, token).ConfigureAwait(false);
+            context.JudgePolicy = JudgeStrengthRule.Effective(voyage);
+            if (!_Settings.ExcludeReviewAuthorsFromJudge && context.JudgePolicy == JudgeStrengthPolicyEnum.Off) return;
+
+            List<Captain> authors = new List<Captain>();
+            foreach (string authorId in await ReviewAuthorCaptainIdsAsync(mission, token).ConfigureAwait(false))
+            {
+                Captain? author = visible.FirstOrDefault(c => c.Id == authorId) ?? await PassCaptainAsync(authorId, token).ConfigureAwait(false);
+                if (author != null) authors.Add(author);
+            }
+            HashSet<string> identities = new HashSet<string>(StringComparer.Ordinal);
+            HashSet<string> families = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (Captain author in authors)
+            {
+                ModelEndpoint? endpoint = await CaptainEndpointAsync(author, token).ConfigureAwait(false);
+                identities.Add(JudgeStrengthRule.ModelIdentity(author, endpoint));
+                families.Add(ModelFamily.Of(author, endpoint));
+            }
+            if (context.JudgePolicy != JudgeStrengthPolicyEnum.Off) context.JudgeRequiredTier = JudgeStrengthRule.RequiredTier(authors);
+            foreach (Captain captain in visible)
+            {
+                ModelEndpoint? endpoint = await CaptainEndpointAsync(captain, token).ConfigureAwait(false);
+                if (families.Contains(ModelFamily.Of(captain, endpoint))) context.SameFamilyAsAuthors.Add(captain.Id);
+                // ExcludeReviewAuthorsFromJudge compares model identity (RS-8.7): an author's captain and any other captain on
+                // the same model are excluded.
+                if (_Settings.ExcludeReviewAuthorsFromJudge && (authors.Any(a => a.Id == captain.Id) || identities.Contains(JudgeStrengthRule.ModelIdentity(captain, endpoint))))
+                    context.ExcludedAuthors.Add(captain.Id);
+            }
+            if (_Settings.ExcludeReviewAuthorsFromJudge)
+                foreach (Captain author in authors) context.ExcludedAuthors.Add(author.Id);
+        }
+
+        private async Task AddContextFitAsync(CaptainEligibilityContext context, Mission mission, List<Captain> visible, CancellationToken token)
+        {
+            foreach (Captain captain in visible)
+            {
+                ModelEndpoint? endpoint = await CaptainEndpointAsync(captain, token).ConfigureAwait(false);
+                ModelProfile? profile = await CaptainProfileAsync(captain, token).ConfigureAwait(false);
+                string? reason = MissionPromptFit.IneligibilityReason(mission, MissionPromptFit.ServedContext(endpoint, profile));
+                if (reason != null) context.ContextExclusions[captain.Id] = reason;
+            }
+        }
+
+        private async Task AddOutcomeScoresAsync(CaptainEligibilityContext context, Mission mission, List<Captain> visible, CancellationToken token)
+        {
+            RoutingDataSettings settings = _Settings.RoutingData;
+            if (!settings.RankByOutcomes || String.IsNullOrEmpty(context.RoutingPersona)) return;
+            Dictionary<string, PersonaOutcomeScore> scores;
+            try
+            {
+                scores = await OutcomeStats.ReadAsync(mission.TenantId, settings.HalfLifeDays, token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
+            {
+                _Logging.Warn(_Header + "outcome ranking skipped for mission " + mission.Id + ": " + ex.Message);
+                return;
+            }
+            foreach (Captain captain in visible)
+            {
+                ModelProfile? profile = await CaptainProfileAsync(captain, token).ConfigureAwait(false);
+                if (profile == null) continue;
+                string key = PersonaOutcomeStats.Key(ModelProfileRules.IdentityKey(profile.TenantId, profile.Identity), context.RoutingPersona);
+                if (scores.TryGetValue(key, out PersonaOutcomeScore? score) && score.Samples >= settings.MinimumSamples)
+                    context.OutcomeScores[captain.Id] = score;
+            }
+        }
+
+        private async Task<ModelEndpoint?> CaptainEndpointAsync(Captain captain, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(captain.ModelEndpointId)) return null;
+            return await PassEndpointAsync(captain.ModelEndpointId, token).ConfigureAwait(false);
+        }
+
+        private async Task<ModelProfile?> CaptainProfileAsync(Captain captain, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(captain.ModelProfileId)) return null;
+            ModelProfile? profile = await PassProfileAsync(captain.ModelProfileId, token).ConfigureAwait(false);
+            return profile != null && String.Equals(profile.TenantId, captain.TenantId, StringComparison.Ordinal) ? profile : null;
+        }
+
+        private async Task RecordRoutingNotesAsync(Mission mission, Captain captain, CaptainAdmissionSelection selection, CancellationToken token)
+        {
+            CaptainEligibilityContext context = selection.Eligibility;
+            List<ArmadaEvent> events = new List<ArmadaEvent>();
+            if (context.JudgePolicy == JudgeStrengthPolicyEnum.ProceedAndFlag && !JudgeStrengthRule.Meets(captain, context.JudgeRequiredTier))
+            {
+                string message = "Judge strength exception: " + captain.Name + " (tier " + CaptainTierSelector.EffectiveTier(captain)
+                    + ") judges work of tier " + context.JudgeRequiredTier!.Value + " because no captain that meets the rule was available.";
+                _Logging.Warn(_Header + "mission " + mission.Id + ": " + message);
+                events.Add(RoutingEvent(mission, captain, JudgeStrengthRule.ExceptionEventType, message, null));
+            }
+            CaptainRoutingBucket? bucket = selection.RoutingBuckets.FirstOrDefault(b => b.Captains.Any(c => c.Id == captain.Id));
+            if (bucket != null && bucket.Captains.Any(c => context.OutcomeScores.ContainsKey(c.Id)))
+            {
+                List<CaptainOutcomeRank> ranks = bucket.Captains.Take(CaptainOutcomeRank.MaxListed).Select(c => CaptainOutcomeRank.From(c,
+                    context.OutcomeScores.TryGetValue(c.Id, out PersonaOutcomeScore? score) ? score : null)).ToList();
+                string message = "Outcome ranking (" + context.RoutingPersona + ", " + bucket.ReasonCode + ") chose " + captain.Name + ": "
+                    + String.Join("; ", ranks.Select(r => r.Describe()));
+                _Logging.Info(_Header + "mission " + mission.Id + ": " + message);
+                events.Add(RoutingEvent(mission, captain, CaptainOutcomeRank.EventType, message, JsonSerializer.Serialize(ranks)));
+            }
+            foreach (ArmadaEvent evt in events)
+            {
+                try
+                {
+                    await _Database.Events.CreateAsync(evt, token).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
+                {
+                    _Logging.Warn(_Header + "could not record " + evt.EventType + " for mission " + mission.Id + ": " + ex.Message);
+                }
+            }
+        }
+
+        private static ArmadaEvent RoutingEvent(Mission mission, Captain captain, string type, string message, string? payload)
+        {
+            ArmadaEvent evt = new ArmadaEvent(type, message);
+            evt.TenantId = mission.TenantId;
+            evt.UserId = mission.UserId;
+            evt.EntityType = "mission";
+            evt.EntityId = mission.Id;
+            evt.CaptainId = captain.Id;
+            evt.MissionId = mission.Id;
+            evt.VesselId = mission.VesselId;
+            evt.VoyageId = mission.VoyageId;
+            evt.Payload = payload;
+            return evt;
+        }
+
         private static bool UsesSharedLocalAndWorkingDirectory(Vessel vessel)
         {
             if (vessel == null) return false;
@@ -606,6 +764,11 @@ namespace Armada.Core.Services
             public string? DefaultCaptainId { get; set; } = null;
             public Persona? Persona { get; set; } = null;
             public WorkerEnvelopeGate? EnvelopeGate { get; set; } = null;
+            public Dictionary<string, string> ContextExclusions { get; } = new Dictionary<string, string>(StringComparer.Ordinal);
+            public JudgeStrengthPolicyEnum JudgePolicy { get; set; } = JudgeStrengthPolicyEnum.Off;
+            public CaptainTierEnum? JudgeRequiredTier { get; set; } = null;
+            public HashSet<string> SameFamilyAsAuthors { get; } = new HashSet<string>(StringComparer.Ordinal);
+            public Dictionary<string, PersonaOutcomeScore> OutcomeScores { get; } = new Dictionary<string, PersonaOutcomeScore>(StringComparer.Ordinal);
         }
 
         #endregion

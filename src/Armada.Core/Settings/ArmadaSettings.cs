@@ -1093,6 +1093,16 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
+        /// Routing from outcome data (RS-8.5, RS-8.6): ranking within a tier and profile tier suggestions. Both off by
+        /// default. Never null; setting null restores the defaults.
+        /// </summary>
+        public RoutingDataSettings RoutingData
+        {
+            get => _RoutingData;
+            set => _RoutingData = value ?? new RoutingDataSettings();
+        }
+
+        /// <summary>
         /// Vessel health evaluation settings (schedule, concurrency, freshness, scored criteria, thresholds).
         /// Never null; setting null restores the defaults.
         /// </summary>
@@ -1307,6 +1317,7 @@ namespace Armada.Core.Settings
         private FleetActionSettings _FleetActions = new FleetActionSettings();
         private EvaluationSettings _Evaluation = new EvaluationSettings();
         private ModelAlertSettings _ModelAlerts = new ModelAlertSettings();
+        private RoutingDataSettings _RoutingData = new RoutingDataSettings();
         private AskSettings _Ask = new AskSettings();
         private CliPermissionSettings _Permissions = new CliPermissionSettings();
         private RepositoryHealthSettings _RepositoryHealth = new RepositoryHealthSettings();

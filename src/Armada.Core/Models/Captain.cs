@@ -134,6 +134,14 @@ namespace Armada.Core.Models
         public CaptainTierEnum? Tier { get; set; } = null;
 
         /// <summary>
+        /// The tier an administrator set on this captain's model profile (RS-8.5), filled by routing from the profile
+        /// before tier decisions; null when the profile sets none or was not read. Not stored and not serialized; an
+        /// explicit <see cref="Tier"/> always wins over it.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public CaptainTierEnum? ProfileTier { get; set; } = null;
+
+        /// <summary>
         /// Runtime-specific configuration serialized as JSON.
         /// Use this for settings that should not be promoted into generic captain fields.
         /// </summary>

@@ -28,6 +28,12 @@ namespace Armada.Server.Mcp
         /// Optional ownership scope for create (UserSpecific or TenantWide), resolved against what the caller may create.
         /// </summary>
         public Armada.Core.Enums.ScopeEnum? Scope { get; set; }
+
+        /// <summary>
+        /// Optional Judge strength rule (Off, Wait or ProceedAndFlag, RS-8.7). Create defaults to Wait; update keeps the
+        /// stored value when omitted.
+        /// </summary>
+        public Armada.Core.Enums.JudgeStrengthPolicyEnum? JudgeStrength { get; set; }
     }
 
     /// <summary>

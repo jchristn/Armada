@@ -62,8 +62,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     {
                         cmd.Connection = conn;
                         cmd.Transaction = transaction;
-                        cmd.CommandText = @"INSERT INTO pipelines (id, tenant_id, user_id, scope, name, description, is_built_in, active, created_utc, last_update_utc)
-                        VALUES (@id, @tenant_id, @user_id, @scope, @name, @description, @is_built_in, @active, @created_utc, @last_update_utc);";
+                        cmd.CommandText = @"INSERT INTO pipelines (id, tenant_id, user_id, scope, name, description, is_built_in, active, judge_strength, created_utc, last_update_utc)
+                        VALUES (@id, @tenant_id, @user_id, @scope, @name, @description, @is_built_in, @active, @judge_strength, @created_utc, @last_update_utc);";
                         cmd.Parameters.AddWithValue("@id", pipeline.Id);
                         cmd.Parameters.AddWithValue("@tenant_id", (object?)pipeline.TenantId ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@user_id", (object?)pipeline.UserId ?? DBNull.Value);
@@ -72,6 +72,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         cmd.Parameters.AddWithValue("@description", (object?)pipeline.Description ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@is_built_in", pipeline.IsBuiltIn);
                         cmd.Parameters.AddWithValue("@active", pipeline.Active);
+                        cmd.Parameters.AddWithValue("@judge_strength", pipeline.JudgeStrength.HasValue ? (object)pipeline.JudgeStrength.Value.ToString() : DBNull.Value);
                         PostgresqlCommandHelper.AddDate(cmd, "@created_utc", pipeline.CreatedUtc);
                         PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", pipeline.LastUpdateUtc);
                         await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
@@ -203,6 +204,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         description = @description,
                         is_built_in = @is_built_in,
                         active = @active,
+                        judge_strength = @judge_strength,
                         last_update_utc = @last_update_utc
                         WHERE id = @id;";
                         cmd.Parameters.AddWithValue("@id", pipeline.Id);
@@ -213,6 +215,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         cmd.Parameters.AddWithValue("@description", (object?)pipeline.Description ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@is_built_in", pipeline.IsBuiltIn);
                         cmd.Parameters.AddWithValue("@active", pipeline.Active);
+                        cmd.Parameters.AddWithValue("@judge_strength", pipeline.JudgeStrength.HasValue ? (object)pipeline.JudgeStrength.Value.ToString() : DBNull.Value);
                         PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", pipeline.LastUpdateUtc);
                         await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                     }
@@ -503,6 +506,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             pipeline.Description = NullableString(reader["description"]);
             pipeline.IsBuiltIn = Convert.ToBoolean(reader["is_built_in"]);
             pipeline.Active = Convert.ToBoolean(reader["active"]);
+            try { pipeline.JudgeStrength = Armada.Core.Services.JudgeStrengthRule.Parse(reader["judge_strength"]); } catch { }
             pipeline.CreatedUtc = DateTime.SpecifyKind((DateTime)reader["created_utc"], DateTimeKind.Utc);
             pipeline.LastUpdateUtc = DateTime.SpecifyKind((DateTime)reader["last_update_utc"], DateTimeKind.Utc);
             return pipeline;

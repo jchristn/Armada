@@ -31,6 +31,13 @@ namespace Armada.Core.Enums
         /// Tokens per accepted result above the multiple of the persona median across other profiles.
         /// </summary>
         [EnumMember(Value = "CostPerAcceptedResult")]
-        CostPerAcceptedResult
+        CostPerAcceptedResult,
+
+        /// <summary>
+        /// The profile's outcome data suggests a different tier than the one routing uses (RS-8.5). Raised only when
+        /// RoutingData.SuggestTiers is on; nothing changes until an administrator applies the suggestion.
+        /// </summary>
+        [EnumMember(Value = "TierSuggestion")]
+        TierSuggestion
     }
 }

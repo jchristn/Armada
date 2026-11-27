@@ -39,6 +39,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         name = new { type = "string", description = "Pipeline name (e.g. 'WorkerOnly', 'FullPipeline', 'Reviewed')" },
                         description = new { type = "string", description = "Human-readable description of the pipeline workflow" },
+                        judgeStrength = new { type = "string", @enum = Enum.GetNames<JudgeStrengthPolicyEnum>(), description = "Judge strength rule: a Judge must be at least the highest tier among the stages it reviews. Wait (default for new pipelines) holds the Judge with a judge_strength blocker until such a captain is free; ProceedAndFlag runs the best available Judge and records a judge strength exception; Off disables the rule" },
                         scope = new { type = "string", @enum = Enum.GetNames<ScopeEnum>(), description = "Ownership: UserSpecific (only you) or TenantWide (default for administrators); a regular user can create only UserSpecific pipelines" },
                         stages = new
                         {
@@ -73,6 +74,7 @@ namespace Armada.Server.Mcp.Tools
                     pipeline.TenantId = String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId;
                     pipeline.UserId = caller.UserId;
                     pipeline.Scope = ScopedVisibility.ResolveCreateScope(caller, request.Scope);
+                    pipeline.JudgeStrength = request.JudgeStrength ?? JudgeStrengthPolicyEnum.Wait;
                     if (request.Description != null)
                         pipeline.Description = request.Description;
 
@@ -163,6 +165,8 @@ namespace Armada.Server.Mcp.Tools
 
                     if (request.Description != null)
                         pipeline.Description = request.Description;
+                    if (request.JudgeStrength.HasValue)
+                        pipeline.JudgeStrength = request.JudgeStrength;
 
                     if (request.Stages != null)
                     {

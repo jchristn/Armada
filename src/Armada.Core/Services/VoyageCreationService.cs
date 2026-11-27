@@ -345,6 +345,8 @@ namespace Armada.Core.Services
             // creation that fails or is cut short leaves the voyage Building; the Admiral's health check fails it.
             Voyage voyage = NewVoyage(caller, request, vessel.TenantId, vessel.UserId);
             voyage.Status = VoyageStatusEnum.Building;
+            // RS-8.7: the pipeline's Judge strength rule is fixed for the voyage when it is created.
+            voyage.JudgeStrength = pipeline?.JudgeStrength;
             _Creating.TryAdd(voyage.Id, 0);
             try
             {

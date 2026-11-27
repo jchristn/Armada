@@ -75,18 +75,30 @@ namespace Armada.Core.Services
             return new DispatchCapacity { GlobalLimitReached = model.GlobalBlocker() != null, AnyCaptainHasRoom = model.AnyCaptainHasRoom() };
         }
 
+        // RS-8.5: every captain read for routing carries its model profile's tier, so tier decisions see it.
         private async Task<List<Captain>> PassCaptainsAsync(CancellationToken token)
         {
             DispatchPassCache? pass = _Pass.Value;
-            if (pass == null) return await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false);
-            if (pass.Captains == null) { pass.Captains = await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false); pass.Reads++; }
+            if (pass == null) return await WithProfileTiersAsync(await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false), token).ConfigureAwait(false);
+            if (pass.Captains == null) { pass.Captains = await WithProfileTiersAsync(await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false), token).ConfigureAwait(false); pass.Reads++; }
             return new List<Captain>(pass.Captains);
         }
 
         private async Task<Captain?> PassCaptainAsync(string captainId, CancellationToken token)
         {
-            if (_Pass.Value == null) return await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
+            if (_Pass.Value == null)
+            {
+                Captain? captain = await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
+                if (captain != null) await WithProfileTiersAsync(new List<Captain> { captain }, token).ConfigureAwait(false);
+                return captain;
+            }
             return (await PassCaptainsAsync(token).ConfigureAwait(false)).FirstOrDefault(c => c.Id == captainId);
+        }
+
+        private async Task<List<Captain>> WithProfileTiersAsync(List<Captain> captains, CancellationToken token)
+        {
+            await CaptainProfileTiers.ApplyAsync(captains, id => PassProfileAsync(id, token)).ConfigureAwait(false);
+            return captains;
         }
 
         private async Task<int> PassExecutionSlotsAsync(CancellationToken token)

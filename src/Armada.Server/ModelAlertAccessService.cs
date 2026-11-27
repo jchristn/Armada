@@ -191,12 +191,13 @@ namespace Armada.Server
             RequirePerson(caller);
             ModelAlert alert = await ReadVisibleAsync(caller, alertId, token).ConfigureAwait(false);
             RequireAdmin(caller);
-            if (request == null || !request.Action.HasValue) throw new ArgumentException("action is required (MoveDown, RemoveFromPersona, CompactTemplate, Reevaluate or Ignore).");
+            if (request == null || !request.Action.HasValue) throw new ArgumentException("action is required (MoveDown, RemoveFromPersona, CompactTemplate, Reevaluate, ApplyTier or Ignore).");
             if (!Enum.IsDefined(typeof(ModelAlertActionEnum), request.Action.Value)) throw new ArgumentException("Unknown action.");
 
             ModelAlertActionEnum action = request.Action.Value;
             ModelAlertActionPlan plan = await _Planner.PlanAsync(alert, caller, _Settings().DefaultIgnoreDays, token).ConfigureAwait(false);
-            ModelAlertSuggestedAction suggested = plan.Actions.First(a => a.Action == action);
+            ModelAlertSuggestedAction? suggested = plan.Actions.FirstOrDefault(a => a.Action == action);
+            if (suggested == null) throw new ArgumentException(action + " does not apply to a " + alert.Rule + " alert.");
             if (action != ModelAlertActionEnum.Ignore && !suggested.Available)
                 throw new ArgumentException(suggested.Label + " is unavailable: " + suggested.UnavailableReason);
 
@@ -211,6 +212,9 @@ namespace Armada.Server
                     break;
                 case ModelAlertActionEnum.Reevaluate:
                     await ReevaluateAsync(caller, plan, record, token).ConfigureAwait(false);
+                    break;
+                case ModelAlertActionEnum.ApplyTier:
+                    await ApplyTierAsync(caller, alert, plan, record, token).ConfigureAwait(false);
                     break;
                 case ModelAlertActionEnum.Ignore:
                     int days = request.Days ?? _Settings().DefaultIgnoreDays;
@@ -280,6 +284,22 @@ namespace Armada.Server
             record.Changed = true;
             record.TargetId = persona.Name;
             record.Result = persona.Name + ": " + String.Join("; ", parts) + ".";
+        }
+
+        private async Task ApplyTierAsync(AuthContext caller, ModelAlert alert, ModelAlertActionPlan plan, ModelAlertActionRecord record, CancellationToken token)
+        {
+            ModelProfile profile = plan.Profile!;
+            CaptainTierEnum tier = profile.Tiering.SuggestedTier!.Value;
+            CaptainTierEnum? previous = profile.Tiering.Tier;
+            profile.Tiering.Tier = tier;
+            profile.LastUpdateUtc = DateTime.UtcNow;
+            await _Database.ModelProfiles.UpdateAsync(profile, token).ConfigureAwait(false);
+            alert.Status = ModelAlertStatusEnum.Resolved;
+            alert.ResolvedUtc = record.AppliedUtc;
+            record.Changed = true;
+            record.TargetId = profile.Id;
+            record.Result = "Set the tier of model profile " + profile.Id + " to " + tier + (previous.HasValue ? " (was " + previous.Value + ")" : " (was classified from the model name)") + ".";
+            _Logging.Info(_Header + "profile " + profile.Id + " tier set to " + tier + " by " + caller.UserId + " from alert " + alert.Id);
         }
 
         private async Task ReevaluateAsync(AuthContext caller, ModelAlertActionPlan plan, ModelAlertActionRecord record, CancellationToken token)

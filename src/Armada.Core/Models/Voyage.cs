@@ -129,6 +129,12 @@ namespace Armada.Core.Models
         public bool IsEvaluation { get; set; } = false;
 
         /// <summary>
+        /// The Judge strength rule its pipeline set when the voyage was created (RS-8.7), or null for none (the rule is
+        /// off, as for every voyage created before 1.5.0). Copied once; a later pipeline edit does not change it.
+        /// </summary>
+        public Armada.Core.Enums.JudgeStrengthPolicyEnum? JudgeStrength { get; set; } = null;
+
+        /// <summary>
         /// The voyage's current black box entry (bbx_ prefix), or null when it has none.
         /// </summary>
         public string? LastBlackBoxEntryId { get; set; } = null;

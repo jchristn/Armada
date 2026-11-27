@@ -81,6 +81,13 @@ namespace Armada.Core.Models
         public bool Active { get; set; } = true;
 
         /// <summary>
+        /// Judge strength rule for the voyages this pipeline creates (RS-8.7): a Judge must be at least as strong as the
+        /// stages it reviews. Null means Off, which is what pipelines stored before 1.5.0 read as; a pipeline created
+        /// through the REST, MCP or WebSocket API without a value gets Wait.
+        /// </summary>
+        public Armada.Core.Enums.JudgeStrengthPolicyEnum? JudgeStrength { get; set; } = null;
+
+        /// <summary>
         /// Creation timestamp in UTC.
         /// </summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;

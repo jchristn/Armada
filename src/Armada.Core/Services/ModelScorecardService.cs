@@ -547,7 +547,7 @@ namespace Armada.Core.Services
             return byRule;
         }
 
-        private static string? ExclusionOf(StageOutcome outcome, string persona)
+        internal static string? ExclusionOf(StageOutcome outcome, string persona)
         {
             if (!PersonaCatalog.Matches(outcome.Persona, persona)) return RuleOtherStage;
             if (outcome.IsEvaluation) return RuleEvaluation;
@@ -628,7 +628,7 @@ namespace Armada.Core.Services
             return current;
         }
 
-        private static StageOutcome? ReviewedAttempt(List<StageOutcome> missionOutcomes, StageOutcome judge)
+        internal static StageOutcome? ReviewedAttempt(List<StageOutcome> missionOutcomes, StageOutcome judge)
         {
             DateTime reviewStart = (judge.StartedUtc ?? judge.EndedUtc).ToUniversalTime();
             List<StageOutcome> completed = missionOutcomes
@@ -639,7 +639,7 @@ namespace Armada.Core.Services
             return before ?? completed.LastOrDefault();
         }
 
-        private static JudgeVerdictEnum ParseVerdict(string? text)
+        internal static JudgeVerdictEnum ParseVerdict(string? text)
         {
             string normalized = (text ?? String.Empty).Replace("_", String.Empty, StringComparison.Ordinal).Trim();
             if (Enum.TryParse<JudgeVerdictEnum>(normalized, true, out JudgeVerdictEnum verdict)) return verdict;
