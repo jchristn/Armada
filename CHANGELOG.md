@@ -409,9 +409,13 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   (`client.Missions.GetAsync(id)`, `client.Battery.ListRunsAsync(...)`); the 1.4 flat methods are removed.
   `docs/SDK_MIGRATION_1.5.md` maps every 1.4 method to its 1.5 call. `ArmadaClient` and Core's `ArmadaApiClient` are no
   longer partial classes (RS-11.1).
-- **`MissionService` partials no longer share mutable collections.** Circuit breakers, launch backoff, admission
-  results, background launches, completion runs, usage-selection blockers, and warning flags each live in one owning
-  class; the readiness gate returns a typed outcome instead of a tuple (RS-11.1 in part, RS-11.2).
+- **No partial classes.** `MissionService` is a single facade over 23 services with one responsibility each
+  (`MissionLauncher`, `StageCompletionHandler`, `MissionCaptainRouter`, `ArchitectFanOutService`,
+  `MissionHandoffService`, `MissionReworkService`, `OutputRepairService`, and others) sharing one
+  `MissionServiceContext`; `AdmiralService` moves Harbor link episodes to `CaptainLinkMonitor`; battery pack authoring
+  moves to `BatteryPackAccessService`; the mission, captain, and captain selection database methods split into focused
+  classes on all four providers. Only the Avalonia windows the XAML compiler completes stay partial, and a source scan
+  keeps it that way. Black box records now name the owning service as their component (RS-11.1, RS-11.2).
 - **`SlotManager` is now `RebuildSlotManager`** (and `IRebuildSlotManager`), naming the binary rebuild slots it
   manages (RS-11.3).
 - **Unique-violation and git identity handling no longer match exception text.** Captain selection and captain slot
