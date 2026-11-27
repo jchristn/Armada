@@ -1143,13 +1143,13 @@ Parity manifests (`src/Armada.Tui/parity.json`, `src/Armada.Mobile/parity.json`)
 
 ### CLI and TUI
 
-- [ ] **RS-12.8** `armada` CLI (Armada.Helm): commands and flags for persona escalation ladders, model profile
+- [x] **RS-12.8** `armada` CLI (Armada.Helm): commands and flags for persona escalation ladders, model profile
   recovery policy and timeouts, mission attempt history (`armada mission attempts <id>`), mission create `--persona`
-  and `--mode`, and the gate report (`armada battery report`). Help text and docs. Evidence:
-- [ ] **RS-12.9** TUI: mission detail shows attempts, failure kinds, repairs, and escalations; persona and pipeline
+  and `--mode`, and the gate report (`armada battery report`). Help text and docs. Evidence: Helm commands above plus earlier battery runs/cancel and mission attempts; usage in docs/REST_API.md; suite Services.HelmReliability 7/7.
+- [x] **RS-12.9** TUI: mission detail shows attempts, failure kinds, repairs, and escalations; persona and pipeline
   screens edit the ladder and judge rule; model profile screen shows recovery policy, timeouts, and discovered
   context; blockers show the typed RS-4.6 reasons. `scripts/tui/generate-parity-manifest.py --check` passes.
-  Evidence:
+  Evidence: Tui.Reliability 6/6; all Tui.* with Client.Coverage, Client.RouteSurface, Services.HelmReliability and SourceGuards 681/681 on the merged head; `generate-parity-manifest.py --check` passes (729 entries, none planned). Attempts panel covered by helper unit tests only; model profile edit form has no test.
 
 ### Dashboard
 

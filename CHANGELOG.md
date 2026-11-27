@@ -461,6 +461,13 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   persona with server-side filtering, sorting, and paging, plus the latest gate report. A Battery Runs tab lists runs
   with Cancel. Settings has a Reliability and Routing section for every 1.5.0 setting (RS-12.10, RS-12.13, RS-12.4).
 
+- **CLI:** `armada mission create --persona --mode`, `armada persona list|show|ladder` (`--rung`, `--clear`),
+  `armada model-profile list|show|update` (tier, recovery, and timeout flags; `-1` clears an override), and
+  `armada battery report [id]` (RS-12.8).
+- **TUI:** Captains gains Model Profiles, Reliability (with the latest gate report), and Battery Runs (cancel) tabs;
+  the model profile page shows and edits tier, recovery, and timeouts with their source; mission detail has an
+  Attempts panel and names the typed blocker reason; pipelines edit the Judge strength rule (RS-12.9).
+
 ### Tests
 
 - Cases that set a skip reason now also set Touchstone's skip flag; five suites ran cases that were meant to skip,
