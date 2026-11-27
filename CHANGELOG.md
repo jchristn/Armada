@@ -451,6 +451,12 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   served context, tools, tier and suggestion, recovery policy and timeouts read-only. The app accepts `escalated` and
   `recovery_exhausted` pushes (RS-12.16).
 
+- **Dashboard reliability views.** Mission detail shows an attempts card (captain, model, outcome, failure kind, next
+  step, duration; live on attempt events) and submitted results with findings by severity. A Reliability tab under
+  Captains lists completion, failures, repairs, escalations, `Unclassified` rate, and failure kinds per model and
+  persona with server-side filtering, sorting, and paging, plus the latest gate report. A Battery Runs tab lists runs
+  with Cancel. Settings has a Reliability and Routing section for every 1.5.0 setting (RS-12.10, RS-12.13, RS-12.4).
+
 ### Tests
 
 - Cases that set a skip reason now also set Touchstone's skip flag; five suites ran cases that were meant to skip,

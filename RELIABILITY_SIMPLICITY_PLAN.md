@@ -1127,7 +1127,7 @@ Parity manifests (`src/Armada.Tui/parity.json`, `src/Armada.Mobile/parity.json`)
 - [x] **RS-12.3** WebSocket: events for escalation, repair, and attempt changes; existing `mission.changed` payloads
   carry the new fields; visibility rules from 1.4.0 apply. Evidence: `MissionAttemptChange` events and extended `mission.changed`; E2E.WebSocketSecurity green.
 - [x] **RS-12.4** Settings: every new setting has validation in its setter, defaults documented, and appears in the
-  runtime settings API and dashboard Settings page. Evidence: Settings API fields with setter validation; E2E.ReliabilitySettingsApi. Dashboard Settings page fields follow in the next wave.
+  runtime settings API and dashboard Settings page. Evidence: Settings API fields with setter validation; E2E.ReliabilitySettingsApi. Dashboard Settings: Reliability and Routing section.
 - [x] **RS-12.5** Telemetry: Prometheus metrics for RS-1.4, Grafana dashboard panels added under
   `docker/armada/observability/grafana` (pipeline reliability: completion rate, failure kinds, repairs, escalations,
   dispatch latency), per `TELEMETRY_REQUIREMENTS.md`. Evidence: `StageOutcomeMetrics`, `armada-pipeline-reliability.json`, `docs/TELEMETRY.md`; suite Services.StageOutcomeMetrics 4/4 (checks every dashboard query has an emitted series), related telemetry and stage-outcome suites 75/75.
@@ -1156,20 +1156,20 @@ Parity manifests (`src/Armada.Tui/parity.json`, `src/Armada.Mobile/parity.json`)
 All dashboard work follows `DASHBOARD_STYLE_AND_USABILITY.md` and `FRONTEND_ARCHITECTURE.md`, is localized for every
 shipped locale per `I18N.md`, and is checked in light and dark themes at desktop and phone widths.
 
-- [ ] **RS-12.10** Mission detail: an attempts timeline (each attempt's captain, model, tier, failure kind, repair
-  kind, escalation, duration), the submitted structured result, and findings with severity. Evidence:
-- [ ] **RS-12.11** Persona and pipeline editors: escalation ladder editor (same interaction as Captain Priorities),
-  judge strength rule, and reference pipeline templates (RS-1.6) available as "create from template". Evidence:
-- [ ] **RS-12.12** Model profiles and endpoints: recovery policy, timeouts, rendering, discovered versus configured
-  context, probe-derived capabilities with their source, streaming toggle. Evidence:
-- [ ] **RS-12.13** A reliability view (under Captains or Insights, per the navigation model in
+- [x] **RS-12.10** Mission detail: an attempts timeline (each attempt's captain, model, tier, failure kind, repair
+  kind, escalation, duration), the submitted structured result, and findings with severity. Evidence: MissionAttemptsCard (live via useMissionAttemptRevision) and MissionSubmissionsCard.
+- [x] **RS-12.11** Persona and pipeline editors: escalation ladder editor (same interaction as Captain Priorities),
+  judge strength rule, and reference pipeline templates (RS-1.6) available as "create from template". Evidence: Dashboard Model Profiles tab and detail (served and configured context with source, probed tools, tier, recovery policy and timeouts with source, admin editor); pipelines Judge strength and create-from-template; ladder editor already present.
+- [x] **RS-12.12** Model profiles and endpoints: recovery policy, timeouts, rendering, discovered versus configured
+  context, probe-derived capabilities with their source, streaming toggle. Evidence: Dashboard Model Profiles tab and detail (served and configured context with source, probed tools, tier, recovery policy and timeouts with source, admin editor); pipelines Judge strength and create-from-template; ladder editor already present.
+- [x] **RS-12.13** A reliability view (under Captains or Insights, per the navigation model in
   `docs/DASHBOARD_NAVIGATION.md`): per model and persona completion, failure kinds, repairs, escalations,
-  `Unclassified` rate, and the latest gate report. Backend filtering and sorting. Evidence:
-- [ ] **RS-12.14** Voyage and mission creation forms: persona and mode fields on every path; blockers on pending
-  missions show the typed reason and the action that clears it. Evidence:
-- [ ] **RS-12.15** Dashboard tests (Vitest) for every new view and editor; `npm run build` and `npm run test:run`
+  `Unclassified` rate, and the latest gate report. Backend filtering and sorting. Evidence: Captains > Reliability tab on /api/v1/reliability/summary with gate report panel; Battery Runs tab with cancel.
+- [x] **RS-12.14** Voyage and mission creation forms: persona and mode fields on every path; blockers on pending
+  missions show the typed reason and the action that clears it. Evidence: Persona on mission create, Mode on Dispatch; VoyageCreate and typed blockers already present.
+- [x] **RS-12.15** Dashboard tests (Vitest) for every new view and editor; `npm run build` and `npm run test:run`
   green; Playwright visual check (light, dark, phone, one non-English locale, no horizontal overflow, no console
-  errors) with screenshots saved. Evidence:
+  errors) with screenshots saved. Evidence: Vitest 2059/2059, type check and build green; Playwright on a seeded throwaway Admiral: light and dark desktop, light phone, dark phone in Spanish, Japanese desktop, 25 checks, no overflow, only unrelated 404s (proxy session context, Vite dev logo); screenshots kept outside the repo.
 
 ### Mobile
 
