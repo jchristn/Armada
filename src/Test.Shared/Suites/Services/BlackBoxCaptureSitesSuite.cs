@@ -33,7 +33,7 @@ namespace Test.Shared.Suites.Services
         private const string SuiteId = "Services.BlackBoxCaptureSites";
         private const string MissionLauncherFile = "src/Armada.Core/Services/MissionLauncher.cs";
         private const string AdmiralFile = "src/Armada.Core/Services/AdmiralService.cs";
-        private const string AdmiralHarborLinkFile = "src/Armada.Core/Services/AdmiralService.HarborLink.cs";
+        private const string CaptainLinkMonitorFile = "src/Armada.Core/Services/CaptainLinkMonitor.cs";
 
         #endregion
 
@@ -649,7 +649,7 @@ namespace Test.Shared.Suites.Services
             yield return M(BlackBoxStepEnum.ScopeViolation, BlackBoxPhaseEnum.Completion, scope, scope, MissionFailureKindEnum.ScopeViolation, "WorkProduced", "Failed");
             yield return M(BlackBoxStepEnum.BoundaryViolation, BlackBoxPhaseEnum.Completion, completion, completion, MissionFailureKindEnum.Boundary, "WorkProduced", "Failed");
             yield return M(BlackBoxStepEnum.DefinitionOfDone, BlackBoxPhaseEnum.Completion, completion, completion, MissionFailureKindEnum.TestFail, "WorkProduced", "Failed");
-            yield return M(BlackBoxStepEnum.StageCheck, BlackBoxPhaseEnum.Completion, "src/Armada.Core/Services/AdmiralService.Verification.cs", adm, MissionFailureKindEnum.InvalidOutput, "InProgress", "Failed");
+            yield return M(BlackBoxStepEnum.StageCheck, BlackBoxPhaseEnum.Completion, "src/Armada.Core/Services/AdmiralService.cs", adm, MissionFailureKindEnum.InvalidOutput, "InProgress", "Failed");
             yield return M(BlackBoxStepEnum.JudgeRejected, BlackBoxPhaseEnum.Review, completion, completion, MissionFailureKindEnum.JudgeRejected, "WorkProduced", "Failed");
             yield return M(BlackBoxStepEnum.ReviewDenied, BlackBoxPhaseEnum.Review, review, review, MissionFailureKindEnum.ReviewDenied, "Review", "Failed");
             yield return M(BlackBoxStepEnum.ReviewTimeout, BlackBoxPhaseEnum.Review, review, review, MissionFailureKindEnum.ReviewDenied, "Review", "Failed");
@@ -677,7 +677,7 @@ namespace Test.Shared.Suites.Services
             yield return M(BlackBoxStepEnum.RescueFailed, BlackBoxPhaseEnum.Recovery, recovery, recovery, MissionFailureKindEnum.Crash, "Failed", "Failed");
             yield return M(BlackBoxStepEnum.RedispatchExhausted, BlackBoxPhaseEnum.Recovery, adm, adm, MissionFailureKindEnum.Infra, "InProgress", "Failed");
             yield return M(BlackBoxStepEnum.OrphanedExit, BlackBoxPhaseEnum.Recovery, adm, adm, MissionFailureKindEnum.Infra, "InProgress", "WorkProduced");
-            yield return M(BlackBoxStepEnum.UnconfirmedStop, BlackBoxPhaseEnum.Recovery, AdmiralHarborLinkFile, AdmiralHarborLinkFile, MissionFailureKindEnum.Infra, "InProgress", "InProgress");
+            yield return M(BlackBoxStepEnum.UnconfirmedStop, BlackBoxPhaseEnum.Recovery, CaptainLinkMonitorFile, CaptainLinkMonitorFile, MissionFailureKindEnum.Infra, "InProgress", "InProgress");
             yield return M(BlackBoxStepEnum.MissingMergeHandoff, BlackBoxPhaseEnum.Recovery, adm, adm, MissionFailureKindEnum.Infra, "WorkProduced", "LandingFailed");
             yield return V(BlackBoxStepEnum.SettlementFailed, settlement, "InProgress", "Failed");
             yield return V(BlackBoxStepEnum.Halted, adm, "InProgress", "Cancelled");

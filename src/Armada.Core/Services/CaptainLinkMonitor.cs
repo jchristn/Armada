@@ -4,92 +4,112 @@ namespace Armada.Core.Services
     using System.Collections.Concurrent;
     using System.Linq;
     using System.Text.Json;
+    using SyslogLogging;
     using Armada.Core.BlackBox;
+    using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services.Interfaces;
+    using Armada.Core.Settings;
 
     /// <summary>
-    /// Captains that are unreachable (their Harbor lost the link) or whose stop was not confirmed. An unreachable captain
+    /// Link episodes of live captains for the Admiral's health check: captains that are unreachable (their Harbor lost the link) or whose stop was not confirmed. An unreachable captain
     /// may still be working, so missing output is not judged a stall while the link is down (for up to
     /// HarborDisconnectGraceMinutes). A stop that cannot be confirmed is recorded once and retried with backoff instead of
     /// on every health check, and is delivered again when the Harbor reconnects. Each episode is recorded by typed events
     /// (captain.unreachable, captain.stop_unconfirmed, captain.stop_redelivered, captain.reconciled) from which it is
     /// rebuilt after an Admiral restart.
     /// </summary>
-    public partial class AdmiralService
+    internal sealed class CaptainLinkMonitor
     {
-        #region Public-Members
-
-        /// <summary>
-        /// The Harbor link manager, or null when no Harbor can host captains. The health check reads which Harbor runs a
-        /// captain's process and whether that Harbor is linked, so a captain on a disconnected Harbor is held as unreachable
-        /// rather than judged stalled, and reconciled when the link returns.
-        /// </summary>
-        public HarborConnectionManager? HarborLinks { get; set; } = null;
-
-        #endregion
 
         #region Private-Members
 
         private const string _UnconfirmedStopReason = "Recovery deferred: the previous job has not confirmed its exit. No replacement was launched. Remediation: reconnect the owning Harbor and confirm the job has stopped before retrying.";
-        private const string _StallRemediation = "Remediation: inspect provider/tool progress and pending background work; correct blocked configuration or job lifetime before restarting.";
         private const int _MaxStopRetryDelayMinutes = 15;
         private static readonly TimeSpan _ReconnectSettle = TimeSpan.FromSeconds(30);
+        private readonly string _Header = "[CaptainLinkMonitor] ";
+        private readonly ICaptainLinkHost _Host;
+        private readonly DatabaseDriver _Database;
+        private readonly ArmadaSettings _Settings;
+        private readonly ICaptainService _Captains;
+        private readonly LoggingModule _Logging;
         private readonly ConcurrentDictionary<string, CaptainLinkEpisode> _LinkEpisodes = new ConcurrentDictionary<string, CaptainLinkEpisode>(StringComparer.Ordinal);
+
+        private HarborConnectionManager? HarborLinks => _Host.HarborLinks;
+
+        #endregion
+
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="host">The Admiral that owns the health check, its clock, Harbor links, black box, and events.</param>
+        /// <param name="database">Database driver.</param>
+        /// <param name="settings">Admiral settings.</param>
+        /// <param name="captains">Captain service that stops and recovers captains.</param>
+        /// <param name="logging">Logging module.</param>
+        /// <exception cref="ArgumentNullException">Thrown when any argument is null.</exception>
+        internal CaptainLinkMonitor(ICaptainLinkHost host, DatabaseDriver database, ArmadaSettings settings, ICaptainService captains, LoggingModule logging)
+        {
+            _Host = host ?? throw new ArgumentNullException(nameof(host));
+            _Database = database ?? throw new ArgumentNullException(nameof(database));
+            _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
+            _Captains = captains ?? throw new ArgumentNullException(nameof(captains));
+            _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+        }
 
         #endregion
 
         #region Private-Methods
 
-        private DateTime UtcNow()
-        {
-            return _Time.GetUtcNow().UtcDateTime;
-        }
-
-        private string? ProcessHarbor(int? processId)
+        internal string? ProcessHarbor(int? processId)
         {
             if (HarborLinks == null || !processId.HasValue) return null;
             return HarborLinks.TryGetHarborForProcess(processId.Value, out string? harborId) ? harborId : null;
         }
 
-        private static int NextRetryDelayMinutes(CaptainLinkEpisode episode)
+        internal static int NextRetryDelayMinutes(CaptainLinkEpisode episode)
         {
             if (!episode.StopPending || episode.RetryDelayMinutes < 1) return 1;
             return Math.Min(episode.RetryDelayMinutes * 2, _MaxStopRetryDelayMinutes);
         }
 
         /// <summary>
-        /// Run the unreachable and stop-pending part of a live captain's health check. Returns true when the health check
-        /// must stop here (the captain is held as unreachable, is waiting on an unconfirmed stop, or was reconciled on this
-        /// tick); false lets the max-runtime and stall checks run.
+        /// Run the unreachable and stop-pending part of a live captain's health check. Handled is true when the health
+        /// check must stop here (the captain is held as unreachable, is waiting on an unconfirmed stop, or was reconciled on
+        /// this tick); false lets the max-runtime and stall checks run. A stop the Harbor confirmed after reconnecting comes
+        /// back as ConfirmedStopPurpose for the Admiral to continue.
         /// </summary>
-        private async Task<bool> CheckLinkEpisodeAsync(Captain captain, Mission? mission, int processId, CancellationToken token)
+        internal async Task<CaptainLinkCheck> CheckLinkEpisodeAsync(Captain captain, Mission? mission, int processId, CancellationToken token)
         {
-            DateTime nowUtc = UtcNow();
+            DateTime nowUtc = _Host.UtcNow();
             CaptainLinkEpisode episode = await LoadEpisodeAsync(captain, mission, processId, token).ConfigureAwait(false);
             string? harborId = ProcessHarbor(processId);
 
             if (harborId != null && HarborLinks!.GetLinkState(harborId) == HarborLinkStateEnum.NotLinked)
             {
-                if (await HoldUnreachableCaptainAsync(captain, mission, harborId, processId, episode, nowUtc, token).ConfigureAwait(false)) return true;
+                if (await HoldUnreachableCaptainAsync(captain, mission, harborId, processId, episode, nowUtc, token).ConfigureAwait(false)) return CaptainLinkCheck.Hold;
             }
             else if (harborId != null && episode.IsOpen)
             {
-                if (await ReconcileAfterReconnectAsync(captain, mission, harborId, processId, episode, nowUtc, token).ConfigureAwait(false)) return true;
+                CaptainLinkCheck reconciled = await ReconcileAfterReconnectAsync(captain, mission, harborId, processId, episode, nowUtc, token).ConfigureAwait(false);
+                if (reconciled.Handled) return reconciled;
             }
 
-            if (!episode.StopPending) return false;
+            if (!episode.StopPending) return CaptainLinkCheck.Continue;
 
             // The captain reported activity after its stop was requested: it is working, so the pending stop is cancelled.
             if (captain.LastHeartbeatUtc.HasValue && captain.LastHeartbeatUtc.Value > episode.StopRequestedUtc!.Value)
             {
                 _Logging.Info(_Header + "captain " + captain.Id + " reported activity after its unconfirmed stop; cancelling the pending stop");
                 await CloseEpisodeAsync(captain, mission, episode, CaptainReconcileOutcomeEnum.Resumed, null, token).ConfigureAwait(false);
-                return false;
+                return CaptainLinkCheck.Continue;
             }
 
             // Waiting on the unconfirmed stop: no recovery is re-entered until the backoff elapses.
-            return nowUtc < episode.NextStopRetryUtc;
+            return nowUtc < episode.NextStopRetryUtc ? CaptainLinkCheck.Hold : CaptainLinkCheck.Continue;
         }
 
         private async Task<bool> HoldUnreachableCaptainAsync(Captain captain, Mission? mission, string harborId, int processId, CaptainLinkEpisode episode, DateTime nowUtc, CancellationToken token)
@@ -144,7 +164,7 @@ namespace Armada.Core.Services
             return false;
         }
 
-        private async Task<bool> ReconcileAfterReconnectAsync(Captain captain, Mission? mission, string harborId, int processId, CaptainLinkEpisode episode, DateTime nowUtc, CancellationToken token)
+        private async Task<CaptainLinkCheck> ReconcileAfterReconnectAsync(Captain captain, Mission? mission, string harborId, int processId, CaptainLinkEpisode episode, DateTime nowUtc, CancellationToken token)
         {
             HarborConnectionManager links = HarborLinks!;
             DateTime linkedSince = links.GetLinkedSinceUtc(harborId) ?? nowUtc;
@@ -153,14 +173,14 @@ namespace Armada.Core.Services
                 : (episode.UnreachableSinceUtc ?? episode.StopRequestedUtc!.Value);
 
             // The link was up for the whole episode (a stop the Harbor did not confirm in time): the backoff applies.
-            if (!episode.UnreachableSinceUtc.HasValue && linkedSince <= episodeStart) return false;
+            if (!episode.UnreachableSinceUtc.HasValue && linkedSince <= episodeStart) return CaptainLinkCheck.Continue;
 
             // Let the Harbor replay its job outbox (which may carry the job's exit) and report what still runs first.
-            if (!links.HasReportedSinceLink(harborId) && nowUtc - linkedSince < _ReconnectSettle) return true;
+            if (!links.HasReportedSinceLink(harborId) && nowUtc - linkedSince < _ReconnectSettle) return CaptainLinkCheck.Hold;
 
             // The job ended while the link was down: its replayed exit (or the vanished-job report) is applied through
             // the normal exit path, which closes the episode.
-            if (links.IsProcessLive(processId) != true) return true;
+            if (links.IsProcessLive(processId) != true) return CaptainLinkCheck.Hold;
 
             if (episode.StopPending)
             {
@@ -169,7 +189,7 @@ namespace Armada.Core.Services
                     _Logging.Info(_Header + "captain " + captain.Id + " is still working on reconnected Harbor " + harborId + "; cancelling its pending stop");
                     await ResetStallClockAsync(captain, linkedSince, token).ConfigureAwait(false);
                     await CloseEpisodeAsync(captain, mission, episode, CaptainReconcileOutcomeEnum.Resumed, linkedSince, token).ConfigureAwait(false);
-                    return true;
+                    return CaptainLinkCheck.Hold;
                 }
 
                 // Still running and silent since the stop was requested: it is stuck, so the stop is delivered now.
@@ -207,13 +227,12 @@ namespace Armada.Core.Services
                 {
                     episode.RetryDelayMinutes = NextRetryDelayMinutes(episode);
                     episode.NextStopRetryUtc = nowUtc.AddMinutes(episode.RetryDelayMinutes);
-                    return true;
+                    return CaptainLinkCheck.Hold;
                 }
 
                 CaptainStopPurposeEnum purpose = episode.Purpose;
                 await CloseEpisodeAsync(captain, mission, episode, CaptainReconcileOutcomeEnum.Stopped, linkedSince, token).ConfigureAwait(false);
-                await ContinueAfterConfirmedStopAsync(captain, mission, purpose, token).ConfigureAwait(false);
-                return true;
+                return CaptainLinkCheck.StopConfirmed(purpose);
             }
 
             // Unreachable only: the captain was working through the outage, so monitoring resumes with the stall clock
@@ -221,7 +240,7 @@ namespace Armada.Core.Services
             _Logging.Info(_Header + "Harbor " + harborId + " reconnected; resuming stall monitoring of captain " + captain.Id + " from " + linkedSince.ToString("o"));
             await ResetStallClockAsync(captain, linkedSince, token).ConfigureAwait(false);
             await CloseEpisodeAsync(captain, mission, episode, CaptainReconcileOutcomeEnum.Resumed, linkedSince, token).ConfigureAwait(false);
-            return true;
+            return CaptainLinkCheck.Hold;
         }
 
         private async Task PersistRuntimeContextAsync(Captain captain, CancellationToken token)
@@ -242,51 +261,16 @@ namespace Armada.Core.Services
             await PersistRuntimeContextAsync(captain, token).ConfigureAwait(false);
         }
 
-        private async Task ContinueAfterConfirmedStopAsync(Captain captain, Mission? mission, CaptainStopPurposeEnum purpose, CancellationToken token)
-        {
-            if (purpose == CaptainStopPurposeEnum.MaxRuntime)
-            {
-                if (mission != null) await FailMaxRuntimeAsync(captain, mission, token).ConfigureAwait(false);
-                return;
-            }
 
-            if (purpose == CaptainStopPurposeEnum.Recovery && captain.RecoveryAttempts > 0)
-            {
-                // The attempt was counted when its stop could not be confirmed; TryRecoverAsync counts it again as it
-                // relaunches, so it is handed the count from before that attempt.
-                captain.RecoveryAttempts--;
-                await _Captains.TryRecoverAsync(captain, token).ConfigureAwait(false);
-                return;
-            }
-
-            DateTime? heartbeat = captain.LastHeartbeatUtc ?? mission?.StartedUtc;
-            double idle = heartbeat.HasValue ? (UtcNow() - heartbeat.Value).TotalMinutes : 0;
-            await FailStallRecoveryExhaustedAsync(captain, mission, StallReason(idle), heartbeat, token).ConfigureAwait(false);
-        }
-
-        private string StallReason(double idleMinutes, int? thresholdMinutes = null, bool firstOutput = false)
-        {
-            int threshold = thresholdMinutes ?? _Settings.StallThresholdMinutes;
-            if (firstOutput)
-                return "No output for " + idleMinutes.ToString("F1") + " min since launch (first-output limit for this model: " + threshold + " min).";
-            return "No activity for " + idleMinutes.ToString("F1") + " min (configured stall threshold: " + threshold + " min).";
-        }
-
-        // A mission has had no output in this run when its output heartbeat is unset or older than its start.
-        private static bool AwaitingFirstOutput(Mission? mission)
-        {
-            if (mission == null || !mission.StartedUtc.HasValue) return false;
-            return !mission.LastHeartbeatUtc.HasValue || mission.LastHeartbeatUtc.Value < mission.StartedUtc.Value;
-        }
 
         /// <summary>
         /// Record a stop the owning host did not confirm. Ownership is retained (the mission keeps its status and no
         /// replacement is launched). The first time in an episode the mission is marked, the black box records it and one
         /// captain.stop_unconfirmed event is written; later failures only extend the backoff (1, 2, 4 ... 15 minutes).
         /// </summary>
-        private async Task RecordUnconfirmedStopAsync(Captain captain, Mission? mission, CaptainStopPurposeEnum purpose, Exception? error, CancellationToken token)
+        internal async Task RecordUnconfirmedStopAsync(Captain captain, Mission? mission, CaptainStopPurposeEnum purpose, Exception? error, CancellationToken token)
         {
-            DateTime nowUtc = UtcNow();
+            DateTime nowUtc = _Host.UtcNow();
             int? processId = captain.ProcessId ?? mission?.ProcessId;
             CaptainLinkEpisode episode = await LoadEpisodeAsync(captain, mission, processId, token).ConfigureAwait(false);
             string? harborId = ProcessHarbor(processId) ?? episode.HarborId;
@@ -325,7 +309,7 @@ namespace Armada.Core.Services
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
                 // Non-terminal (the mission keeps its status); recorded once per episode, not on every health check.
                 if (!alreadyRecorded)
-                    await BlackBox.RecordMissionFailureAsync(mission, mission.Status, BlackBoxStepEnum.UnconfirmedStop, context =>
+                    await _Host.BlackBox.RecordMissionFailureAsync(mission, mission.Status, BlackBoxStepEnum.UnconfirmedStop, context =>
                     {
                         context.Captain = captain;
                         context.Exception = error;
@@ -359,7 +343,7 @@ namespace Armada.Core.Services
             await EmitEpisodeEventAsync("captain.stop_unconfirmed", message, captain, mission, payload, token).ConfigureAwait(false);
         }
 
-        private async Task CloseEpisodeAsync(Captain captain, Mission? mission, CaptainLinkEpisode episode, CaptainReconcileOutcomeEnum outcome, DateTime? reconnectedUtc, CancellationToken token)
+        internal async Task CloseEpisodeAsync(Captain captain, Mission? mission, CaptainLinkEpisode episode, CaptainReconcileOutcomeEnum outcome, DateTime? reconnectedUtc, CancellationToken token)
         {
             if (!episode.IsOpen) return;
             CaptainReconciledPayload payload = new CaptainReconciledPayload
@@ -432,7 +416,7 @@ namespace Armada.Core.Services
         /// <summary>
         /// Close the episode of a captain whose process exit is being handled: the exit settles it.
         /// </summary>
-        private async Task CloseEpisodeOnExitAsync(string captainId, string missionId, int processId, CancellationToken token)
+        internal async Task CloseEpisodeOnExitAsync(string captainId, string missionId, int processId, CancellationToken token)
         {
             try
             {
@@ -458,7 +442,7 @@ namespace Armada.Core.Services
         }
 
         // The captain's open link episode when its stop is still unconfirmed, or null.
-        private CaptainLinkEpisode? PendingStopEpisode(Captain captain)
+        internal CaptainLinkEpisode? PendingStopEpisode(Captain captain)
             => _LinkEpisodes.TryGetValue(captain.Assignment?.Id ?? captain.Id, out CaptainLinkEpisode? episode) && episode.StopPending ? episode : null;
 
         private async Task<CaptainLinkEpisode> LoadEpisodeAsync(Captain captain, Mission? mission, int? processId, CancellationToken token)
@@ -558,10 +542,7 @@ namespace Armada.Core.Services
 
         private async Task EmitEpisodeEventAsync(string eventType, string message, Captain captain, Mission? mission, object payload, CancellationToken token, string? missionId = null)
         {
-            await EmitEventAsync(eventType, message, entityType: "captain", entityId: captain.Id, captainId: captain.Id,
-                missionId: mission?.Id ?? missionId, vesselId: mission?.VesselId, voyageId: mission?.VoyageId,
-                token: token, tenantId: mission?.TenantId ?? captain.TenantId, userId: mission?.UserId ?? captain.UserId,
-                payload: JsonSerializer.Serialize(payload, payload.GetType())).ConfigureAwait(false);
+            await _Host.EmitCaptainEventAsync(eventType, message, captain, mission, missionId, JsonSerializer.Serialize(payload, payload.GetType()), token).ConfigureAwait(false);
         }
 
         #endregion
