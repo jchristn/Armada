@@ -1101,9 +1101,9 @@ the job and keep it from coming back.
 - [ ] **RS-11.2** Style fixes: `var` and tuples in `MissionService.cs` (around line 548), `MissionService.Readiness.cs:11`,
   and `AdmissionStuckMonitor.cs:57-66`; the mis-indented blocks at `MissionService.Handoff.cs:162-178`; inline
   non-compiled regexes in `MissionService.ArchitectPlan.cs:317, 547, 577`. Evidence:
-- [ ] **RS-11.3** Rename `SlotManager` to describe what it manages (binary rebuild slots). Evidence:
-- [ ] **RS-11.4** Source-scan tests that keep the simplifications in place: no direct mission status writes (RS-3.6),
-  no reads of control markers from `Description`, no `ex.Message.Contains` in Core, no second dispatcher. Evidence:
+- [x] **RS-11.3** Rename `SlotManager` to describe what it manages (binary rebuild slots). Evidence: `RebuildSlotManager`/`IRebuildSlotManager`, suite Services.RebuildSlotManager 7/7.
+- [x] **RS-11.4** Source-scan tests that keep the simplifications in place: no direct mission status writes (RS-3.6),
+  no reads of control markers from `Description`, no `ex.Message.Contains` in Core, no second dispatcher. Evidence: Suite Services.SourceGuards (no control markers read from descriptions, no exception message matching in Core with two reasoned allow-list entries, one dispatcher); direct status writes already guarded by Services.MissionTransitions `no_direct_status_writes`. Fixed CaptainSelectionMethods, CaptainSlotStore (provider error codes) and GitService.CommitAllAsync (`git var` identity check). Guards plus rename 10/10 on the merged head; 113 affected tests SQLite, 28/28 PostgreSQL. Outside the Core scan: `McpAskTools` still matches "not found" text.
 - [ ] **RS-11.5** Warning-free Release build on both frameworks after all changes. Evidence:
 
 ## Phase 12: Product surfaces

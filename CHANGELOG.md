@@ -403,6 +403,14 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
 - **The Harbor app shows its capability flags**, a banner with update steps when the Admiral needs flags this Harbor
   lacks, and the context windows it discovered for local endpoints (RS-12.19).
 
+### Code health
+
+- **`SlotManager` is now `RebuildSlotManager`** (and `IRebuildSlotManager`), naming the binary rebuild slots it
+  manages (RS-11.3).
+- **Unique-violation and git identity handling no longer match exception text.** Captain selection and captain slot
+  writes use provider error codes; a failed commit retries as Armada only when `git var` reports no author or committer
+  identity (RS-11.4).
+
 ### Tests
 
 - Cases that set a skip reason now also set Touchstone's skip flag; five suites ran cases that were meant to skip,
