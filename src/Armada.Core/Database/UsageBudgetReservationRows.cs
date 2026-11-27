@@ -6,10 +6,12 @@ namespace Armada.Core.Database
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using static Armada.Core.Database.CaptainSelectionSql;
 
-    internal sealed partial class CaptainSelectionMethods
+    /// <summary>Usage budget reservation rows: insert and map.</summary>
+    internal static class UsageBudgetReservationRows
     {
-        private static async Task InsertUsageBudgetReservationAsync(DbConnection connection, DbTransaction transaction, UsageBudgetReservation row, CancellationToken token)
+        internal static async Task InsertUsageBudgetReservationAsync(DbConnection connection, DbTransaction transaction, UsageBudgetReservation row, CancellationToken token)
         {
             using DbCommand command = Command(connection, transaction, "INSERT INTO usage_budget_reservations(id,tenant_id,user_id,created_utc,last_update_utc,active,decision_id,mission_id,execution_attempt_id,captain_id,membership_id,host_id,runtime,account_key,window_key,generation_key,reserved_percent,state,revision,execution_started_utc,execution_ended_utc,settlement_eligible_utc,settled_by_snapshot_id,released_utc,transition_reason) VALUES(@id,@tenant_id,@user_id,@created_utc,@last_update_utc,@active,@decision_id,@mission_id,@execution_attempt_id,@captain_id,@membership_id,@host_id,@runtime,@account_key,@window_key,@generation_key,@reserved_percent,@state,@revision,@execution_started_utc,@execution_ended_utc,@settlement_eligible_utc,@settled_by_snapshot_id,@released_utc,@transition_reason);");
             Add(command, "@id", row.Id);
@@ -40,7 +42,7 @@ namespace Armada.Core.Database
             await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
         }
 
-        private static UsageBudgetReservation MapUsageBudgetReservation(DbDataReader reader)
+        internal static UsageBudgetReservation MapUsageBudgetReservation(DbDataReader reader)
         {
             return new UsageBudgetReservation
             {

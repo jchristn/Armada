@@ -6,10 +6,12 @@ namespace Armada.Core.Database
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using static Armada.Core.Database.CaptainSelectionSql;
 
-    internal sealed partial class CaptainSelectionMethods
+    /// <summary>Selection policy revision rows: insert and map.</summary>
+    internal static class CaptainSelectionPolicyRevisionRows
     {
-        private static async Task InsertCaptainSelectionPolicyRevisionAsync(DbConnection connection, DbTransaction transaction, CaptainSelectionPolicyRevision row, CancellationToken token)
+        internal static async Task InsertCaptainSelectionPolicyRevisionAsync(DbConnection connection, DbTransaction transaction, CaptainSelectionPolicyRevision row, CancellationToken token)
         {
             using DbCommand command = Command(connection, transaction, "INSERT INTO captain_selection_policy_revisions(id,tenant_id,user_id,created_utc,last_update_utc,active,fingerprint,algorithm_version,mode,strategy,unknown_usage_behavior,reserve_percent,comfortable_headroom_percent,per_attempt_reservation_percent,maximum_freshness_seconds,unknown_retry_seconds,provider_cooldown_seconds,settlement_lag_seconds,maximum_unsettled_seconds,decision_retention_days,maximum_candidates) VALUES(@id,@tenant_id,@user_id,@created_utc,@last_update_utc,@active,@fingerprint,@algorithm_version,@mode,@strategy,@unknown_usage_behavior,@reserve_percent,@comfortable_headroom_percent,@per_attempt_reservation_percent,@maximum_freshness_seconds,@unknown_retry_seconds,@provider_cooldown_seconds,@settlement_lag_seconds,@maximum_unsettled_seconds,@decision_retention_days,@maximum_candidates);");
             Add(command, "@id", row.Id);
@@ -36,7 +38,7 @@ namespace Armada.Core.Database
             await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
         }
 
-        private static CaptainSelectionPolicyRevision MapCaptainSelectionPolicyRevision(DbDataReader reader)
+        internal static CaptainSelectionPolicyRevision MapCaptainSelectionPolicyRevision(DbDataReader reader)
         {
             return new CaptainSelectionPolicyRevision
             {

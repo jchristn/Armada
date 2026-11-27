@@ -7,14 +7,29 @@ namespace Armada.Core.Database
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Models;
+    using static Armada.Core.Database.CaptainSelectionMethods;
+    using static Armada.Core.Database.CaptainSelectionSql;
 
-    internal sealed partial class CaptainSelectionMethods
+    /// <summary>Candidates a decision omitted: insert and read.</summary>
+    internal sealed class CaptainSelectionOmittedCandidateStore
     {
+        private readonly CaptainSelectionConnector _Connector;
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="connector">Opens provider connections.</param>
+        /// <exception cref="ArgumentNullException">Thrown when connector is null.</exception>
+        internal CaptainSelectionOmittedCandidateStore(CaptainSelectionConnector connector)
+        {
+            _Connector = connector ?? throw new ArgumentNullException(nameof(connector));
+        }
+
         /// <inheritdoc />
         public Task<List<CaptainSelectionOmittedReason>> ReadOmittedCandidatesAsync(string tenantId, string decisionId, string? ownerUserId = null, string? candidateOwnerUserId = null, CancellationToken token = default)
         {
             Required(tenantId, nameof(tenantId)); Required(decisionId, nameof(decisionId));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 // Hidden peers' counts are excluded the same way their candidate rows are.
                 using DbCommand command = Command(connection, null, "SELECT o.reason_code,SUM(o.candidate_count) AS omitted FROM captain_selection_omitted_candidates o JOIN captain_selection_decisions d ON d.id=o.decision_id AND d.tenant_id=o.tenant_id"
@@ -34,7 +49,7 @@ namespace Armada.Core.Database
             }, token);
         }
 
-        private static async Task InsertCaptainSelectionOmittedCandidatesAsync(DbConnection connection, DbTransaction transaction, CaptainSelectionOmittedCandidates row, CancellationToken token)
+        internal static async Task InsertCaptainSelectionOmittedCandidatesAsync(DbConnection connection, DbTransaction transaction, CaptainSelectionOmittedCandidates row, CancellationToken token)
         {
             using DbCommand command = Command(connection, transaction, "INSERT INTO captain_selection_omitted_candidates(id,tenant_id,user_id,created_utc,last_update_utc,active,decision_id,reason_code,candidate_count) VALUES(@id,@tenant_id,@user_id,@created_utc,@last_update_utc,@active,@decision_id,@reason_code,@candidate_count);");
             Add(command, "@id", row.Id);

@@ -8,14 +8,28 @@ namespace Armada.Core.Database
     using System.Threading.Tasks;
     using Armada.Core.Models;
     using Armada.Core.Services;
+    using static Armada.Core.Database.CaptainSelectionSql;
 
-    internal sealed partial class CaptainSelectionMethods
+    /// <summary>Usage selection recovery reads and authorization.</summary>
+    internal sealed class CaptainSelectionRecoveryAuthorization
     {
+        private readonly CaptainSelectionConnector _Connector;
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="connector">Opens provider connections.</param>
+        /// <exception cref="ArgumentNullException">Thrown when connector is null.</exception>
+        internal CaptainSelectionRecoveryAuthorization(CaptainSelectionConnector connector)
+        {
+            _Connector = connector ?? throw new ArgumentNullException(nameof(connector));
+        }
+
         /// <inheritdoc />
         public Task<UsageSelectionRecovery?> ReadDecisionRecoveryAsync(string tenantId, string decisionId, CancellationToken token = default)
         {
             Required(tenantId, nameof(tenantId)); Required(decisionId, nameof(decisionId));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 using DbCommand command = Command(connection, null, @"SELECT r.* FROM usage_selection_recovery r JOIN captain_selection_execution_events e ON e.tenant_id=r.tenant_id AND e.reporting_source=r.id
                     WHERE e.tenant_id=@tenant AND e.decision_id=@decision AND e.event_kind='" + CaptainSelectionEventKinds.RecoveryAuthorizationApplied + "' ORDER BY r.revision DESC" + PageSql(connection));
@@ -25,7 +39,7 @@ namespace Armada.Core.Database
             }, token);
         }
 
-        private static UsageSelectionRecovery MapRecovery(DbDataReader reader)
+        internal static UsageSelectionRecovery MapRecovery(DbDataReader reader)
             => new UsageSelectionRecovery { Id = reader["id"].ToString()!, MissionId = reader["mission_id"].ToString()!, ActorUserId = reader["actor_user_id"].ToString()!, Reason = reader["reason"].ToString()!,
                 AllowFallback = Convert.ToInt32(reader["allow_fallback"], CultureInfo.InvariantCulture) != 0, ReserveException = Convert.ToInt32(reader["reserve_exception"], CultureInfo.InvariantCulture) != 0,
                 Revision = Convert.ToInt32(reader["revision"], CultureInfo.InvariantCulture), CreatedUtc = ParseUtc(reader["created_utc"]) };
@@ -34,10 +48,10 @@ namespace Armada.Core.Database
         public Task<UsageSelectionRecovery?> ReadRecoveryAsync(string tenantId, string missionId, CancellationToken token = default)
         {
             Required(tenantId, nameof(tenantId)); Required(missionId, nameof(missionId));
-            return RunAsync(connection => ReadRecoveryAsync(connection, null, tenantId, missionId, token), token);
+            return _Connector.RunAsync(connection => ReadRecoveryAsync(connection, null, tenantId, missionId, token), token);
         }
 
-        private static async Task<UsageSelectionRecovery?> ReadRecoveryAsync(DbConnection connection, DbTransaction? transaction, string tenantId, string missionId, CancellationToken token)
+        internal static async Task<UsageSelectionRecovery?> ReadRecoveryAsync(DbConnection connection, DbTransaction? transaction, string tenantId, string missionId, CancellationToken token)
         {
             using DbCommand command = Command(connection, transaction, "SELECT * FROM usage_selection_recovery WHERE tenant_id=@tenant AND mission_id=@mission ORDER BY revision DESC" + PageSql(connection));
             Add(command, "@tenant", tenantId); Add(command, "@mission", missionId); Add(command, "@skip", 0); Add(command, "@take", 1);
@@ -53,7 +67,7 @@ namespace Armada.Core.Database
             if (request.ExpectedRevision < 0 || request.ExpectedRevision == Int32.MaxValue || String.IsNullOrWhiteSpace(request.Reason) || request.Reason.Length > 512
                 || UsageSelectionEvidenceSanitizer.Label(request.Reason) != request.Reason || System.Linq.Enumerable.Any(request.Reason, Char.IsControl))
                 throw new ArgumentException("Recovery requires a nonnegative revision and a plain explanation of 1..512 characters, without credentials.", nameof(request));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 using DbTransaction transaction = await connection.BeginTransactionAsync(connection.GetType().Name == "SqliteConnection" ? IsolationLevel.Serializable : IsolationLevel.ReadCommitted, token).ConfigureAwait(false);
                 using DbCommand locked = Command(connection, transaction, "UPDATE missions SET last_update_utc=@at WHERE tenant_id=@tenant AND id=@mission AND status='Pending';");

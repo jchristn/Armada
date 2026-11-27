@@ -6,10 +6,12 @@ namespace Armada.Core.Database
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using static Armada.Core.Database.CaptainSelectionSql;
 
-    internal sealed partial class CaptainSelectionMethods
+    /// <summary>Selection decision rows: insert and map.</summary>
+    internal static class CaptainSelectionDecisionRows
     {
-        private static async Task InsertCaptainSelectionDecisionAsync(DbConnection connection, DbTransaction transaction, CaptainSelectionDecision row, CancellationToken token)
+        internal static async Task InsertCaptainSelectionDecisionAsync(DbConnection connection, DbTransaction transaction, CaptainSelectionDecision row, CancellationToken token)
         {
             using DbCommand command = Command(connection, transaction, "INSERT INTO captain_selection_decisions(id,tenant_id,user_id,created_utc,last_update_utc,active,mission_id,voyage_id,execution_attempt_id,trigger_kind,mode,outcome,selected_captain_id,selected_provider,selected_model,hypothetical_captain_id,hypothetical_outcome,algorithm_version,policy_revision_id,routing_revision,evidence_fingerprint,previous_decision_id,evaluated_utc,next_reconsider_utc,primary_reason_code,override_actor_id,override_reason,candidate_count) VALUES(@id,@tenant_id,@user_id,@created_utc,@last_update_utc,@active,@mission_id,@voyage_id,@execution_attempt_id,@trigger_kind,@mode,@outcome,@selected_captain_id,@selected_provider,@selected_model,@hypothetical_captain_id,@hypothetical_outcome,@algorithm_version,@policy_revision_id,@routing_revision,@evidence_fingerprint,@previous_decision_id,@evaluated_utc,@next_reconsider_utc,@primary_reason_code,@override_actor_id,@override_reason,@candidate_count);");
             Add(command, "@id", row.Id);
@@ -43,7 +45,7 @@ namespace Armada.Core.Database
             await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
         }
 
-        private static CaptainSelectionDecision MapCaptainSelectionDecision(DbDataReader reader)
+        internal static CaptainSelectionDecision MapCaptainSelectionDecision(DbDataReader reader)
         {
             return new CaptainSelectionDecision
             {

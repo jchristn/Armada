@@ -10,10 +10,28 @@ namespace Armada.Core.Database
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
+    using static Armada.Core.Database.CaptainSelectionAccountEvidence;
+    using static Armada.Core.Database.CaptainSelectionExecutionEventRows;
+    using static Armada.Core.Database.CaptainSelectionMethods;
+    using static Armada.Core.Database.CaptainSelectionSql;
+    using static Armada.Core.Database.UsageAccountCooldownRows;
 
-    internal sealed partial class CaptainSelectionMethods
+    /// <summary>Execution sources and launch boundaries: launch attempted, unstarted releases, and provider cooldowns.</summary>
+    internal sealed class CaptainSelectionLaunchBoundary
     {
-        private static async Task TrackExecutionSourceAsync(DbConnection connection, DbTransaction transaction, string missionId,
+        private readonly CaptainSelectionConnector _Connector;
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="connector">Opens provider connections.</param>
+        /// <exception cref="ArgumentNullException">Thrown when connector is null.</exception>
+        internal CaptainSelectionLaunchBoundary(CaptainSelectionConnector connector)
+        {
+            _Connector = connector ?? throw new ArgumentNullException(nameof(connector));
+        }
+
+        internal static async Task TrackExecutionSourceAsync(DbConnection connection, DbTransaction transaction, string missionId,
             CaptainSelectionRecordSet? records, string? localHostId, bool adopting, CancellationToken token)
         {
             UsageExecutionSource row;
@@ -60,7 +78,7 @@ namespace Armada.Core.Database
             await insert.ExecuteNonQueryAsync(token).ConfigureAwait(false);
         }
 
-        private static async Task<UsageExecutionSource?> ReadExecutionSourceAsync(DbConnection connection, DbTransaction? transaction, string tenantId, string executionKey, CancellationToken token)
+        internal static async Task<UsageExecutionSource?> ReadExecutionSourceAsync(DbConnection connection, DbTransaction? transaction, string tenantId, string executionKey, CancellationToken token)
         {
             using DbCommand command = Command(connection, transaction, "SELECT * FROM usage_execution_sources WHERE tenant_id=@tenant AND execution_key=@execution;");
             Add(command, "@tenant", tenantId); Add(command, "@execution", executionKey);
@@ -76,7 +94,7 @@ namespace Armada.Core.Database
         public Task<string?> ReadUsageExecutionKeyAsync(string tenantId, string missionId, CancellationToken token = default)
         {
             Required(tenantId, nameof(tenantId)); Required(missionId, nameof(missionId));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 using DbCommand command = Command(connection, null, "SELECT usage_execution_key FROM missions WHERE tenant_id=@tenant AND id=@mission;");
                 Add(command, "@tenant", tenantId); Add(command, "@mission", missionId);
@@ -96,7 +114,7 @@ namespace Armada.Core.Database
         private Task<bool> ChangeLaunchBoundaryAsync(string tenantId, string missionId, string captainId, string executionKey, bool release, CancellationToken token)
         {
             Required(tenantId, nameof(tenantId)); Required(missionId, nameof(missionId)); Required(captainId, nameof(captainId)); Required(executionKey, nameof(executionKey));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 using DbTransaction transaction = await connection.BeginTransactionAsync(connection.GetType().Name == "SqliteConnection" ? IsolationLevel.Serializable : IsolationLevel.ReadCommitted, token).ConfigureAwait(false);
                 using DbCommand locked = Command(connection, transaction, "UPDATE missions SET usage_execution_key=usage_execution_key WHERE tenant_id=@tenant AND id=@mission AND captain_id=@captain AND usage_execution_key=@execution AND status IN ('Assigned','InProgress')" + (release ? " AND process_id IS NULL" : "") + ";");
@@ -146,7 +164,7 @@ namespace Armada.Core.Database
         public Task<bool> ReleaseStoppedUnstartedAsync(string tenantId, string executionKey, CancellationToken token = default)
         {
             Required(tenantId, nameof(tenantId)); Required(executionKey, nameof(executionKey));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 using DbTransaction transaction = await connection.BeginTransactionAsync(connection.GetType().Name == "SqliteConnection" ? IsolationLevel.Serializable : IsolationLevel.ReadCommitted, token).ConfigureAwait(false);
                 UsageExecutionSource? source = await ReadExecutionSourceAsync(connection, transaction, tenantId, executionKey, token).ConfigureAwait(false);
@@ -187,7 +205,7 @@ namespace Armada.Core.Database
             Required(request.TenantId, nameof(request.TenantId)); Required(request.MissionId, nameof(request.MissionId)); Required(request.CaptainId, nameof(request.CaptainId)); Required(request.ExecutionKey, nameof(request.ExecutionKey));
             if (request.ObservedUtc.Kind != DateTimeKind.Utc || request.UntilUtc.Kind != DateTimeKind.Utc || request.UntilUtc <= request.ObservedUtc || request.UntilUtc > request.ObservedUtc.AddHours(24))
                 throw new ArgumentException("A UTC provider cooldown must be positive and bounded to 24 hours.", nameof(request));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 using DbTransaction transaction = await connection.BeginTransactionAsync(connection.GetType().Name == "SqliteConnection" ? IsolationLevel.Serializable : IsolationLevel.ReadCommitted, token).ConfigureAwait(false);
                 using DbCommand locked = Command(connection, transaction, "UPDATE missions SET usage_execution_key=usage_execution_key WHERE tenant_id=@tenant AND id=@mission AND captain_id=@captain AND usage_execution_key=@execution;");

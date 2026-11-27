@@ -10,21 +10,37 @@ namespace Armada.Core.Database
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Settings;
+    using static Armada.Core.Database.CaptainSelectionAccountEvidence;
+    using static Armada.Core.Database.CaptainSelectionLaunchBoundary;
+    using static Armada.Core.Database.CaptainSelectionSql;
 
-    internal sealed partial class CaptainSelectionMethods
+    /// <summary>Legacy admission and executions that started without a reservation.</summary>
+    internal sealed class CaptainSelectionUntrackedExecutions
     {
+        private readonly CaptainSelectionConnector _Connector;
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="connector">Opens provider connections.</param>
+        /// <exception cref="ArgumentNullException">Thrown when connector is null.</exception>
+        internal CaptainSelectionUntrackedExecutions(CaptainSelectionConnector connector)
+        {
+            _Connector = connector ?? throw new ArgumentNullException(nameof(connector));
+        }
+
         /// <inheritdoc />
         public Task<bool> TryAdmitLegacyAsync(string captainId, string missionId, string? executionHostId, int ceiling = 256, CancellationToken token = default)
         {
             Required(captainId, nameof(captainId)); Required(missionId, nameof(missionId));
-            return RunAsync(connection => new CaptainSlotStore(connection).ClaimAsync(captainId, missionId, null, token, ceiling, usageHostId: executionHostId), token, write: true);
+            return _Connector.RunAsync(connection => new CaptainSlotStore(connection).ClaimAsync(captainId, missionId, null, token, ceiling, usageHostId: executionHostId), token, write: true);
         }
 
         /// <inheritdoc />
         public Task<bool> TryAdmitLegacyRepairAsync(string captainId, string missionId, DateTime verificationVersion, string? executionHostId, int ceiling = 256, CancellationToken token = default)
         {
             Required(captainId, nameof(captainId)); Required(missionId, nameof(missionId));
-            return RunAsync(connection => new CaptainSlotStore(connection).ResumeVerificationAsync(captainId, missionId, verificationVersion, ceiling, token, usageHostId: executionHostId), token, write: true);
+            return _Connector.RunAsync(connection => new CaptainSlotStore(connection).ResumeVerificationAsync(captainId, missionId, verificationVersion, ceiling, token, usageHostId: executionHostId), token, write: true);
         }
 
         internal static async Task TrackUnreservedExecutionAsync(DbConnection connection, DbTransaction transaction, string missionId,
@@ -72,7 +88,7 @@ namespace Armada.Core.Database
         public Task<int> AdoptUntrackedExecutionsAsync(int batchSize = 100, string? localHostId = null, CancellationToken token = default)
         {
             if (batchSize < 1 || batchSize > 1000) throw new ArgumentOutOfRangeException(nameof(batchSize));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 using DbTransaction transaction = await connection.BeginTransactionAsync(token).ConfigureAwait(false);
                 using DbCommand command = Command(connection, transaction, @"SELECT m.id FROM missions m WHERE m.tenant_id IS NOT NULL AND m.captain_id IS NOT NULL
@@ -96,7 +112,7 @@ namespace Armada.Core.Database
         public Task<List<UsageUntrackedExecution>> ReadUntrackedExecutionsAsync(int batchSize = 100, CancellationToken token = default)
         {
             if (batchSize < 1 || batchSize > 1000) throw new ArgumentOutOfRangeException(nameof(batchSize));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 using DbCommand command = Command(connection, null, "SELECT * FROM usage_untracked_executions WHERE state IN ('Active','Unsettled','Uncertain') ORDER BY last_update_utc,id" + PageSql(connection));
                 Add(command, "@skip", 0); Add(command, "@take", batchSize);
@@ -126,7 +142,7 @@ namespace Armada.Core.Database
             if (expectedRevision < 0 || expectedRevision == Int32.MaxValue) throw new ArgumentOutOfRangeException(nameof(expectedRevision));
             if (row.State == UsageReservationStateEnum.Settled && (row.ExecutionEndedUtc == null || String.IsNullOrWhiteSpace(row.SettledBySnapshotId))) throw new ArgumentException("Settlement requires an execution end and capture proof.", nameof(row));
             if (row.State == UsageReservationStateEnum.Released) throw new ArgumentException("Untracked work cannot be released as proven unstarted.", nameof(row));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 using DbCommand command = Command(connection, null, @"UPDATE usage_untracked_executions SET last_update_utc=@at,state=@state,active=@active,revision=revision+1,
                     execution_ended_utc=@ended,settled_by_snapshot_id=@snapshot,transition_reason=@reason WHERE tenant_id=@tenant AND id=@id AND revision=@revision
@@ -141,7 +157,7 @@ namespace Armada.Core.Database
         public Task<bool> IsUntrackedExecutionRunningAsync(string tenantId, string missionId, string executionKey, CancellationToken token = default)
         {
             Required(tenantId, nameof(tenantId)); Required(missionId, nameof(missionId)); Required(executionKey, nameof(executionKey));
-            return RunAsync(connection => IsUntrackedExecutionRunningAsync(connection, tenantId, missionId, executionKey, token), token);
+            return _Connector.RunAsync(connection => IsUntrackedExecutionRunningAsync(connection, tenantId, missionId, executionKey, token), token);
         }
 
         internal static async Task<bool> IsUntrackedExecutionRunningAsync(DbConnection connection, string tenantId, string missionId, string executionKey, CancellationToken token)

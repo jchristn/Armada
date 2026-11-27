@@ -6,10 +6,12 @@ namespace Armada.Core.Database
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using static Armada.Core.Database.CaptainSelectionSql;
 
-    internal sealed partial class CaptainSelectionMethods
+    /// <summary>Candidate usage window rows: insert and map.</summary>
+    internal static class CaptainSelectionWindowRows
     {
-        private static async Task InsertCaptainSelectionWindowRecordAsync(DbConnection connection, DbTransaction transaction, CaptainSelectionWindowRecord row, CancellationToken token)
+        internal static async Task InsertCaptainSelectionWindowRecordAsync(DbConnection connection, DbTransaction transaction, CaptainSelectionWindowRecord row, CancellationToken token)
         {
             using DbCommand command = Command(connection, transaction, "INSERT INTO captain_selection_windows(id,tenant_id,user_id,created_utc,last_update_utc,active,decision_id,candidate_id,snapshot_id,captured_utc,probe_started_utc,source,status,configuration_revision,window_key,window_name,model,scope_name,generation_key,used_percent,used_amount,limit_amount,unit,resets_utc,applicable,active_reservation_percent,unsettled_percent,reserve_percent,normalization_code) VALUES(@id,@tenant_id,@user_id,@created_utc,@last_update_utc,@active,@decision_id,@candidate_id,@snapshot_id,@captured_utc,@probe_started_utc,@source,@status,@configuration_revision,@window_key,@window_name,@model,@scope_name,@generation_key,@used_percent,@used_amount,@limit_amount,@unit,@resets_utc,@applicable,@active_reservation_percent,@unsettled_percent,@reserve_percent,@normalization_code);");
             Add(command, "@id", row.Id);
@@ -44,7 +46,7 @@ namespace Armada.Core.Database
             await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
         }
 
-        private static CaptainSelectionWindowRecord MapCaptainSelectionWindowRecord(DbDataReader reader)
+        internal static CaptainSelectionWindowRecord MapCaptainSelectionWindowRecord(DbDataReader reader)
         {
             return new CaptainSelectionWindowRecord
             {

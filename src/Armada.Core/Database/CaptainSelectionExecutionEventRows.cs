@@ -6,10 +6,12 @@ namespace Armada.Core.Database
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using static Armada.Core.Database.CaptainSelectionSql;
 
-    internal sealed partial class CaptainSelectionMethods
+    /// <summary>Execution event rows: insert and map.</summary>
+    internal static class CaptainSelectionExecutionEventRows
     {
-        private static async Task InsertCaptainSelectionExecutionEventAsync(DbConnection connection, DbTransaction transaction, CaptainSelectionExecutionEvent row, CancellationToken token)
+        internal static async Task InsertCaptainSelectionExecutionEventAsync(DbConnection connection, DbTransaction transaction, CaptainSelectionExecutionEvent row, CancellationToken token)
         {
             using DbCommand command = Command(connection, transaction, "INSERT INTO captain_selection_execution_events(id,tenant_id,user_id,created_utc,last_update_utc,active,decision_id,execution_attempt_id,event_kind,actual_provider,actual_model,reporting_source,occurred_utc,failure_classification) VALUES(@id,@tenant_id,@user_id,@created_utc,@last_update_utc,@active,@decision_id,@execution_attempt_id,@event_kind,@actual_provider,@actual_model,@reporting_source,@occurred_utc,@failure_classification);");
             Add(command, "@id", row.Id);
@@ -29,7 +31,7 @@ namespace Armada.Core.Database
             await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
         }
 
-        private static CaptainSelectionExecutionEvent MapCaptainSelectionExecutionEvent(DbDataReader reader)
+        internal static CaptainSelectionExecutionEvent MapCaptainSelectionExecutionEvent(DbDataReader reader)
         {
             return new CaptainSelectionExecutionEvent
             {

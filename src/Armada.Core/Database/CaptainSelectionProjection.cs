@@ -8,9 +8,24 @@ namespace Armada.Core.Database
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using static Armada.Core.Database.CaptainSelectionEvidence;
+    using static Armada.Core.Database.CaptainSelectionSql;
 
-    internal sealed partial class CaptainSelectionMethods
+    /// <summary>Decision views for missions.</summary>
+    internal sealed class CaptainSelectionProjection
     {
+        private readonly CaptainSelectionConnector _Connector;
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="connector">Opens provider connections.</param>
+        /// <exception cref="ArgumentNullException">Thrown when connector is null.</exception>
+        internal CaptainSelectionProjection(CaptainSelectionConnector connector)
+        {
+            _Connector = connector ?? throw new ArgumentNullException(nameof(connector));
+        }
+
         /// <inheritdoc />
         public Task<List<CaptainSelectionDecisionView>> ReadDecisionViewsAsync(string tenantId, IReadOnlyList<string> decisionIds,
             string? ownerUserId = null, string? candidateOwnerUserId = null, CancellationToken token = default)
@@ -18,7 +33,7 @@ namespace Armada.Core.Database
             Required(tenantId, nameof(tenantId)); ArgumentNullException.ThrowIfNull(decisionIds);
             if (decisionIds.Count > 1000) throw new ArgumentException("Decision projections are read in batches of at most 1000.", nameof(decisionIds));
             if (decisionIds.Count == 0) return Task.FromResult(new List<CaptainSelectionDecisionView>());
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 string[] ids = Enumerable.Range(0, decisionIds.Count).Select(i => "@decision" + i).ToArray();
                 string visible = candidateOwnerUserId == null ? "" : " AND (c.user_id=@candidateOwner OR c.user_id IS NULL)";

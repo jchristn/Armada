@@ -6,10 +6,12 @@ namespace Armada.Core.Database
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using static Armada.Core.Database.CaptainSelectionSql;
 
-    internal sealed partial class CaptainSelectionMethods
+    /// <summary>Selection candidate rows: insert and map.</summary>
+    internal static class CaptainSelectionCandidateRows
     {
-        private static async Task InsertCaptainSelectionCandidateRecordAsync(DbConnection connection, DbTransaction transaction, CaptainSelectionCandidateRecord row, CancellationToken token)
+        internal static async Task InsertCaptainSelectionCandidateRecordAsync(DbConnection connection, DbTransaction transaction, CaptainSelectionCandidateRecord row, CancellationToken token)
         {
             using DbCommand command = Command(connection, transaction, "INSERT INTO captain_selection_candidates(next_reconsider_utc,id,tenant_id,user_id,created_utc,last_update_utc,active,decision_id,captain_id,provider,configured_model,routing_bucket,rank_number,band,primary_reason_code,eligible,occupied_slots,capacity,last_assigned_utc,membership_id,host_id,runtime,account_key,available_percent,captain_name,evidence_captured_utc) VALUES(@next_reconsider_utc,@id,@tenant_id,@user_id,@created_utc,@last_update_utc,@active,@decision_id,@captain_id,@provider,@configured_model,@routing_bucket,@rank_number,@band,@primary_reason_code,@eligible,@occupied_slots,@capacity,@last_assigned_utc,@membership_id,@host_id,@runtime,@account_key,@available_percent,@captain_name,@evidence_captured_utc);");
             Add(command, "@next_reconsider_utc", row.NextReconsiderUtc.HasValue ? Utc(row.NextReconsiderUtc.Value) : null);
@@ -41,7 +43,7 @@ namespace Armada.Core.Database
             await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
         }
 
-        private static CaptainSelectionCandidateRecord MapCaptainSelectionCandidateRecord(DbDataReader reader)
+        internal static CaptainSelectionCandidateRecord MapCaptainSelectionCandidateRecord(DbDataReader reader)
         {
             return new CaptainSelectionCandidateRecord
             {

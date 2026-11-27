@@ -9,16 +9,30 @@ namespace Armada.Core.Database
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using static Armada.Core.Database.CaptainSelectionSql;
 
-    internal sealed partial class CaptainSelectionMethods
+    /// <summary>Usage account evidence: budget totals, last assignment, reservation counts, and account memberships.</summary>
+    internal sealed class CaptainSelectionAccountEvidence
     {
+        private readonly CaptainSelectionConnector _Connector;
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="connector">Opens provider connections.</param>
+        /// <exception cref="ArgumentNullException">Thrown when connector is null.</exception>
+        internal CaptainSelectionAccountEvidence(CaptainSelectionConnector connector)
+        {
+            _Connector = connector ?? throw new ArgumentNullException(nameof(connector));
+        }
+
         /// <inheritdoc />
         public Task<List<UsageSelectionBudgetTotals>> ReadBudgetTotalsAsync(string tenantId, IReadOnlyList<string> captainIds, CancellationToken token = default, string? carriedExecutionAttemptId = null)
         {
             Required(tenantId, nameof(tenantId)); ArgumentNullException.ThrowIfNull(captainIds);
             if (captainIds.Count > 1000) throw new ArgumentException("Budget evidence is read in batches of at most 1000 captains.", nameof(captainIds));
             if (captainIds.Count == 0) return Task.FromResult(new List<UsageSelectionBudgetTotals>());
-            return RunAsync(connection => ReadBudgetTotalsAsync(connection, null, tenantId, captainIds, token, carriedExecutionAttemptId), token);
+            return _Connector.RunAsync(connection => ReadBudgetTotalsAsync(connection, null, tenantId, captainIds, token, carriedExecutionAttemptId), token);
         }
 
         /// <inheritdoc />
@@ -28,7 +42,7 @@ namespace Armada.Core.Database
             ArgumentNullException.ThrowIfNull(captainIds);
             if (captainIds.Count > 1000) throw new ArgumentException("Assignment times are read in batches of at most 1000 captains.", nameof(captainIds));
             if (captainIds.Count == 0) return Task.FromResult(new Dictionary<string, DateTime>(StringComparer.Ordinal));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 string[] names = Enumerable.Range(0, captainIds.Count).Select(i => "@captain" + i).ToArray();
                 using DbCommand command = Command(connection, null, "SELECT id,last_assigned_utc FROM captains WHERE tenant_id=@tenant AND last_assigned_utc IS NOT NULL AND id IN ("
@@ -46,7 +60,7 @@ namespace Armada.Core.Database
         /// <inheritdoc />
         public Task<Dictionary<UsageReservationStateEnum, long>> CountReservationsByStateAsync(CancellationToken token = default)
         {
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 using DbCommand command = Command(connection, null, "SELECT state,COUNT(*) AS total FROM usage_budget_reservations GROUP BY state;");
                 Dictionary<UsageReservationStateEnum, long> counts = new Dictionary<UsageReservationStateEnum, long>();
@@ -105,14 +119,14 @@ namespace Armada.Core.Database
             if (captainIds.Count > 1000) throw new ArgumentException("Account evidence is read in batches of at most 1000 captains.", nameof(captainIds));
             if (captainIds.Count == 0) return Task.FromResult(new List<UsageSelectionAccountEvidence>());
             foreach (string id in captainIds) Required(id, nameof(captainIds));
-            return RunAsync(connection => ReadAccountEvidenceAsync(connection, null, tenantId, captainIds, token), token);
+            return _Connector.RunAsync(connection => ReadAccountEvidenceAsync(connection, null, tenantId, captainIds, token), token);
         }
 
         /// <inheritdoc />
         public Task<UsageSelectionAccountEvidence?> ReadMembershipEvidenceAsync(string tenantId, string membershipId, CancellationToken token = default)
         {
             Required(tenantId, nameof(tenantId)); Required(membershipId, nameof(membershipId));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
                 (await ReadAccountEvidenceAsync(connection, null, tenantId, Array.Empty<string>(), token, membershipId).ConfigureAwait(false)).FirstOrDefault(), token);
         }
 

@@ -8,9 +8,23 @@ namespace Armada.Core.Database
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using static Armada.Core.Database.CaptainSelectionSql;
 
-    internal sealed partial class CaptainSelectionMethods
+    /// <summary>Missions waiting on usage selection that an operator can act on.</summary>
+    internal sealed class CaptainSelectionWaits
     {
+        private readonly CaptainSelectionConnector _Connector;
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="connector">Opens provider connections.</param>
+        /// <exception cref="ArgumentNullException">Thrown when connector is null.</exception>
+        internal CaptainSelectionWaits(CaptainSelectionConnector connector)
+        {
+            _Connector = connector ?? throw new ArgumentNullException(nameof(connector));
+        }
+
         /// <inheritdoc />
         public Task<EnumerationResult<CaptainSelectionWaitingItem>> EnumerateActionableWaitsAsync(string? tenantId, string? userId, IReadOnlyList<string> reasonCodes,
             DateTime waitingSinceBeforeUtc, int pageNumber = 1, int pageSize = 25, CancellationToken token = default)
@@ -20,7 +34,7 @@ namespace Armada.Core.Database
             if (userId != null && tenantId == null) throw new ArgumentException("A user scope requires its tenant.", nameof(userId));
             EnumerationQuery paging = new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize };
             if (reasonCodes.Count == 0) return Task.FromResult(EnumerationResult<CaptainSelectionWaitingItem>.Create(paging, new List<CaptainSelectionWaitingItem>(), 0));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 string[] reasons = Enumerable.Range(0, reasonCodes.Count).Select(i => "@reason" + i).ToArray();
                 // Only Enforce blocks on usage; Observe waits come from legacy routing. The latest decision per mission (by evaluated time, then id) must itself be the waiting one; a later

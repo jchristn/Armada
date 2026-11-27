@@ -5,10 +5,12 @@ namespace Armada.Core.Database
     using System.Data.Common;
     using System.Threading;
     using System.Threading.Tasks;
+    using static Armada.Core.Database.CaptainSelectionSql;
 
-    internal sealed partial class CaptainSelectionMethods
+    /// <summary>Prunes usage selection recovery rows past retention.</summary>
+    internal static class CaptainSelectionRecoveryRetention
     {
-        private static async Task PruneRecoveryAsync(DbConnection connection, DbTransaction transaction, DateTime cutoffUtc, int batchSize, CancellationToken token)
+        internal static async Task PruneRecoveryAsync(DbConnection connection, DbTransaction transaction, DateTime cutoffUtc, int batchSize, CancellationToken token)
         {
             DateTime now = DateTime.UtcNow;
             using DbCommand expired = Command(connection, transaction, @"SELECT s.execution_key,s.tenant_id FROM usage_execution_sources s WHERE s.created_utc<@cutoff

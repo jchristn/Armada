@@ -6,10 +6,12 @@ namespace Armada.Core.Database
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using static Armada.Core.Database.CaptainSelectionSql;
 
-    internal sealed partial class CaptainSelectionMethods
+    /// <summary>Usage account cooldown rows: insert and map.</summary>
+    internal static class UsageAccountCooldownRows
     {
-        private static async Task InsertUsageAccountCooldownAsync(DbConnection connection, DbTransaction transaction, UsageAccountCooldown row, CancellationToken token)
+        internal static async Task InsertUsageAccountCooldownAsync(DbConnection connection, DbTransaction transaction, UsageAccountCooldown row, CancellationToken token)
         {
             using DbCommand command = Command(connection, transaction, "INSERT INTO usage_account_cooldowns(execution_key,mission_id,decision_id,id,tenant_id,user_id,created_utc,last_update_utc,active,host_id,runtime,account_key,window_key,revision,observed_utc,retry_after_utc,classification) VALUES(@execution_key,@mission_id,@decision_id,@id,@tenant_id,@user_id,@created_utc,@last_update_utc,@active,@host_id,@runtime,@account_key,@window_key,@revision,@observed_utc,@retry_after_utc,@classification);");
             Add(command, "@execution_key", row.ExecutionKey); Add(command, "@mission_id", row.MissionId); Add(command, "@decision_id", row.DecisionId);
@@ -30,7 +32,7 @@ namespace Armada.Core.Database
             await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
         }
 
-        private static UsageAccountCooldown MapUsageAccountCooldown(DbDataReader reader)
+        internal static UsageAccountCooldown MapUsageAccountCooldown(DbDataReader reader)
         {
             return new UsageAccountCooldown
             {

@@ -11,17 +11,13 @@ namespace Armada.Core.Database
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Core.Settings;
+    using static Armada.Core.Database.CaptainSelectionAccountEvidence;
+    using static Armada.Core.Database.CaptainSelectionRecoveryAuthorization;
+    using static Armada.Core.Database.CaptainSelectionSql;
 
-    internal sealed partial class CaptainSelectionMethods
+    /// <summary>Re-checks an enforced selection inside the admission transaction before a launch.</summary>
+    internal static class CaptainSelectionEnforcement
     {
-        /// <inheritdoc />
-        public Task<CaptainSelectionAdmissionReceipt> TryAdmitEnforcedAsync(CaptainSelectionRecordSet records, string? dockId = null, int ceiling = 256, CancellationToken token = default)
-            => AdmitSelectionAsync(records, dockId, ceiling, null, UsageSelectionModeEnum.Enforce, token);
-
-        /// <inheritdoc />
-        public Task<CaptainSelectionAdmissionReceipt> TryAdmitEnforcedRepairAsync(CaptainSelectionRecordSet records, DateTime verificationVersion, int ceiling = 256, CancellationToken token = default)
-            => AdmitSelectionAsync(records, null, ceiling, verificationVersion, UsageSelectionModeEnum.Enforce, token);
-
         // Re-evaluates the selected candidate inside the admission transaction. Any drift from the recorded
         // decision (recovery revision, captain version, membership, evidence, reservation totals) returns false
         // so the caller recomputes instead of launching from an outdated choice.
@@ -73,7 +69,7 @@ namespace Armada.Core.Database
             return ReservationsMatch(records, recorded, captain, source, input, policy, now);
         }
 
-        private static bool RecoveryMatches(CaptainSelectionRecordSet records, UsageSelectionRecovery? recovery)
+        internal static bool RecoveryMatches(CaptainSelectionRecordSet records, UsageSelectionRecovery? recovery)
         {
             if ((recovery?.Revision ?? 0) != records.AdmissionRecoveryRevision) return false;
             int applied = records.Events.Count(e => e.EventKind == CaptainSelectionEventKinds.RecoveryAuthorizationApplied
@@ -81,7 +77,7 @@ namespace Armada.Core.Database
             return recovery == null ? applied == 0 : applied == 1;
         }
 
-        private static async Task<Captain?> ReadAdmissionCaptainAsync(DbConnection connection, DbTransaction transaction, string tenantId, string captainId, int ceiling, CancellationToken token)
+        internal static async Task<Captain?> ReadAdmissionCaptainAsync(DbConnection connection, DbTransaction transaction, string tenantId, string captainId, int ceiling, CancellationToken token)
         {
             using DbCommand command = Command(connection, transaction, "SELECT * FROM captains WHERE tenant_id=@tenant AND id=@captain;");
             Add(command, "@tenant", tenantId);
@@ -113,7 +109,7 @@ namespace Armada.Core.Database
         // Lock the same account rows updated by capture commits. Distinct captains on a shared account
         // serialize here, before reading reservations. ReadCommitted prevents MySQL snapshot reads
         // from hiding a reservation committed while this transaction waited for the account row.
-        private static async Task LockAccountsAsync(DbConnection connection, DbTransaction transaction, string tenantId, List<UsageSelectionAccountEvidence> accounts, CancellationToken token)
+        internal static async Task LockAccountsAsync(DbConnection connection, DbTransaction transaction, string tenantId, List<UsageSelectionAccountEvidence> accounts, CancellationToken token)
         {
             IEnumerable<UsageSelectionAccountEvidence> ordered = accounts
                 .OrderBy(a => a.HostId, StringComparer.Ordinal)
@@ -131,7 +127,7 @@ namespace Armada.Core.Database
             }
         }
 
-        private static bool SameMemberships(List<UsageSelectionAccountEvidence> before, List<UsageSelectionAccountEvidence> after)
+        internal static bool SameMemberships(List<UsageSelectionAccountEvidence> before, List<UsageSelectionAccountEvidence> after)
         {
             IEnumerable<string> first = before.Select(a => a.MembershipId).OrderBy(id => id, StringComparer.Ordinal);
             IEnumerable<string> second = after.Select(a => a.MembershipId).OrderBy(id => id, StringComparer.Ordinal);
@@ -139,7 +135,7 @@ namespace Armada.Core.Database
         }
 
         // The recorded window evidence and the reservation rows must match exactly what a fresh evaluation would reserve.
-        private static bool ReservationsMatch(CaptainSelectionRecordSet records, CaptainSelectionCandidateRecord recorded, Captain captain,
+        internal static bool ReservationsMatch(CaptainSelectionRecordSet records, CaptainSelectionCandidateRecord recorded, Captain captain,
             UsageSelectionAccountEvidence? source, UsageSelectionCandidate input, UsageSelectionSettings policy, DateTime now)
         {
             List<CaptainSelectionWindowRecord> windows = records.Windows.Where(w => w.CandidateId == recorded.Id).ToList();

@@ -6,10 +6,12 @@ namespace Armada.Core.Database
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using static Armada.Core.Database.CaptainSelectionSql;
 
-    internal sealed partial class CaptainSelectionMethods
+    /// <summary>Candidate reason rows: insert and map.</summary>
+    internal static class CaptainSelectionReasonRows
     {
-        private static async Task InsertCaptainSelectionReasonAsync(DbConnection connection, DbTransaction transaction, CaptainSelectionReason row, CancellationToken token)
+        internal static async Task InsertCaptainSelectionReasonAsync(DbConnection connection, DbTransaction transaction, CaptainSelectionReason row, CancellationToken token)
         {
             using DbCommand command = Command(connection, transaction, "INSERT INTO captain_selection_candidate_reasons(id,tenant_id,user_id,created_utc,last_update_utc,active,decision_id,candidate_id,ordinal_number,reason_code,required_percent,available_percent,blocker_id) VALUES(@id,@tenant_id,@user_id,@created_utc,@last_update_utc,@active,@decision_id,@candidate_id,@ordinal_number,@reason_code,@required_percent,@available_percent,@blocker_id);");
             Add(command, "@id", row.Id);
@@ -28,7 +30,7 @@ namespace Armada.Core.Database
             await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
         }
 
-        private static CaptainSelectionReason MapCaptainSelectionReason(DbDataReader reader)
+        internal static CaptainSelectionReason MapCaptainSelectionReason(DbDataReader reader)
         {
             return new CaptainSelectionReason
             {

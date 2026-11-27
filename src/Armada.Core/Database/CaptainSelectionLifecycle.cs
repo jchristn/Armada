@@ -9,14 +9,32 @@ namespace Armada.Core.Database
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using static Armada.Core.Database.CaptainSelectionExecutionEventRows;
+    using static Armada.Core.Database.CaptainSelectionMethods;
+    using static Armada.Core.Database.CaptainSelectionRecoveryRetention;
+    using static Armada.Core.Database.CaptainSelectionSql;
+    using static Armada.Core.Database.UsageBudgetReservationRows;
 
-    internal sealed partial class CaptainSelectionMethods
+    /// <summary>Budget reservation lifecycle, execution events, and retention deletes.</summary>
+    internal sealed class CaptainSelectionLifecycle
     {
+        private readonly CaptainSelectionConnector _Connector;
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="connector">Opens provider connections.</param>
+        /// <exception cref="ArgumentNullException">Thrown when connector is null.</exception>
+        internal CaptainSelectionLifecycle(CaptainSelectionConnector connector)
+        {
+            _Connector = connector ?? throw new ArgumentNullException(nameof(connector));
+        }
+
         /// <inheritdoc />
         public Task<List<UsageBudgetReservation>> ReadReconciliationBatchAsync(int batchSize = 100, CancellationToken token = default)
         {
             if (batchSize < 1 || batchSize > 1000) throw new ArgumentOutOfRangeException(nameof(batchSize));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 using DbCommand command = Command(connection, null, "SELECT * FROM usage_budget_reservations WHERE state IN ('Active','Unsettled','Uncertain') ORDER BY last_update_utc,id" + PageSql(connection));
                 Add(command, "@skip", 0); Add(command, "@take", batchSize);
@@ -31,7 +49,7 @@ namespace Armada.Core.Database
         public Task<bool> TouchReservationAsync(string tenantId, string reservationId, int revision, DateTime atUtc, CancellationToken token = default)
         {
             Required(tenantId, nameof(tenantId)); Required(reservationId, nameof(reservationId));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 using DbCommand command = Command(connection, null, "UPDATE usage_budget_reservations SET last_update_utc=@at,revision=revision+1 WHERE tenant_id=@tenant AND id=@id AND revision=@revision AND last_update_utc<@at AND state IN ('Active','Unsettled','Uncertain');");
                 Add(command, "@at", Utc(atUtc)); Add(command, "@tenant", tenantId); Add(command, "@id", reservationId); Add(command, "@revision", revision);
@@ -43,7 +61,7 @@ namespace Armada.Core.Database
         public Task<List<UsageBudgetReservation>> ReadReservationsAsync(string tenantId, string hostId, string runtime, string accountKey, CancellationToken token = default)
         {
             Required(tenantId, nameof(tenantId)); Required(hostId, nameof(hostId)); Required(runtime, nameof(runtime)); Required(accountKey, nameof(accountKey));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 using DbCommand command = Command(connection, null, "SELECT * FROM usage_budget_reservations WHERE tenant_id=@tenant AND host_id=@host AND runtime=@runtime AND account_key=@account AND state IN ('Active','Unsettled','Uncertain') ORDER BY created_utc,id;");
                 Add(command, "@tenant", tenantId); Add(command, "@host", hostId); Add(command, "@runtime", runtime); Add(command, "@account", accountKey);
@@ -65,7 +83,7 @@ namespace Armada.Core.Database
                 || expected == UsageReservationStateEnum.Unsettled && next == UsageReservationStateEnum.Uncertain;
             if (!valid) throw new ArgumentException("Invalid usage reservation lifecycle transition.", nameof(next));
             if (next == UsageReservationStateEnum.Settled) Required(snapshotId!, nameof(snapshotId));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 using DbTransaction transaction = await connection.BeginTransactionAsync(token).ConfigureAwait(false);
                 using DbCommand command = Command(connection, transaction, "UPDATE usage_budget_reservations SET state=@next,revision=revision+1,last_update_utc=@at,transition_reason=@reason"
@@ -89,7 +107,7 @@ namespace Armada.Core.Database
             ArgumentNullException.ThrowIfNull(entry);
             Required(entry.TenantId, nameof(entry.TenantId)); Required(entry.DecisionId, nameof(entry.DecisionId));
             Required(entry.ExecutionAttemptId, nameof(entry.ExecutionAttemptId)); Required(entry.EventKind, nameof(entry.EventKind));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 using DbTransaction transaction = await connection.BeginTransactionAsync(token).ConfigureAwait(false);
                 CaptainSelectionDecision? parent = await ReadAttemptAsync(connection, transaction, entry.TenantId, entry.ExecutionAttemptId, token).ConfigureAwait(false);
@@ -111,7 +129,7 @@ namespace Armada.Core.Database
         public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize = 100, CancellationToken token = default)
         {
             if (batchSize < 1 || batchSize > 1000) throw new ArgumentOutOfRangeException(nameof(batchSize));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 using DbTransaction transaction = await connection.BeginTransactionAsync(token).ConfigureAwait(false);
                 using DbCommand command = Command(connection, transaction, "SELECT d.id,d.tenant_id FROM captain_selection_decisions d WHERE d.evaluated_utc<@cutoff"
@@ -127,7 +145,7 @@ namespace Armada.Core.Database
                 }
                 foreach (CaptainSelectionDecision row in rows)
                 {
-                    foreach (string table in _ChildTables)
+                    foreach (string table in ChildTables)
                     {
                         using DbCommand child = Command(connection, transaction, "DELETE FROM " + table + " WHERE tenant_id=@tenant AND decision_id=@decision;");
                         Add(child, "@tenant", row.TenantId); Add(child, "@decision", row.Id);
@@ -155,11 +173,11 @@ namespace Armada.Core.Database
         public Task<int> DeleteByTenantAsync(string tenantId, CancellationToken token = default)
         {
             Required(tenantId, nameof(tenantId));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 using DbTransaction transaction = await connection.BeginTransactionAsync(token).ConfigureAwait(false);
                 int count = 0;
-                foreach (string table in _ChildTables.Concat(new[] { "usage_execution_sources", "usage_selection_recovery", "usage_untracked_executions", "usage_account_cooldowns", "captain_selection_decisions", "captain_selection_policy_revisions" }))
+                foreach (string table in ChildTables.Concat(new[] { "usage_execution_sources", "usage_selection_recovery", "usage_untracked_executions", "usage_account_cooldowns", "captain_selection_decisions", "captain_selection_policy_revisions" }))
                 {
                     using DbCommand command = Command(connection, transaction, "DELETE FROM " + table + " WHERE tenant_id=@tenant;");
                     Add(command, "@tenant", tenantId); count += await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);

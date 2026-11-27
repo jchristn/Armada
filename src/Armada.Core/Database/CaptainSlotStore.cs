@@ -101,7 +101,7 @@ namespace Armada.Core.Database
                 using DbCommand row = Command(tx, "UPDATE captains SET active_mission_count=active_mission_count WHERE id=@id;", captainId);
                 await row.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 if (selection?.Decision.Mode == UsageSelectionModeEnum.Enforce
-                    && !await CaptainSelectionMethods.ValidateEnforcementAsync(_Connection, tx, selection, ceiling, token).ConfigureAwait(false)) return false;
+                    && !await CaptainSelectionEnforcement.ValidateEnforcementAsync(_Connection, tx, selection, ceiling, token).ConfigureAwait(false)) return false;
                 // Updating the captain row serializes claims before the unique mission-slot insertion.
                 using DbCommand claim = Command(tx, @"UPDATE captains SET state='Working',
                     last_heartbeat_utc=@now,last_update_utc=@now,last_assigned_utc=@now,active_mission_count=active_mission_count+1
@@ -124,7 +124,7 @@ namespace Armada.Core.Database
                     await CaptainSelectionMethods.WriteAggregateAsync(_Connection, tx, selection, token).ConfigureAwait(false);
                     await SetSelectionDecisionAsync(tx, missionId, captainId, selection.Decision.Id, token).ConfigureAwait(false);
                 }
-                if (assigned == 1) await CaptainSelectionMethods.TrackUnreservedExecutionAsync(_Connection, tx, missionId, selection, token, usageHostId).ConfigureAwait(false);
+                if (assigned == 1) await CaptainSelectionUntrackedExecutions.TrackUnreservedExecutionAsync(_Connection, tx, missionId, selection, token, usageHostId).ConfigureAwait(false);
                 await tx.CommitAsync(token).ConfigureAwait(false);
                 return true;
             }
@@ -242,7 +242,7 @@ namespace Armada.Core.Database
                 if (!await LockSelectionMissionAsync(tx, selection, "Verifying", token).ConfigureAwait(false)) return false;
                 using DbCommand row = Command(tx, "UPDATE captains SET active_mission_count=active_mission_count WHERE id=@id;", captainId);
                 await row.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                if (!await CaptainSelectionMethods.ValidateEnforcementAsync(_Connection, tx, selection, ceiling, token).ConfigureAwait(false)) return false;
+                if (!await CaptainSelectionEnforcement.ValidateEnforcementAsync(_Connection, tx, selection, ceiling, token).ConfigureAwait(false)) return false;
             }
             using DbCommand claim = Command(tx, @"UPDATE captains SET active_mission_count=active_mission_count+1,state='Working',last_update_utc=@now,last_assigned_utc=@now
                 WHERE id=@id AND active=" + (_Postgres ? "TRUE" : "1") + @" AND current_session_id IS NULL AND state IN ('Idle','Working')
@@ -266,7 +266,7 @@ namespace Armada.Core.Database
                 await CaptainSelectionMethods.WriteAggregateAsync(_Connection, tx, selection, token).ConfigureAwait(false);
                 await SetSelectionDecisionAsync(tx, missionId, captainId, selection.Decision.Id, token).ConfigureAwait(false);
             }
-            await CaptainSelectionMethods.TrackUnreservedExecutionAsync(_Connection, tx, missionId, selection, token, usageHostId).ConfigureAwait(false);
+            await CaptainSelectionUntrackedExecutions.TrackUnreservedExecutionAsync(_Connection, tx, missionId, selection, token, usageHostId).ConfigureAwait(false);
             await tx.CommitAsync(token).ConfigureAwait(false);
             return true;
         }
