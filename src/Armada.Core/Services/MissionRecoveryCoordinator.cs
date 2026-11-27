@@ -35,6 +35,12 @@ namespace Armada.Core.Services
         /// </summary>
         public IEscalationService? Escalation { get; set; } = null;
 
+        /// <summary>
+        /// Called once per incident when it uses up its rescue budget, with the original mission and the incident (push
+        /// notifications), or null. Exceptions are logged and ignored.
+        /// </summary>
+        public Action<Mission, Incident>? OnRecoveryExhausted { get; set; } = null;
+
         #endregion
 
         /// <summary>
@@ -233,6 +239,15 @@ namespace Armada.Core.Services
                     await Escalation.FireAsync(EscalationTriggerEnum.RecoveryExhausted, original.Id,
                         "Mission " + original.Id + " used " + incident.RecoveryAttempts + " of " + maxAttempts
                         + " rescue attempt(s) without landing; incident " + incident.Id + " needs a human.", token).ConfigureAwait(false);
+                }
+
+                try
+                {
+                    OnRecoveryExhausted?.Invoke(original, incident);
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Warn(_Header + "recovery-exhausted notification for incident " + incident.Id + " failed: " + ex.Message);
                 }
             }
         }

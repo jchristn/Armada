@@ -7882,7 +7882,11 @@
         "{{count}} pipelines": "{{count}} pipelines",
         "{{count}} unclassified": "{{count}} sin clasificar",
         "{{min}} to {{max}}, default {{def}}.": "De {{min}} a {{max}}, predeterminado {{def}}.",
-        "{{passed}} passed, {{failed}} failed of {{total}}": "{{passed}} aprobadas, {{failed}} fallidas de {{total}}"
+        "{{passed}} passed, {{failed}} failed of {{total}}": "{{passed}} aprobadas, {{failed}} fallidas de {{total}}",
+        "Escalated missions": "Misiones escaladas",
+        "A mission moved to a stronger captain on its escalation ladder": "Una misión pasó a un capitán más capaz de su escalera de escalado",
+        "Recovery exhausted": "Recuperación agotada",
+        "A failed mission used up its rescue attempts and needs you": "Una misión fallida agotó sus intentos de rescate y te necesita"
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -14712,7 +14716,11 @@
         "{{count}} pipelines": "{{count}} 条流水线",
         "{{count}} unclassified": "{{count}} 未分类",
         "{{min}} to {{max}}, default {{def}}.": "{{min}} 到 {{max}}，默认 {{def}}。",
-        "{{passed}} passed, {{failed}} failed of {{total}}": "{{total}} 个中 {{passed}} 个通过，{{failed}} 个失败"
+        "{{passed}} passed, {{failed}} failed of {{total}}": "{{total}} 个中 {{passed}} 个通过，{{failed}} 个失败",
+        "Escalated missions": "已升级的任务",
+        "A mission moved to a stronger captain on its escalation ladder": "任务已沿升级阶梯转给更强的船长",
+        "Recovery exhausted": "恢复次数已用尽",
+        "A failed mission used up its rescue attempts and needs you": "失败的任务已用尽救援尝试，需要你处理"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -21505,7 +21513,11 @@
         "{{count}} pipelines": "{{count}} 條流水線",
         "{{count}} unclassified": "{{count}} 未分類",
         "{{min}} to {{max}}, default {{def}}.": "{{min}} 到 {{max}}，預設 {{def}}。",
-        "{{passed}} passed, {{failed}} failed of {{total}}": "{{total}} 個中 {{passed}} 個通過，{{failed}} 個失敗"
+        "{{passed}} passed, {{failed}} failed of {{total}}": "{{total}} 個中 {{passed}} 個通過，{{failed}} 個失敗",
+        "Escalated missions": "已升級的任務",
+        "A mission moved to a stronger captain on its escalation ladder": "任務已沿升級階梯轉給更強的船長",
+        "Recovery exhausted": "復原次數已用盡",
+        "A failed mission used up its rescue attempts and needs you": "失敗的任務已用盡救援嘗試，需要你處理"
       },
       "sections": {}
     },
@@ -28259,7 +28271,11 @@
         "{{count}} pipelines": "{{count}} 條流水線",
         "{{count}} unclassified": "{{count}} 未分類",
         "{{min}} to {{max}}, default {{def}}.": "{{min}} 到 {{max}}，預設 {{def}}。",
-        "{{passed}} passed, {{failed}} failed of {{total}}": "{{total}} 個中 {{passed}} 個通過，{{failed}} 個失敗"
+        "{{passed}} passed, {{failed}} failed of {{total}}": "{{total}} 個中 {{passed}} 個通過，{{failed}} 個失敗",
+        "Escalated missions": "已升級的任務",
+        "A mission moved to a stronger captain on its escalation ladder": "任務已沿升級階梯轉給更強的船長",
+        "Recovery exhausted": "復原次數已用盡",
+        "A failed mission used up its rescue attempts and needs you": "失敗嘅任務已用盡救援嘗試，需要你處理"
       },
       "sections": {}
     },
@@ -35029,7 +35045,11 @@
         "{{count}} pipelines": "パイプライン {{count}} 件",
         "{{count}} unclassified": "未分類 {{count}} 件",
         "{{min}} to {{max}}, default {{def}}.": "{{min}} から {{max}}、既定値 {{def}}。",
-        "{{passed}} passed, {{failed}} failed of {{total}}": "{{total}} 件中 合格 {{passed}} 件、失敗 {{failed}} 件"
+        "{{passed}} passed, {{failed}} failed of {{total}}": "{{total}} 件中 合格 {{passed}} 件、失敗 {{failed}} 件",
+        "Escalated missions": "エスカレーションされたミッション",
+        "A mission moved to a stronger captain on its escalation ladder": "ミッションがエスカレーションラダー上のより強力なキャプテンに移りました",
+        "Recovery exhausted": "復旧の試行を使い切りました",
+        "A failed mission used up its rescue attempts and needs you": "失敗したミッションが救援の試行を使い切ったため、対応が必要です"
       },
       "sections": {}
     },
@@ -41790,7 +41810,11 @@
         "{{count}} pipelines": "{{count}} Pipelines",
         "{{count}} unclassified": "{{count}} nicht klassifiziert",
         "{{min}} to {{max}}, default {{def}}.": "{{min}} bis {{max}}, Standard {{def}}.",
-        "{{passed}} passed, {{failed}} failed of {{total}}": "{{passed}} bestanden, {{failed}} fehlgeschlagen von {{total}}"
+        "{{passed}} passed, {{failed}} failed of {{total}}": "{{passed}} bestanden, {{failed}} fehlgeschlagen von {{total}}",
+        "Escalated missions": "Eskalierte Missionen",
+        "A mission moved to a stronger captain on its escalation ladder": "Eine Mission ist auf ihrer Eskalationsleiter zu einem stärkeren Kapitän gewechselt",
+        "Recovery exhausted": "Wiederherstellung erschöpft",
+        "A failed mission used up its rescue attempts and needs you": "Eine fehlgeschlagene Mission hat ihre Rettungsversuche aufgebraucht und braucht dich"
       },
       "sections": {}
     },
@@ -48551,7 +48575,11 @@
         "{{count}} pipelines": "{{count}} pipelines",
         "{{count}} unclassified": "{{count}} non classées",
         "{{min}} to {{max}}, default {{def}}.": "De {{min}} à {{max}}, par défaut {{def}}.",
-        "{{passed}} passed, {{failed}} failed of {{total}}": "{{passed}} réussies, {{failed}} échouées sur {{total}}"
+        "{{passed}} passed, {{failed}} failed of {{total}}": "{{passed}} réussies, {{failed}} échouées sur {{total}}",
+        "Escalated missions": "Missions escaladées",
+        "A mission moved to a stronger captain on its escalation ladder": "Une mission est passée à un capitaine plus fort sur son échelle d'escalade",
+        "Recovery exhausted": "Récupération épuisée",
+        "A failed mission used up its rescue attempts and needs you": "Une mission échouée a épuisé ses tentatives de secours et a besoin de vous"
       },
       "sections": {}
     },
@@ -55312,7 +55340,11 @@
         "{{count}} pipelines": "{{count}} pipeline",
         "{{count}} unclassified": "{{count}} non classificati",
         "{{min}} to {{max}}, default {{def}}.": "Da {{min}} a {{max}}, predefinito {{def}}.",
-        "{{passed}} passed, {{failed}} failed of {{total}}": "{{passed}} superate, {{failed}} fallite su {{total}}"
+        "{{passed}} passed, {{failed}} failed of {{total}}": "{{passed}} superate, {{failed}} fallite su {{total}}",
+        "Escalated missions": "Missioni scalate",
+        "A mission moved to a stronger captain on its escalation ladder": "Una missione è passata a un capitano più forte nella sua scala di escalation",
+        "Recovery exhausted": "Ripristino esaurito",
+        "A failed mission used up its rescue attempts and needs you": "Una missione fallita ha esaurito i tentativi di salvataggio e ha bisogno di te"
       },
       "sections": {}
     }

@@ -20,7 +20,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// New enabled categories (an empty list mutes the device), or null to keep them.
         /// </summary>
-        [CollectionBound(8, Reason = "At most one entry per PushCategoryEnum value")]
+        [CollectionBound(16, Reason = "At most one entry per PushCategoryEnum value (11 today); headroom for new categories")]
         public List<PushCategoryEnum>? Categories { get; set; } = null;
 
         #endregion

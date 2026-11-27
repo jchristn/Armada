@@ -2,6 +2,7 @@ namespace Armada.Core.Services.Push
 {
     using System;
     using System.Collections.Generic;
+    using System.Globalization;
     using System.Linq;
     using System.Threading;
     using System.Threading.Channels;
@@ -300,6 +301,34 @@ namespace Armada.Core.Services.Push
         }
 
         /// <summary>
+        /// Hook for an applied escalation: announced once per escalation (keyed by the mission's escalation count) to the
+        /// mission owner, or the tenant's admins when it has none.
+        /// </summary>
+        /// <param name="mission">Escalated mission, with its escalation count already raised.</param>
+        /// <param name="toCaptainName">Name of the captain the mission moved to, or null.</param>
+        public void OnMissionEscalated(Mission? mission, string? toCaptainName)
+        {
+            if (mission == null || String.IsNullOrEmpty(mission.Id)) return;
+            PushOccurrence occurrence = FromEscalation(mission, toCaptainName);
+            if (IsNewState("escalation:" + mission.Id, mission.EscalationCount.ToString(CultureInfo.InvariantCulture))) Enqueue(occurrence);
+        }
+
+        /// <summary>
+        /// Hook for a recovery incident that used up its rescue budget: announced once per incident to the mission owner
+        /// and the tenant's admins.
+        /// </summary>
+        /// <param name="original">The original failed mission.</param>
+        /// <param name="incidentId">Recovery incident id, or null to key by the mission.</param>
+        /// <param name="attempts">Rescue attempts used.</param>
+        public void OnRecoveryExhausted(Mission? original, string? incidentId, int attempts)
+        {
+            if (original == null || String.IsNullOrEmpty(original.Id)) return;
+            PushOccurrence occurrence = FromRecoveryExhausted(original, attempts);
+            string key = "recovery_exhausted:" + (String.IsNullOrEmpty(incidentId) ? original.Id : incidentId);
+            if (IsNewState(key, "exhausted")) Enqueue(occurrence);
+        }
+
+        /// <summary>
         /// Hook for a new Ask proposal: a pending proposal is announced to the thread owner.
         /// </summary>
         /// <param name="proposal">Proposal.</param>
@@ -382,6 +411,7 @@ namespace Armada.Core.Services.Push
                 case PushCategoryEnum.CliPermission:
                 case PushCategoryEnum.MissionReview:
                 case PushCategoryEnum.DeploymentApproval:
+                case PushCategoryEnum.RecoveryExhausted:
                     if (owner != null) chosen.Add(owner);
                     chosen.AddRange(admins);
                     break;
@@ -644,6 +674,52 @@ namespace Armada.Core.Services.Push
             occurrence.TenantId = mission.TenantId;
             occurrence.OwnerUserId = mission.UserId;
             occurrence.Url = "/missions/" + mission.Id;
+            return occurrence;
+        }
+
+        /// <summary>
+        /// Occurrence for an applied escalation.
+        /// </summary>
+        /// <param name="mission">Escalated mission.</param>
+        /// <param name="toCaptainName">Name of the captain the mission moved to, or null.</param>
+        /// <returns>The occurrence.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when mission is null.</exception>
+        public static PushOccurrence FromEscalation(Mission mission, string? toCaptainName)
+        {
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+            PushOccurrence occurrence = new PushOccurrence();
+            occurrence.Category = PushCategoryEnum.MissionEscalated;
+            occurrence.Kind = PushNotificationKinds.Escalated;
+            occurrence.Title = "Mission escalated";
+            occurrence.Body = String.IsNullOrEmpty(toCaptainName)
+                ? "Mission " + Quote(mission.Title) + " moved up its escalation ladder."
+                : "Mission " + Quote(mission.Title) + " moved to captain " + Quote(toCaptainName) + ".";
+            occurrence.EntityId = mission.Id;
+            occurrence.TenantId = mission.TenantId;
+            occurrence.OwnerUserId = mission.UserId;
+            occurrence.Url = "/missions/" + mission.Id;
+            return occurrence;
+        }
+
+        /// <summary>
+        /// Occurrence for a mission whose rescue budget is used up.
+        /// </summary>
+        /// <param name="original">The original failed mission.</param>
+        /// <param name="attempts">Rescue attempts used.</param>
+        /// <returns>The occurrence.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when original is null.</exception>
+        public static PushOccurrence FromRecoveryExhausted(Mission original, int attempts)
+        {
+            if (original == null) throw new ArgumentNullException(nameof(original));
+            PushOccurrence occurrence = new PushOccurrence();
+            occurrence.Category = PushCategoryEnum.RecoveryExhausted;
+            occurrence.Kind = PushNotificationKinds.RecoveryExhausted;
+            occurrence.Title = "Recovery exhausted";
+            occurrence.Body = "Mission " + Quote(original.Title) + " used " + attempts + " rescue attempt(s) without landing and needs a human.";
+            occurrence.EntityId = original.Id;
+            occurrence.TenantId = original.TenantId;
+            occurrence.OwnerUserId = original.UserId;
+            occurrence.Url = "/missions/" + original.Id;
             return occurrence;
         }
 

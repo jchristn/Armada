@@ -150,10 +150,11 @@ The Admiral can notify your phone about the things that need a person, the same 
 | Mission review | A mission is waiting for review | The owner and the tenant's admins |
 | Deployment approval | A deployment is waiting for approval | The owner and the tenant's admins |
 | Mission failed, landing failed, captain stalled, voyage finished | As named | The owner (the tenant's admins when there is no active owner) |
+| Mission escalated | A mission moved to the next captain on its persona's escalation ladder (one per escalation) | The owner (the tenant's admins when there is no active owner) |
+| Recovery exhausted | A failed mission used up its rescue attempts and needs a person (one per recovery incident) | The owner and the tenant's admins |
 
-- Escalation and recovery-exhausted notifications (a mission moved to the next captain on its persona's
-  escalation ladder, or ran out of resumes, repairs, and escalations) open the mission. The app accepts them now;
-  they get their own switches in Preferences once the Admiral has categories for them.
+- Escalation and recovery-exhausted notifications open the mission. Each has its own switch in Preferences, on by
+  default for a newly registered device, like the other categories.
 - The app asks for permission once after sign-in (or from **More > Preferences**), never at launch.
 - Each signed-in server registers the device separately. Preferences shows whether this device receives
   notifications from the current server, a switch for each category, and **Send a test notification**.

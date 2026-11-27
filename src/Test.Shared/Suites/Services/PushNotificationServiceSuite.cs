@@ -357,6 +357,53 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(1, await push.DeliverAsync(Failed(org, "msn_n5")).ConfigureAwait(false), "enabled again");
             }));
 
+            cases.Add(CaseAsync("escalation_and_recovery_exhausted_push_once_to_opted_in_users", "An applied escalation and a used-up rescue budget each send one push per event to users whose device enables the category, and none to users who turned it off", async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                PushTestOrg org = await CreateOrgAsync(db).ConfigureAwait(false);
+                RecordingPushTransport transport = new RecordingPushTransport();
+                ArmadaSettings settings = new ArmadaSettings();
+                settings.Push.DedupeWindowSeconds = 0;
+                using PushNotificationService push = new PushNotificationService(db, settings, Quiet(), transport);
+                push.RetryBaseDelay = TimeSpan.Zero;
+                push.Start();
+
+                PushDevice ownerDevice = await AddDeviceAsync(db, org.TenantId, org.Owner).ConfigureAwait(false);
+                PushDevice globalAdminDevice = await AddDeviceAsync(db, org.TenantId, org.GlobalAdmin).ConfigureAwait(false);
+                PushDevice optedOut = new PushDevice
+                {
+                    TenantId = org.TenantId,
+                    UserId = org.TenantAdmin,
+                    ExpoPushToken = NewToken(),
+                    Categories = PushSettings.AllCategories().Where(c => c != PushCategoryEnum.MissionEscalated && c != PushCategoryEnum.RecoveryExhausted).ToList()
+                };
+                optedOut = await db.PushDevices.CreateAsync(optedOut).ConfigureAwait(false);
+
+                Mission mission = new Mission { Id = "msn_escalated", TenantId = org.TenantId, UserId = org.Owner, Title = "Ladder", Status = MissionStatusEnum.Pending, EscalationCount = 1 };
+                push.OnMissionEscalated(mission, "opus");
+                push.OnMissionEscalated(mission, "opus");
+                await push.WaitForIdleAsync().WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+                List<PushMessage> escalated = transport.Messages.Where(m => m.Data.Kind == PushNotificationKinds.Escalated).ToList();
+                AssertEqual(1, escalated.Count, "one push for one escalation, to the owner only");
+                AssertEqual(ownerDevice.ExpoPushToken, escalated[0].To, "the owner's device");
+                AssertEqual(PushCategoryEnum.MissionEscalated.ToString(), escalated[0].Data.Category, "category on the wire");
+
+                mission.EscalationCount = 2;
+                push.OnMissionEscalated(mission, "gpt");
+                await push.WaitForIdleAsync().WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+                AssertEqual(2, transport.Messages.Count(m => m.Data.Kind == PushNotificationKinds.Escalated), "a second escalation is a new push");
+
+                Mission original = new Mission { Id = "msn_rescued", TenantId = org.TenantId, UserId = org.Owner, Title = "Rescue me", Status = MissionStatusEnum.Failed };
+                push.OnRecoveryExhausted(original, "inc_1", 3);
+                push.OnRecoveryExhausted(original, "inc_1", 3);
+                await push.WaitForIdleAsync().WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+                List<PushMessage> exhausted = transport.Messages.Where(m => m.Data.Kind == PushNotificationKinds.RecoveryExhausted).ToList();
+                AssertEqual(2, exhausted.Count, "one push per opted-in recipient (owner and global admin)");
+                AssertSetEqual(new[] { ownerDevice.ExpoPushToken, globalAdminDevice.ExpoPushToken }, exhausted.Select(m => m.To).ToList(), "owner and global admin devices");
+                AssertFalse(transport.Messages.Any(m => m.To == optedOut.ExpoPushToken), "the tenant admin turned both categories off and got nothing");
+            }));
+
             cases.Add(CaseAsync("hooks_are_async_and_announce_transitions_once", "Hooks enqueue without blocking; a status is announced once per entry; a failing transport never throws into the caller", async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
@@ -579,6 +626,13 @@ namespace Test.Shared.Suites.Services
             user.Active = active;
             await db.Users.CreateAsync(user).ConfigureAwait(false);
             return user.Id;
+        }
+
+        private static void AssertSetEqual(string[] expected, List<string> actual, string label)
+        {
+            string e = String.Join(",", expected.OrderBy(x => x, StringComparer.Ordinal));
+            string a = String.Join(",", actual.OrderBy(x => x, StringComparer.Ordinal));
+            AssertEqual(e, a, label);
         }
 
         private static void AssertSet(string[] expected, List<PushRecipient> actual, string label)

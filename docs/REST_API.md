@@ -12178,7 +12178,9 @@ Ownership scope for Category B configuration entities (see [Data Scoping](#data-
 #### PushCategoryEnum
 
 `AskProposal`, `CliPermission`, `MissionReview`, `DeploymentApproval`, `MissionFailed`, `LandingFailed`,
-`CaptainStalled`, `VoyageFinished` (see [Push Notifications](#push-notifications)).
+`CaptainStalled`, `VoyageFinished`, `ModelAlert`, `MissionEscalated` (kind `escalated`, once per applied escalation),
+`RecoveryExhausted` (kind `recovery_exhausted`, once per recovery incident that used up its rescue budget; sent to the
+owner and the tenant's admins) (see [Push Notifications](#push-notifications)).
 
 #### PushTestStatusEnum
 

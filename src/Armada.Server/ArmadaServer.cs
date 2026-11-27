@@ -927,6 +927,9 @@ namespace Armada.Server
                 if (_Settings.ModelAlerts.PushEnabled) pushNotifications.OnModelAlertRaised(alert);
             };
             _AskThreads.OnProposalCreated = proposal => pushNotifications.OnAskProposalCreated(proposal);
+            if (_Admiral is AdmiralService escalatingAdmiral)
+                escalatingAdmiral.OnMissionEscalated = (mission, captain) => pushNotifications.OnMissionEscalated(mission, captain?.Name);
+            _MissionRecovery.OnRecoveryExhausted = (original, incident) => pushNotifications.OnRecoveryExhausted(original, incident.Id, incident.RecoveryAttempts);
             _PushNotifications.Start();
             _AskTracker.ExpireProposals = async (CancellationToken expireToken) =>
             {

@@ -11,4 +11,6 @@ export const CATEGORY_TEXT: Record<PushCategory, { label: string; description: s
   CaptainStalled: { label: 'Stalled captains', description: 'A captain stopped making progress' },
   VoyageFinished: { label: 'Finished voyages', description: 'A voyage completed or failed' },
   ModelAlert: { label: 'Model alerts', description: 'A model scorecard threshold was crossed' },
+  MissionEscalated: { label: 'Escalated missions', description: 'A mission moved to a stronger captain on its escalation ladder' },
+  RecoveryExhausted: { label: 'Recovery exhausted', description: 'A failed mission used up its rescue attempts and needs you' },
 };

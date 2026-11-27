@@ -121,6 +121,12 @@ namespace Armada.Core.Services
         /// </summary>
         public Func<RemoteTunnelStatus>? OnGetRemoteTunnelStatus { get; set; }
 
+        /// <summary>
+        /// Called after an escalation is applied and its <c>mission.escalated</c> event recorded, with the escalated mission
+        /// and the captain it moved to (push notifications), or null. Exceptions are logged and ignored.
+        /// </summary>
+        public Action<Mission, Captain>? OnMissionEscalated { get; set; }
+
         /// <summary>Called after a <c>concurrency.limit_exceeded</c> event is recorded, for live delivery.</summary>
         public Action<ArmadaEvent>? OnConcurrencyEvent
         {
@@ -2717,6 +2723,15 @@ namespace Armada.Core.Services
             await EmitEventAsync("mission.escalated", "Mission escalated to " + choice.Captain.Name + " (" + choice.Describe() + ") after " + captain.Name + " could not finish: " + mission.Title,
                 entityType: "mission", entityId: mission.Id, captainId: choice.Captain.Id, missionId: mission.Id,
                 vesselId: mission.VesselId, voyageId: mission.VoyageId, token: token).ConfigureAwait(false);
+            try
+            {
+                OnMissionEscalated?.Invoke(mission, choice.Captain);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "escalation notification for mission " + mission.Id + " failed: " + ex.Message);
+            }
+
             return true;
         }
 
