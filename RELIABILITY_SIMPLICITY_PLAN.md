@@ -1281,18 +1281,18 @@ console or a two-factor prompt. Record build and submission URLs in `src/Armada.
 
 ### Prepare (agent)
 
-- [ ] **RS-16.1** Bundle ID and Android package become `ai.latticetech.armada` in `app.config.ts` (permanent once a
+- [x] **RS-16.1** Bundle ID and Android package become `ai.latticetech.armada` in `app.config.ts` (permanent once a
   store record exists). Add the `*_LOCAL_TEAM_ID` switch used by Mux Cloud so personal-team device builds append
-  `.dev` and drop the push and associated-domains entitlements, instead of editing the real ID. Evidence:
-- [ ] **RS-16.2** `eas.json` to the family standard: `development` (plus `development-device`), `preview` as a store
+  `.dev` and drop the push and associated-domains entitlements, instead of editing the real ID. Evidence: mobile commit: `ai.latticetech.armada` in app.config.ts, owner and EAS project id from env, local team switch.
+- [x] **RS-16.2** `eas.json` to the family standard: `development` (plus `development-device`), `preview` as a store
   build (`"distribution": "store"`), `production`; `appVersionSource: remote` with `autoIncrement: true` on store
   profiles; `APP_VARIANT` per profile and read by the app config; Android submit `track: internal` and
   `releaseStatus: draft` for both profiles; iOS submit `appleTeamId` and `ascAppId` filled after RS-16.6 (no
-  `appleId`). Set `owner` and the EAS project id in the app config with environment overrides. Evidence:
-- [ ] **RS-16.3** `.gitignore` covers `secrets/`, `*.p8`, `*.key`, `*.local.md`, `google-services.json` where
-  required; nothing with a password is committed. Evidence:
-- [ ] **RS-16.4** Version 1.5.0 in `app.config.ts`; `extra.releaseVersion` set; build numbers come from EAS remote
-  versioning. Evidence:
+  `appleId`). Set `owner` and the EAS project id in the app config with environment overrides. Evidence: mobile commit: four profiles, remote app versions, autoIncrement on store profiles, ASC ids as placeholders.
+- [x] **RS-16.3** `.gitignore` covers `secrets/`, `*.p8`, `*.key`, `*.local.md`, `google-services.json` where
+  required; nothing with a password is committed. Evidence: mobile commit: `*.local.md`, google-services.json, GoogleService-Info.plist, `*.keystore` added; `git check-ignore` confirms.
+- [x] **RS-16.4** Version 1.5.0 in `app.config.ts`; `extra.releaseVersion` set; build numbers come from EAS remote
+  versioning. Evidence: mobile commit: 1.5.0, `extra.releaseVersion`, build numbers from EAS; Services.ReleaseVersion checks it (11/11).
 - [ ] **RS-16.5** Store readiness checks from `INSTALLERS.md` "What review needs from every app":
   - Real content on first launch: an always-on demo Admiral for reviewers with representative fleets, voyages, and
     missions (decide where it runs in RS-16.9), and a reviewer account whose credentials go only in
@@ -1302,10 +1302,10 @@ console or a two-factor prompt. Record build and submission URLs in `src/Armada.
   - No outside purchase paths; copy My Morning News's policy test.
   - Privacy answers match the binary; no tracking; `usesNonExemptEncryption: false` stays.
   - Android: no `AD_ID` permission in the merged manifest; current target API level.
-  Evidence:
+  Evidence: Partial: APP_STORE_SUBMISSION.md, AD_ID blocked, storePolicy.test.ts. Open: account deletion decision (admin-created users only), target API level and merged manifest check on the first store build.
 - [ ] **RS-16.6** Store assets in `src/Armada.Mobile/store/`: iPhone 6.9" (1320x2868) and iPad 13" (2064x2752)
   screenshots of real views including the new reliability screens, Play 512x512 icon, 1024x500 feature graphic,
-  phone screenshots; store copy with no em-dashes; support contact per `INSTALLERS.md`. Evidence:
+  phone screenshots; store copy with no em-dashes; support contact per `INSTALLERS.md`. Evidence: Partial: play icon, feature graphic, listing.md and capture-store-screenshots.sh. Open: screenshots need the demo Admiral (RS-16.9a).
 
 ### One-time console setup ([HUMAN] unless noted)
 

@@ -14,7 +14,7 @@ credentials, App Store Connect app id, Apple team id, Play account details) go o
 | Version | `1.5.0` in `app.config.ts`, the same as the Armada release; `extra.releaseVersion` is shown in Preferences |
 | Build numbers | EAS remote versioning, `autoIncrement` on the `preview` and `production` profiles |
 | Export compliance | `usesNonExemptEncryption: false` (HTTPS and platform crypto only) |
-| Support contact | `hello@latticetech.ai` |
+| Support contact | the support address from the private store notes (`store-private.local.md`), not committed |
 
 ## Review checks
 

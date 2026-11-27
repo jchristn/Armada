@@ -1,7 +1,7 @@
 # Armada store listing copy
 
 Copy for App Store Connect and Google Play. Keep it in step with what the app does; no pricing, no links to pay.
-Support contact: `hello@latticetech.ai`.
+Support contact: the support address from the private store notes (`store-private.local.md`), not committed.
 
 ## Name and subtitle
 
