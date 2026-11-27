@@ -4,7 +4,8 @@ import { dispatchWarningsFrom } from '../lib/dispatchPreview';
 import DispatchPreview from '../components/blackbox/DispatchWarnings';
 import { createPipeline, getPipeline, updatePipeline, deletePipeline, listPersonas, listVessels, createVoyage, apiErrorMessage } from '../api/client';
 import { listAll } from '../api/paging';
-import type { Pipeline, PipelineStage, Vessel } from '../types/models';
+import type { JudgeStrengthPolicy, Pipeline, PipelineStage, Vessel } from '../types/models';
+import JudgeStrengthField, { JUDGE_STRENGTH_TIP, judgeStrengthLabel } from '../components/pipelines/JudgeStrengthField';
 import { useAuth } from '../context/AuthContext';
 import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
 import ActionMenu from '../components/shared/ActionMenu';
@@ -86,7 +87,7 @@ export default function PipelineDetail() {
 
   // Edit modal
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<{ description: string; stages: StageForm[] }>({ description: '', stages: [] });
+  const [form, setForm] = useState<{ description: string; stages: StageForm[]; judgeStrength: JudgeStrengthPolicy }>({ description: '', stages: [], judgeStrength: 'Off' });
   const [personaNames, setPersonaNames] = useState<string[]>([]);
 
   // JSON viewer
@@ -129,6 +130,7 @@ export default function PipelineDetail() {
         requiresReview: s.requiresReview,
         reviewDenyAction: s.reviewDenyAction,
       })),
+      judgeStrength: pipeline.judgeStrength ?? 'Off',
     });
     setShowForm(true);
   }
@@ -171,7 +173,7 @@ export default function PipelineDetail() {
       const stagesPayload = form.stages
         .filter(s => s.personaName.trim() !== '')
         .map((s, i) => ({ personaName: s.personaName.trim(), isOptional: s.isOptional, description: s.description || null, requiresReview: s.requiresReview, reviewDenyAction: s.reviewDenyAction, order: i + 1 }));
-      const payload = { description: form.description || null, stages: stagesPayload } as Partial<Pipeline>;
+      const payload = { description: form.description || null, stages: stagesPayload, judgeStrength: form.judgeStrength } as Partial<Pipeline>;
       await updatePipeline(pipeline.name, payload);
       setShowForm(false);
       pushToast('success', t('Pipeline "{{name}}" saved.', { name: pipeline.name }));
@@ -275,6 +277,7 @@ export default function PipelineDetail() {
           <form className="modal" onClick={e => e.stopPropagation()} onSubmit={handleSubmit} style={{ maxWidth: '720px', width: '90%' }}>
             <h3>{t('Edit Pipeline')}</h3>
             <label title={t(PIPELINE_DESCRIPTION_TIP)}>{t('Description')}<textarea title={t(PIPELINE_DESCRIPTION_TIP)} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={3} /></label>
+            <JudgeStrengthField value={form.judgeStrength} onChange={(judgeStrength) => setForm({ ...form, judgeStrength })} />
             <div style={{ marginTop: '1rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                 <strong title={t('Stages run top to bottom. Each stage creates a mission for its persona that starts when the stage before it finishes.')}>{t('Stages')}</strong>
@@ -372,6 +375,7 @@ export default function PipelineDetail() {
         <div className="detail-field"><span className="detail-label">{t('Description')}</span><span>{pipeline.description || '-'}</span></div>
         <div className="detail-field"><span className="detail-label" title={t('Built-in pipelines ship with Armada and cannot be deleted.')}>{t('Built-in')}</span><span>{pipeline.isBuiltIn ? <span className="tag info" title={t('Built-in: ships with Armada and cannot be deleted.')}>{t('Yes')}</span> : <span className="tag" title={t('Custom: created by a user and can be deleted.')}>{t('No')}</span>}</span></div>
         <div className="detail-field"><span className="detail-label" title={t('Marks the pipeline as in use or retired. It is a label only: dispatch does not skip inactive pipelines.')}>{t('Active')}</span><span>{pipeline.active !== false ? <span className="tag passed" title={t('Active (a label only; it does not change dispatch).')}>{t('Yes')}</span> : <span className="tag" title={t('Inactive (a label only; dispatch can still use it).')}>{t('No')}</span>}</span></div>
+        <div className="detail-field"><span className="detail-label" title={t(JUDGE_STRENGTH_TIP)}>{t('Judge strength rule')}</span><span>{t(judgeStrengthLabel(pipeline.judgeStrength))}</span></div>
         <div className="detail-field"><span className="detail-label">{t('Created')}</span><span title={pipeline.createdUtc}>{formatDateTime(pipeline.createdUtc)}</span></div>
         <div className="detail-field"><span className="detail-label">{t('Last Updated')}</span><span>{formatDateTime(pipeline.lastUpdateUtc)}</span></div>
       </div>

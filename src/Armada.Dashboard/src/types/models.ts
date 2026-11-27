@@ -3365,6 +3365,12 @@ export interface ModelEndpoint {
   lastHealthCheckUtc: string | null;
   lastHealthError: string | null;
   lastLatencyMs: number | null;
+  /** Context window the model server reported for this endpoint's model (RS-7.8), or null when not discovered. */
+  discoveredContextLength?: number | null;
+  /** Where the discovered context was read, for example "ollama /api/ps", or null. */
+  discoveredContextSource?: string | null;
+  /** When the context was last discovered (UTC), or null. */
+  contextDiscoveredUtc?: string | null;
   healthHistory: ModelEndpointHealthRecord[];
   uptimePercentage: number;
   consecutiveSuccesses: number;
@@ -5152,6 +5158,146 @@ export interface CaptainSelectionHistoryQuery {
   trigger?: string;
   from?: string;
   to?: string;
+  pageNumber?: number;
+  pageSize?: number;
+}
+
+/** Where a model profile's served context came from (Armada.Core.Enums.ContextLengthSourceEnum). */
+export type ContextLengthSource = 'Configured' | 'Discovered' | 'Measured';
+
+/** Where an effective timeout came from (Armada.Core.Enums.TimeoutSourceEnum). */
+export type TimeoutSource = 'Global' | 'Measured' | 'Profile';
+
+/** Persona prompt variant a profile renders (Armada.Core.Enums.PromptVariantEnum). */
+export type PromptVariant = 'Current' | 'Lean' | 'Compact';
+
+/** Stable identity of a model profile (Armada.Core.Models.ModelProfileIdentity). */
+export interface ModelProfileIdentity {
+  runtime: string;
+  provider: string | null;
+  model: string | null;
+  servedContextTokens: number | null;
+  servedContextSource?: ContextLengthSource | null;
+}
+
+/** What the model can use as served: administrator values plus probe results (RS-8.1). */
+export interface ModelProfileCapabilities {
+  toolsAvailable: boolean | null;
+  mcpAvailable: boolean | null;
+  probedToolsAvailable?: boolean | null;
+  probedMcpAvailable?: boolean | null;
+  probedUtc?: string | null;
+}
+
+/** Rendering overrides; null means no override. */
+export interface ModelProfileRendering {
+  template: string | null;
+  repeatContractAtEnd: boolean | null;
+  maxFilesPerMission: number | null;
+}
+
+/** Per-model recovery overrides (RS-5.5); null uses the global setting. */
+export interface ModelProfileRecovery {
+  maxResumes: number | null;
+  unclassifiedResumes: number | null;
+  transientGraceMinutes: number | null;
+  judgeReworkRounds: number | null;
+  outputRepairAttempts: number | null;
+  escalateAfterResumes: number | null;
+}
+
+/** The recovery policy in effect (global settings with the profile overrides applied). */
+export interface RecoveryPolicy {
+  modelProfileId: string | null;
+  maxResumes: number;
+  unclassifiedResumes: number;
+  transientGraceMinutes: number;
+  judgeReworkRounds: number;
+  outputRepairAttempts: number;
+  escalateAfterResumes: number;
+}
+
+/** Per-model timeout overrides in minutes (RS-8.8); null uses the measured-speed default or the global setting. */
+export interface ModelProfileTimeouts {
+  stallThresholdMinutes: number | null;
+  toolWaitHardLimitMinutes: number | null;
+  maxRuntimeMinutes: number | null;
+  firstOutputMinutes: number | null;
+}
+
+/** The timeouts in effect, with where each came from. */
+export interface TimeoutPolicy {
+  modelProfileId: string | null;
+  speedScale: number;
+  stallThresholdMinutes: number;
+  stallThresholdSource: TimeoutSource;
+  toolWaitHardLimitMinutes: number;
+  toolWaitHardLimitSource: TimeoutSource;
+  maxRuntimeMinutes: number;
+  maxRuntimeSource: TimeoutSource;
+  firstOutputMinutes: number;
+  firstOutputSource: TimeoutSource;
+}
+
+/** The newest speed measurement from a probe run (server-owned). */
+export interface ModelProfileSpeed {
+  tokensPerSecond: number | null;
+  firstOutputMs: number | null;
+  measuredUtc: string | null;
+}
+
+/** The administrator's tier and the outcome-data suggestion (RS-8.5); only tier is editable. */
+export interface ModelProfileTiering {
+  tier: CaptainTier | null;
+  suggestedTier: CaptainTier | null;
+  suggestedReason: string | null;
+  suggestedSamples: number | null;
+  suggestedUtc: string | null;
+}
+
+/** One immutable revision of a model profile (runtime version, digest). */
+export interface ModelProfileRevisionSummary {
+  id: string;
+  runtimeVersion: string | null;
+  modelDigest: string | null;
+  firstSeenUtc: string;
+  evaluationRunId?: string | null;
+}
+
+/** The model as served (Armada.Core.Models.ModelProfile). */
+export interface ModelProfile {
+  id: string;
+  tenantId: string | null;
+  identity: ModelProfileIdentity;
+  capabilities: ModelProfileCapabilities;
+  rendering: ModelProfileRendering;
+  recovery: ModelProfileRecovery;
+  tiering: ModelProfileTiering;
+  effectiveRecovery?: RecoveryPolicy | null;
+  timeouts: ModelProfileTimeouts;
+  speed: ModelProfileSpeed;
+  effectiveTimeouts?: TimeoutPolicy | null;
+  notes: string | null;
+  revisions?: ModelProfileRevisionSummary[];
+  createdUtc: string;
+  lastUpdateUtc: string;
+}
+
+/** Body of PUT /api/v1/model-profiles/{id}: a section the body carries replaces it whole; omitted sections keep their value. */
+export interface ModelProfileUpdateRequest {
+  capabilities?: { toolsAvailable: boolean | null; mcpAvailable: boolean | null };
+  rendering?: ModelProfileRendering;
+  recovery?: ModelProfileRecovery;
+  timeouts?: ModelProfileTimeouts;
+  tiering?: { tier: CaptainTier | null };
+  notes?: string;
+}
+
+/** Filters of GET /api/v1/model-profiles. */
+export interface ModelProfileListQuery {
+  runtime?: string;
+  provider?: string;
+  model?: string;
   pageNumber?: number;
   pageSize?: number;
 }

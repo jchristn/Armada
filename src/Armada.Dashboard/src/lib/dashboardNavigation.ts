@@ -16,6 +16,7 @@ export const dashboardHubs = [
     path: '/captains', label: 'Captains', param: 'tab', defaultTab: 'captains',
     tabs: [
       { key: 'captains', label: 'Captains' },
+      { key: 'profiles', label: 'Model Profiles' },
       { key: 'docks', label: 'Docks' },
       { key: 'battery', label: 'Battery Packs' },
     ],
@@ -104,6 +105,7 @@ export const dashboardCollections: Record<string, { label: string; to: string }>
   missions: { label: 'Missions', to: '/missions' },
   voyages: { label: 'Voyages', to: '/missions?tab=voyages' },
   docks: { label: 'Docks', to: '/captains?tab=docks' },
+  'model-profiles': { label: 'Model Profiles', to: '/captains?tab=profiles' },
   'merge-queue': { label: 'Merge Queue', to: '/missions?tab=merge-queue' },
   blackbox: { label: 'Black Box', to: '/missions?tab=blackbox' },
   objectives: { label: 'Backlog', to: '/dispatch?tab=backlog' },
@@ -191,6 +193,7 @@ export const dashboardBreadcrumbRoutes = [
   "/events/:id",
   "/docks/:id",
   "/merge-queue/:id",
+  "/model-profiles/:id",
   "/configuration",
   "/personas/:name",
   "/pipelines/:name",

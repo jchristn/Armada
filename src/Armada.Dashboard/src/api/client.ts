@@ -228,6 +228,9 @@ import type {
   ModelProbeRunWithBattery,
   BatteryTaskResultInfo,
   ModelAlertAction,
+  ModelProfile,
+  ModelProfileListQuery,
+  ModelProfileUpdateRequest,
   ModelAlertApplyResult,
 } from '../types/models';
 import type {
@@ -2272,6 +2275,23 @@ export const listModelProbeRuns = (query?: ModelProbeRunQuery) =>
     captainId: query?.captainId, modelEndpointId: query?.modelEndpointId, status: query?.status,
     pageNumber: query?.pageNumber, pageSize: query?.pageSize,
   })}`);
+
+// Model profiles (the model as served). Reads are open to every signed-in user; updates are admin only.
+const MODEL_PROFILES = '/api/v1/model-profiles';
+
+/** One page of model profiles; list rows carry no revisions and no effective recovery or timeouts. */
+export const listModelProfiles = (query?: ModelProfileListQuery) =>
+  get<EnumerationResult<ModelProfile>>(`${MODEL_PROFILES}${cliQuery({
+    runtime: query?.runtime, provider: query?.provider, model: query?.model,
+    pageNumber: query?.pageNumber, pageSize: query?.pageSize,
+  })}`);
+
+/** One profile with its revisions and the effective recovery policy and timeouts. */
+export const getModelProfile = (id: string) => get<ModelProfile>(`${MODEL_PROFILES}/${encodeURIComponent(id)}`);
+
+/** Update the editable sections of a profile (admins only); a section the body carries replaces it whole. */
+export const updateModelProfile = (id: string, body: ModelProfileUpdateRequest) =>
+  put<ModelProfile>(`${MODEL_PROFILES}/${encodeURIComponent(id)}`, body);
 
 // Model alerts (scorecard thresholds) are advisory inbox items: their suggested actions change nothing until applied.
 

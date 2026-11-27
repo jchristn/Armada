@@ -1,6 +1,13 @@
 import { expect, it } from 'vitest';
 import type { Persona } from '../types/models';
-import { seedStepAssignments, captainAssignmentOverrides } from './dispatchRequest';
+import { seedStepAssignments, captainAssignmentOverrides, buildDispatchVoyageRequest } from './dispatchRequest';
+
+it('sends a read-only mode on every mission and omits the Implementation default', () => {
+  const draft = { vesselId: 'vsl_1', prompt: 'Audit the parser', priority: 100, voyageTitle: '', objectiveId: '', pipeline: '', selectedPlaybooks: [], stepAssignments: {}, multiTaskTitle: 'Multi' };
+  expect(buildDispatchVoyageRequest({ ...draft, mode: 'Audit' }).missions[0].mode).toBe('Audit');
+  expect('mode' in buildDispatchVoyageRequest({ ...draft, mode: 'Implementation' }).missions[0]).toBe(false);
+  expect('mode' in buildDispatchVoyageRequest(draft).missions[0]).toBe(false);
+});
 
 it('keeps personas with priorities on automatic routing despite a stored legacy default', () => {
   const persona = { name: 'Architect', defaultCaptainId: 'cpt_legacy', captainPriorities: [{ runtime: 'Mux' }] } as Persona;

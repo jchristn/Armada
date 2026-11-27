@@ -108,6 +108,13 @@ const EMPTY_FORM: EndpointForm = {
 const EP_NAME_TIP = 'Name for this endpoint, shown when choosing one for a captain, for example openai-prod or local-ollama. Required.';
 const EP_KIND_TIP = 'Inference answers prompts and can drive API Endpoint captains. Embedding turns text into vectors. It also decides how Validate tests the endpoint.';
 const EP_PROVIDER_TIP = 'The API this endpoint speaks. It sets the request format and default authentication. Use OpenAICompatible for servers like vLLM, LM Studio or LiteLLM.';
+/** "32,768 tokens (ollama /api/ps)" for an endpoint whose model server reported its context, else "Not discovered". */
+export function discoveredContextText(endpoint: Pick<ModelEndpoint, 'discoveredContextLength' | 'discoveredContextSource'>, t: (key: string, params?: Record<string, string | number>) => string): string {
+  if (endpoint.discoveredContextLength == null) return t('Not discovered');
+  const tokens = t('{{count}} tokens', { count: endpoint.discoveredContextLength.toLocaleString() });
+  return endpoint.discoveredContextSource ? `${tokens} (${endpoint.discoveredContextSource})` : tokens;
+}
+
 const EP_REGION_TIP = 'Cloud region the model runs in, for example us-east-1 on Bedrock or us-central1 on Vertex AI. Required.';
 const EP_PROJECT_TIP = 'Your Google Cloud project ID, for example my-gcp-project. Required for Vertex AI.';
 const EP_ACCESS_KEY_TIP = 'AWS access key ID, for example AKIA... Put the matching secret access key in the secret field below. Required for Bedrock.';
@@ -683,7 +690,7 @@ export default function Endpoints() {
               {([
                 ['maxIterations', 'Maximum model turns', 1, 1000, 1], ['maxTokens', 'Maximum output tokens', 1, 10000000, 1],
                 ['temperature', 'Temperature', 0, 2, 0.01], ['topP', 'Top P', 0, 1, 0.01],
-                ['contextLength', 'Context window (Ollama num_ctx)', 512, 2097152, 1], ['maxConcurrentMissions', 'Max concurrent missions (per base URL)', 1, 64, 1],
+                ['contextLength', 'Context window (Ollama num_ctx)', 512, 2097152, 1], ['maxConcurrentMissions', 'Max concurrent missions (per server and model)', 1, 64, 1],
                 ['firstResponseTimeoutMs', 'First-response timeout (ms)', 1000, 1800000, 1], ['toolOutputWindowPercent', 'Tool output window (% of context)', 1, 50, 1],
                 ['repeatedToolCallLimit', 'Repeated tool call limit', 2, 20, 1],
               ] as const).map(([key, label, min, max, step]) => <label key={key}>{t(label)}
@@ -692,8 +699,11 @@ export default function Endpoints() {
                   value={form.inferenceOptions[key] ?? ''} onChange={e => setForm({ ...form, inferenceOptions: { ...form.inferenceOptions, [key]: e.target.value === '' ? null : Number(e.target.value) } })} />
               </label>)}
               </div>
+              {editing && editing.discoveredContextLength != null && (
+                <p className="text-dim endpoint-discovered-context">{t('Discovered context: {{value}}. A configured context window above wins over it.', { value: discoveredContextText(editing, t) })}</p>
+              )}
               <p className="text-dim">{t('A model turn can contain several tool calls. Output tokens include reasoning and the visible answer; PolyPrompt defaults to 4,096 when no limit is set. Reasoning models may need a larger explicit budget.')}</p>
-              <p className="text-dim">{t('The context window applies to Ollama and Ollama Cloud; a run that fills it stops with a context-limit error instead of continuing on truncated history. Max concurrent missions limits how many missions run at once against this base URL across all captains. With a known context window, one file read or command output may fill the tool output window share of it before it is paged or cut.')}</p>
+              <p className="text-dim">{t('The context window applies to Ollama and Ollama Cloud; a run that fills it stops with a context-limit error instead of continuing on truncated history. Max concurrent missions limits how many missions run at once against this model on this server across all captains, however the URL is written. With a known context window, one file read or command output may fill the tool output window share of it before it is paged or cut.')}</p>
               <p className="text-dim">{t('Stream responses when a proxy or load balancer cuts long requests: the request timeout then limits only the silence between chunks, not the whole response. The first-response timeout covers loading a cold model and evaluating a long prompt before the first chunk. Both need an updated Harbor.')}</p>
             </fieldset>}
             {form.kind === 'Inference' && <fieldset className="endpoint-auth-section endpoint-inference-section">
@@ -757,6 +767,9 @@ export default function Endpoints() {
                   <span><strong>{t('Extra headers')}:</strong> <code>{health.endpoint.headers.map((h) => h.name).join(', ')}</code></span>
                 )}
                 {health.endpoint.lastLatencyMs != null && <span><strong>{t('Latency')}:</strong> {health.endpoint.lastLatencyMs} ms</span>}
+                <span title={t('Context window the model server reported for this model, read during health checks. Routing and the prompt variant use it when no context window is configured.')}>
+                  <strong>{t('Discovered context')}:</strong> {discoveredContextText(health.endpoint, t)}
+                </span>
               </div>
 
               <div className="health-stats-row">

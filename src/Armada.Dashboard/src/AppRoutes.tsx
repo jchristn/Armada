@@ -54,6 +54,7 @@ const FleetActionRunDetail = lazy(() => import('./pages/FleetActionRunDetail'));
 const BlackBoxEntry = lazy(() => import('./pages/BlackBoxEntry'));
 const Evaluations = lazy(() => import('./pages/Evaluations'));
 const EvaluationDetail = lazy(() => import('./pages/EvaluationDetail'));
+const ModelProfileDetail = lazy(() => import('./pages/ModelProfileDetail'));
 
 /** The dashboard's routes; `layout` is the element every page renders inside (it must render an Outlet). */
 export default function AppRoutes({ layout }: { layout: ReactNode }) {
@@ -88,6 +89,8 @@ export default function AppRoutes({ layout }: { layout: ReactNode }) {
         <Route path="captains/:id" element={<CaptainDetail />} />
         <Route path="evaluations" element={<Evaluations />} />
         <Route path="evaluations/:id" element={<EvaluationDetail />} />
+        <Route path="model-profiles" element={<LegacyPageRedirect to="/captains?tab=profiles" />} />
+        <Route path="model-profiles/:id" element={<ModelProfileDetail />} />
 
         <Route path="missions" element={<MissionsHub />} />
         <Route path="missions/:id" element={<MissionDetail />} />

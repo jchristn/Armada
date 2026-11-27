@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listPipelines, listPersonas, createPipeline, updatePipeline, deletePipeline, apiErrorMessage } from '../api/client';
 import { listAll } from '../api/paging';
-import type { Pipeline, PipelineStage, ScopeEnum } from '../types/models';
+import type { JudgeStrengthPolicy, Pipeline, PipelineStage, ScopeEnum } from '../types/models';
 import { useAuth } from '../context/AuthContext';
 import { canEdit as canEditScoped, resolveCreateScope, type ScopeViewer } from '../lib/scoping';
 import ScopeBadge from '../components/shared/ScopeBadge';
@@ -23,6 +23,7 @@ import { buildPipelineDuplicatePayload } from '../lib/duplicates';
 import { formatStages } from '../lib/configuration';
 import { useResourceTable } from '../lib/useResourceTable';
 import { useDeleteProgress } from '../lib/useDeleteProgress';
+import JudgeStrengthField from '../components/pipelines/JudgeStrengthField';
 
 interface StageFormEntry {
   personaName: string;
@@ -53,7 +54,8 @@ export default function Pipelines() {
   // Modal state
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Pipeline | null>(null);
-  const [form, setForm] = useState<{ name: string; description: string; stages: StageFormEntry[]; scope: ScopeEnum }>({ name: '', description: '', stages: [{ personaName: '', isOptional: false, requiresReview: false, reviewDenyAction: 'RetryStage' }], scope: resolveCreateScope(viewer) });
+  const [form, setForm] = useState<{ name: string; description: string; stages: StageFormEntry[]; scope: ScopeEnum; judgeStrength: JudgeStrengthPolicy }>({ name: '', description: '', stages: [{ personaName: '', isOptional: false, requiresReview: false, reviewDenyAction: 'RetryStage' }], scope: resolveCreateScope(viewer), judgeStrength: 'Wait' });
+  const [templateName, setTemplateName] = useState('');
   const [personaNames, setPersonaNames] = useState<string[]>([]);
 
   // JSON viewer
@@ -101,7 +103,8 @@ export default function Pipelines() {
 
   // CRUD
   function openCreate() {
-    setForm({ name: '', description: '', stages: [{ personaName: '', isOptional: false, requiresReview: false, reviewDenyAction: 'RetryStage' }], scope: resolveCreateScope(viewer) });
+    setForm({ name: '', description: '', stages: [{ personaName: '', isOptional: false, requiresReview: false, reviewDenyAction: 'RetryStage' }], scope: resolveCreateScope(viewer), judgeStrength: 'Wait' });
+    setTemplateName('');
     setEditing(null);
     setShowForm(true);
   }
@@ -111,9 +114,20 @@ export default function Pipelines() {
       .sort((a, b) => a.order - b.order)
       .map(s => ({ personaName: s.personaName, isOptional: s.isOptional, requiresReview: s.requiresReview, reviewDenyAction: s.reviewDenyAction }));
     if (stages.length === 0) stages.push({ personaName: '', isOptional: false, requiresReview: false, reviewDenyAction: 'RetryStage' });
-    setForm({ name: p.name, description: p.description ?? '', stages, scope: p.scope });
+    setForm({ name: p.name, description: p.description ?? '', stages, scope: p.scope, judgeStrength: p.judgeStrength ?? 'Off' });
     setEditing(p);
     setShowForm(true);
+  }
+
+  // Create from template: copy a built-in pipeline's description, stages and Judge rule into the create form.
+  function applyTemplate(name: string) {
+    setTemplateName(name);
+    const template = pipelines.find(p => p.name === name);
+    if (!template) return;
+    const stages: StageFormEntry[] = (template.stages ?? []).slice()
+      .sort((a, b) => a.order - b.order)
+      .map(s => ({ personaName: s.personaName, isOptional: s.isOptional, requiresReview: s.requiresReview, reviewDenyAction: s.reviewDenyAction }));
+    setForm(f => ({ ...f, description: template.description ?? '', stages: stages.length > 0 ? stages : f.stages, judgeStrength: template.judgeStrength ?? 'Wait' }));
   }
 
   function addStage() {
@@ -154,7 +168,7 @@ export default function Pipelines() {
       const stagesPayload = form.stages
         .filter(s => s.personaName.trim() !== '')
         .map((s, i) => ({ personaName: s.personaName.trim(), isOptional: s.isOptional, requiresReview: s.requiresReview, reviewDenyAction: s.reviewDenyAction, order: i + 1 }));
-      const payload = { name: form.name, description: form.description || null, stages: stagesPayload, scope: form.scope } as Partial<Pipeline>;
+      const payload = { name: form.name, description: form.description || null, stages: stagesPayload, scope: form.scope, judgeStrength: form.judgeStrength } as Partial<Pipeline>;
       if (editing) await updatePipeline(editing.name, payload as Partial<Pipeline>);
       else await createPipeline(payload);
       setShowForm(false);
@@ -252,9 +266,18 @@ export default function Pipelines() {
         <div className="modal-overlay" onClick={() => setShowForm(false)}>
           <form className="modal" onClick={e => e.stopPropagation()} onSubmit={handleSubmit} style={{ maxWidth: '720px', width: '90%' }}>
             <h3>{editing ? t('Edit Pipeline') : t('Create Pipeline')}</h3>
+            {!editing && pipelines.some(p => p.isBuiltIn) && (
+              <label title={t('Start from a built-in pipeline, such as a reference pipeline: its description, stages and Judge rule are copied into this form for you to change.')}>{t('Create from template')}
+                <select aria-label={t('Create from template')} value={templateName} onChange={e => applyTemplate(e.target.value)}>
+                  <option value="">{t('Blank pipeline')}</option>
+                  {pipelines.filter(p => p.isBuiltIn).map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                </select>
+              </label>
+            )}
             <label title={t(PIPELINE_NAME_TIP)}>{t('Name')}<input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} title={t(PIPELINE_NAME_TIP)} required /></label>
             <label title={t(PIPELINE_DESCRIPTION_TIP)}>{t('Description')}<input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} title={t(PIPELINE_DESCRIPTION_TIP)} /></label>
             <ScopeSelect viewer={viewer} value={form.scope} onChange={(scope) => setForm({ ...form, scope })} />
+            <JudgeStrengthField value={form.judgeStrength} onChange={(judgeStrength) => setForm({ ...form, judgeStrength })} />
             <div style={{ marginTop: '1rem' }}>
               <strong title={t('Stages run top to bottom. Each stage creates a mission for its persona that starts when the stage before it finishes.')}>{t('Stages')}</strong>
               {form.stages.map((stage, i) => (

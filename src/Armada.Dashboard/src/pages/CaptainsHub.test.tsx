@@ -9,6 +9,7 @@ vi.mock('../context/LocaleContext', () => ({
 vi.mock('./Captains', () => ({ default: () => <div>Captains panel</div> }));
 vi.mock('./Docks', () => ({ default: () => <div>Docks panel</div> }));
 vi.mock('./BatteryPacks', () => ({ default: () => <div>Battery packs panel</div> }));
+vi.mock('./ModelProfiles', () => ({ default: () => <div>Model profiles panel</div> }));
 
 /** Mirrors the AppRoutes.tsx routes for /captains and the legacy /battery redirect. */
 function renderAt(entry: string) {
@@ -25,9 +26,9 @@ function selected(): string | null {
 }
 
 describe('CaptainsHub Battery Packs tab', () => {
-  it('lists Captains, Docks and Battery Packs, with Captains as the default tab', async () => {
+  it('lists Captains, Model Profiles, Docks and Battery Packs, with Captains as the default tab', async () => {
     renderAt('/captains');
-    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Captains', 'Docks', 'Battery Packs']);
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Captains', 'Model Profiles', 'Docks', 'Battery Packs']);
     expect(await screen.findByText('Captains panel')).toBeInTheDocument();
     expect(selected()).toBe('Captains');
   });
