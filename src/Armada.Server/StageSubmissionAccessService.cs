@@ -2,6 +2,7 @@ namespace Armada.Server
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Database;
@@ -18,6 +19,15 @@ namespace Armada.Server
     /// </summary>
     public class StageSubmissionAccessService
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Most submissions one mission read returns (the newest 200).
+        /// </summary>
+        public const int MaxSubmissions = 200;
+
+        #endregion
+
         #region Private-Members
 
         private readonly DatabaseDriver _Database;
@@ -68,7 +78,7 @@ namespace Armada.Server
         }
 
         /// <summary>
-        /// Every submission of a mission the caller can see, newest first.
+        /// The newest submissions (at most <see cref="MaxSubmissions"/>) of a mission the caller can see, newest first.
         /// </summary>
         /// <param name="caller">Caller.</param>
         /// <param name="missionId">Mission id.</param>
@@ -87,7 +97,8 @@ namespace Armada.Server
             Mission? mission = await _Database.Missions.ReadAsync(missionId.Trim(), token).ConfigureAwait(false);
             if (mission == null || !await CanSeeAsync(caller, mission, token).ConfigureAwait(false))
                 throw new KeyNotFoundException("Mission not found.");
-            return await _Database.StageSubmissions.EnumerateByMissionAsync(mission.Id, token).ConfigureAwait(false);
+            List<StageSubmission> all = await _Database.StageSubmissions.EnumerateByMissionAsync(mission.Id, token).ConfigureAwait(false);
+            return all.OrderByDescending(s => s.CreatedUtc).Take(MaxSubmissions).ToList();
         }
 
         #endregion

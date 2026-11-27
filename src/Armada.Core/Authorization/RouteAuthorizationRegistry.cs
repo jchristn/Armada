@@ -98,6 +98,7 @@ namespace Armada.Core.Authorization
             Add("GET", "/api/v1/missions/{id}/attempts", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/reliability/summary", "StageOutcome", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/reliability/gate-reports", "GateReport", ResourceOperationEnum.Read, PermissionLevel.TenantAdmin);
+            Add("POST", "/api/v1/reliability/gate-reports/enumerate", "GateReport", ResourceOperationEnum.Read, PermissionLevel.TenantAdmin);
             Add("POST", "/api/v1/reliability/gate-reports", "GateReport", ResourceOperationEnum.Create, PermissionLevel.AdminOnly);
             Add("GET", "/api/v1/reliability/gate-reports/{id}", "GateReport", ResourceOperationEnum.Read, PermissionLevel.TenantAdmin);
             Add("GET", "/api/v1/failure-cause-rules", "FailureCauseRule", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
@@ -138,6 +139,7 @@ namespace Armada.Core.Authorization
             Add("POST", "/api/v1/battery/packs/enumerate", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/battery/runs", "BatteryRun", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
             Add("GET", "/api/v1/battery/runs", "BatteryRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/battery/runs/enumerate", "BatteryRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/battery/runs/{id}/cancel", "BatteryRun", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
             Add("GET", "/api/v1/battery/runs/{id}", "BatteryRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/battery/runs/{id}/results", "BatteryRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);

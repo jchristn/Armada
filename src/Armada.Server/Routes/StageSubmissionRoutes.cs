@@ -64,7 +64,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("StageSubmissions")
                 .WithSummary("List a mission's stage submissions")
-                .WithDescription("Every plan, verdict or result the mission's captains submitted through armada_submit_plan, armada_submit_verdict or armada_submit_result, newest first, with attempt id, source (Mcp or Native) and the typed submission. The latest submission of an attempt decided that attempt. A global admin sees every tenant, everyone else their own tenant; a captain session sees its own voyage. 404 when the mission does not exist or is out of scope.")
+                .WithDescription("The newest 200 plans, verdicts or results the mission's captains submitted through armada_submit_plan, armada_submit_verdict or armada_submit_result, newest first, with attempt id, source (Mcp or Native) and the typed submission. The latest submission of an attempt decided that attempt. A global admin sees every tenant, everyone else their own tenant; a captain session sees its own voyage. 404 when the mission does not exist or is out of scope.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
                 .WithResponse(200, OpenApiJson.For<List<StageSubmission>>("Submissions"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())

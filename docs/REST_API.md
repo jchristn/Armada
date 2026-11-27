@@ -4866,7 +4866,7 @@ any marker line in the output; at completion it is appended to `AgentOutput` as 
 
 | Method | Path | Body | Response |
 |--------|------|------|----------|
-| GET | `/api/v1/missions/{id}/submissions` | | `200` `StageSubmission[]` of the mission, newest first: `Id`, `TenantId`, `MissionId`, `AttemptId`, `Persona`, `Kind` (`Plan`, `Verdict`, `Result`), `Source` (`Mcp`, or `Native` for an API endpoint captain without MCP), `Submission` (`Kind` and the typed `Plan`, `Verdict` or `Result`) and `CreatedUtc`; `404` when the mission is missing or out of scope |
+| GET | `/api/v1/missions/{id}/submissions` | | `200` `StageSubmission[]` of the mission, newest first and at most the newest 200: `Id`, `TenantId`, `MissionId`, `AttemptId`, `Persona`, `Kind` (`Plan`, `Verdict`, `Result`), `Source` (`Mcp`, or `Native` for an API endpoint captain without MCP), `Submission` (`Kind` and the typed `Plan`, `Verdict` or `Result`) and `CreatedUtc`; `404` when the mission is missing or out of scope |
 
 Access follows the handoff artifact rules: global admins see every tenant, everyone else their own tenant, a captain
 session its own voyage or its own mission and the stage it depends on; Ask sessions get `403`.

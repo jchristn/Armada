@@ -362,6 +362,14 @@
    "auth": "TenantAdmin"
   },
   {
+   "method": "post",
+   "path": "/api/v1/battery/runs/enumerate",
+   "summary": "Enumerate battery runs",
+   "tag": "Battery",
+   "requestType": "BatteryRunQuery",
+   "auth": "Authenticated"
+  },
+  {
    "method": "get",
    "path": "/api/v1/battery/runs/{id}",
    "summary": "Get a battery run",
@@ -3112,6 +3120,14 @@
    "tag": "Reliability",
    "requestType": "GateReport",
    "auth": "AdminOnly"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/reliability/gate-reports/enumerate",
+   "summary": "Enumerate gate reports",
+   "tag": "Reliability",
+   "requestType": "GateReportQuery",
+   "auth": "TenantAdmin"
   },
   {
    "method": "get",

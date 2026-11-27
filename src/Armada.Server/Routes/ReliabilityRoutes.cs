@@ -134,6 +134,31 @@ namespace Armada.Server.Routes
                 .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Not an admin"))
                 .WithSecurity("ApiKey"));
 
+            app.Post("/api/v1/reliability/gate-reports/enumerate", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    GateReportQuery query = ReadGateReportQuery(req);
+                    return (object)_Service.ListGateReports(ctx, query.PageNumber, query.PageSize);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex);
+                }
+            },
+            api => api
+                .WithTag("Reliability")
+                .WithSummary("Enumerate gate reports")
+                .WithDescription("The POST form of GET /api/v1/reliability/gate-reports: stored acceptance gate reports, newest first. The JSON body (GateReportQuery) carries PageNumber and PageSize (1-100, default 10); an empty body returns the first page. Global and tenant admins (403 otherwise).")
+                .WithRequestBody(OpenApiJson.BodyFor<GateReportQuery>("Paging", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<GateReport>>("One page of reports"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Not an admin"))
+                .WithSecurity("ApiKey"));
+
             app.Post("/api/v1/reliability/gate-reports", async (ApiRequest req) =>
             {
                 AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
@@ -216,6 +241,17 @@ namespace Armada.Server.Routes
             int? pageSize = ReadInt(req, "pageSize");
             if (pageSize.HasValue) query.PageSize = pageSize.Value;
             return query;
+        }
+
+        private GateReportQuery ReadGateReportQuery(ApiRequest req)
+        {
+            string body = req.Http.Request.DataAsString ?? "";
+            if (String.IsNullOrWhiteSpace(body)) return new GateReportQuery();
+            try
+            {
+                return JsonSerializer.Deserialize<GateReportQuery>(body, _JsonOptions) ?? new GateReportQuery();
+            }
+            catch (JsonException ex) { throw new ArgumentException("Invalid request body: " + ex.Message, ex); }
         }
 
         private static int? ReadInt(ApiRequest req, string name)

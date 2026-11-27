@@ -342,6 +342,29 @@ namespace Armada.Server.Routes
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
+            app.Post("/api/v1/battery/runs/enumerate", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    return await _Service.EnumerateRunsAsync(ctx, ReadOptionalBody<BatteryRunQuery>(req) ?? new BatteryRunQuery()).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex);
+                }
+            },
+            api => api
+                .WithTag("Battery")
+                .WithSummary("Enumerate battery runs")
+                .WithDescription("The POST form of GET /api/v1/battery/runs: one page of battery runs, newest first, without their per-task results. The JSON body (BatteryRunQuery) carries TenantId (global admins only), CaptainId, Status, PageNumber and PageSize (1-1000, default 25); an empty body returns the first page. Captain sessions are refused.")
+                .WithRequestBody(OpenApiJson.BodyFor<BatteryRunQuery>("Paging and filters", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<BatteryRun>>("One page of runs"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithSecurity("ApiKey"));
+
             app.Post("/api/v1/battery/runs/{id}/cancel", async (ApiRequest req) =>
             {
                 AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
@@ -474,6 +497,17 @@ namespace Armada.Server.Routes
             {
                 return JsonSerializer.Deserialize<T>(req.Http.Request.DataAsString ?? "", _JsonOptions)
                     ?? throw new ArgumentException("A request body is required.");
+            }
+            catch (JsonException ex) { throw new ArgumentException("Invalid request body: " + ex.Message, ex); }
+        }
+
+        private T? ReadOptionalBody<T>(ApiRequest req) where T : class
+        {
+            string body = req.Http.Request.DataAsString ?? "";
+            if (String.IsNullOrWhiteSpace(body)) return null;
+            try
+            {
+                return JsonSerializer.Deserialize<T>(body, _JsonOptions);
             }
             catch (JsonException ex) { throw new ArgumentException("Invalid request body: " + ex.Message, ex); }
         }

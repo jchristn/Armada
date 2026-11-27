@@ -5515,6 +5515,41 @@
                     ]
                 },
                 {
+                    "name": "Enumerate Battery Runs",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"Status\": \"Running\",\n  \"PageNumber\": 1,\n  \"PageSize\": 25\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/battery/runs/enumerate",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "battery",
+                                "runs",
+                                "enumerate"
+                            ]
+                        },
+                        "description": "POST form of GET /api/v1/battery/runs. Body is a BatteryRunQuery (TenantId for global admins, CaptainId, Status, PageNumber, PageSize 1-1000); an empty body returns the first page."
+                    }
+                },
+                {
                     "name": "Cancel Battery Run",
                     "request": {
                         "method": "POST",
@@ -20269,6 +20304,41 @@
                             "body": "{\n  \"Success\": true,\n  \"PageNumber\": 1,\n  \"PageSize\": 10,\n  \"TotalPages\": 1,\n  \"TotalRecords\": 1,\n  \"Objects\": [\n    {\n      \"StartedUtc\": \"2026-11-26T10:00:00Z\",\n      \"FinishedUtc\": \"2026-11-26T12:00:00Z\",\n      \"ArmadaVersion\": \"1.5.0\",\n      \"Packs\": [\n        \"csharp\"\n      ],\n      \"Pipelines\": [\n        {\n          \"Pipeline\": \"Gate-A\",\n          \"RunId\": \"bat_mvq0z9y8x7w6v5u4t3s2r1q0\",\n          \"Status\": \"Completed\",\n          \"Passed\": 99,\n          \"Failed\": 1,\n          \"CouldNotRun\": 0,\n          \"PendingEvaluation\": 0\n        }\n      ],\n      \"Measures\": [\n        {\n          \"Id\": \"G1\",\n          \"Name\": \"Completion rate\",\n          \"Value\": \"99%\",\n          \"Threshold\": \">= 95%\",\n          \"Status\": \"Pass\",\n          \"Detail\": \"99 of 100\"\n        }\n      ],\n      \"Passed\": true,\n      \"Id\": \"gate-20261126-120001000\",\n      \"UploadedUtc\": \"2026-11-26T12:00:01Z\"\n    }\n  ]\n}"
                         }
                     ]
+                },
+                {
+                    "name": "Enumerate Gate Reports",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 10\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/reliability/gate-reports/enumerate",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "reliability",
+                                "gate-reports",
+                                "enumerate"
+                            ]
+                        },
+                        "description": "POST form of GET /api/v1/reliability/gate-reports. Body is a GateReportQuery (PageNumber, PageSize 1-100). Global and tenant admins."
+                    }
                 },
                 {
                     "name": "Get Latest Gate Report",

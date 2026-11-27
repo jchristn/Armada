@@ -106,6 +106,19 @@ namespace Armada.Client
         }
 
         /// <summary>
+        /// POST /api/v1/reliability/gate-reports/enumerate: the POST form of <see cref="ListGateReportsAsync"/>, stored gate
+        /// reports, newest first (global and tenant admins).
+        /// </summary>
+        /// <param name="query">Paging, or null for the first page of 10.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of reports.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<EnumerationResult<GateReport>?> EnumerateGateReportsAsync(GateReportQuery? query = null, CancellationToken token = default)
+        {
+            return _Transport.PostAsync<EnumerationResult<GateReport>>("/api/v1/reliability/gate-reports/enumerate", query ?? new GateReportQuery(), null, token);
+        }
+
+        /// <summary>
         /// GET /api/v1/reliability/gate-reports/{id}: one stored gate report; "latest" returns the newest.
         /// </summary>
         /// <param name="id">Report id, or "latest".</param>

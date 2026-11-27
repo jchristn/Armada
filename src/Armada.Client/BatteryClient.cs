@@ -189,6 +189,19 @@ namespace Armada.Client
         }
 
         /// <summary>
+        /// POST /api/v1/battery/runs/enumerate: the POST form of <see cref="ListRunsAsync"/>, one page of the battery runs
+        /// visible to the caller, newest first.
+        /// </summary>
+        /// <param name="query">Filters (tenant for global admins, captain, status) and paging, or null for the first page of 25.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of runs.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<EnumerationResult<BatteryRun>?> EnumerateRunsAsync(BatteryRunQuery? query = null, CancellationToken token = default)
+        {
+            return _Transport.PostAsync<EnumerationResult<BatteryRun>>("/api/v1/battery/runs/enumerate", query ?? new BatteryRunQuery(), null, token);
+        }
+
+        /// <summary>
         /// POST /api/v1/battery/runs/{id}/cancel: stop a run (no further task is dispatched, its open mission is cancelled
         /// and its dock released). Returns the run after the stop; it may still be Running for a few seconds while its open
         /// mission stops.

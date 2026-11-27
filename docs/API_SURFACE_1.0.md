@@ -27,12 +27,12 @@ Client contract version: `1.0` (reported as `ContractVersion` by
 
 | Surface | Total | Experimental |
 |---|---|---|
-| REST routes | 542 | 15 |
+| REST routes | 544 | 15 |
 | MCP tools | 284 | 8 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 84 | 0 |
-| CLI commands | 104 | 0 |
+| CLI commands | 111 | 0 |
 | Settings keys | 368 | 12 |
 
 ## REST API
@@ -91,6 +91,7 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | POST | `/api/v1/battery/packs/{packId}/validate` | Authenticated |  | 200 `BatteryPackInfo`, 400, 403 `ApiErrorResponse`, 404, 409 `ApiErrorResponse` |  |
 | GET | `/api/v1/battery/runs` | Authenticated |  | 200 `EnumerationResult<BatteryRun>`, 400 |  |
 | POST | `/api/v1/battery/runs` | TenantAdmin | `BatteryRunRequest` | 201 `BatteryRun`, 400, 403 `ApiErrorResponse`, 404 |  |
+| POST | `/api/v1/battery/runs/enumerate` | Authenticated | `BatteryRunQuery` (optional) | 200 `EnumerationResult<BatteryRun>`, 400 |  |
 | GET | `/api/v1/battery/runs/{id}` | Authenticated |  | 200 `BatteryRun`, 404 |  |
 | POST | `/api/v1/battery/runs/{id}/cancel` | TenantAdmin | `BatteryRunCancelRequest` (optional) | 200 `BatteryRun`, 400, 403 `ApiErrorResponse`, 404 |  |
 | GET | `/api/v1/battery/runs/{id}/results` | Authenticated |  | 200 `EnumerationResult<BatteryTaskResult>`, 400, 404 |  |
@@ -419,6 +420,7 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | POST | `/api/v1/releases/{id}/refresh` | TenantAdmin |  | 200 `Release`, 404 |  |
 | GET | `/api/v1/reliability/gate-reports` | TenantAdmin |  | 200 `EnumerationResult<GateReport>`, 400, 403 `ApiErrorResponse` |  |
 | POST | `/api/v1/reliability/gate-reports` | AdminOnly | `GateReport` | 201 `GateReport`, 400, 403 `ApiErrorResponse` |  |
+| POST | `/api/v1/reliability/gate-reports/enumerate` | TenantAdmin | `GateReportQuery` (optional) | 200 `EnumerationResult<GateReport>`, 400, 403 `ApiErrorResponse` |  |
 | GET | `/api/v1/reliability/gate-reports/{id}` | TenantAdmin |  | 200 `GateReport`, 403 `ApiErrorResponse`, 404 |  |
 | GET | `/api/v1/reliability/summary` | Authenticated |  | 200 `ReliabilitySummary`, 400 |  |
 | GET | `/api/v1/request-history` | Authenticated |  | 200 `EnumerationResult<RequestHistoryEntry>` |  |
@@ -1008,6 +1010,7 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 | `armada backlog show` | `<backlog>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada backlog update` | `<backlog>*` | `--acceptance`, `--backlog-state`, `--blocked-by`, `--category`, `--constraint`, `--description\|-d`, `--due-utc`, `--effort`, `--evidence`, `--fleet`, `--json`, `--kind`, `--non-goal`, `--owner`, `--page`, `--page-size`, `--parent`, `--pipeline`, `--priority`, `--profile`, `--rank`, `--server`, `--status`, `--summary`, `--tag`, `--target-version`, `--title\|-t`, `--token`, `--verbose`, `--vessel` |
 | `armada battery cancel` | `<run>*` | `--json`, `--page`, `--page-size`, `--profile`, `--reason`, `--server`, `--token`, `--verbose` |
+| `armada battery report` | `<report>` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada battery runs` |  | `--captain`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--status`, `--token`, `--verbose` |
 | `armada blackbox backfill` |  | `--json`, `--max`, `--page`, `--page-size`, `--profile`, `--server`, `--since`, `--token`, `--verbose` |
 | `armada blackbox bundle` |  | `--before`, `--captain`, `--fingerprint`, `--format`, `--json`, `--kind`, `--max`, `--mission`, `--output\|-o`, `--page`, `--page-size`, `--phase`, `--pinned`, `--profile`, `--redact-hosts`, `--resolution`, `--server`, `--since`, `--step`, `--token`, `--triage`, `--verbose`, `--vessel`, `--voyage` |
@@ -1058,7 +1061,7 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 | `armada mcp stdio` |  | `--profile`, `--server`, `--token` |
 | `armada mission attempts` | `<mission>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada mission cancel` | `<mission>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
-| `armada mission create` | `<title>*` | `--branch-strategy`, `--description\|-d`, `--json`, `--max-files`, `--max-steps`, `--min-context-tokens`, `--page`, `--page-size`, `--parent`, `--priority\|-p`, `--profile`, `--require-tool`, `--server`, `--token`, `--verbose`, `--vessel\|-v`, `--voyage` |
+| `armada mission create` | `<title>*` | `--branch-strategy`, `--description\|-d`, `--json`, `--max-files`, `--max-steps`, `--min-context-tokens`, `--mode`, `--page`, `--page-size`, `--parent`, `--persona`, `--priority\|-p`, `--profile`, `--require-tool`, `--server`, `--token`, `--verbose`, `--vessel\|-v`, `--voyage` |
 | `armada mission failure` | `<id>*` | `--brief`, `--json`, `--page`, `--page-size`, `--profile`, `--redact-hosts`, `--server`, `--token`, `--verbose` |
 | `armada mission lint-brief` |  | `--brief`, `--brief-file`, `--depends-on`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--title`, `--token`, `--verbose`, `--vessel`, `--voyage` |
 | `armada mission list` |  | `--captain\|-c`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--status\|-s`, `--token`, `--verbose`, `--vessel\|-v`, `--voyage` |
@@ -1067,6 +1070,12 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 | `armada mission selection` | `<mission>*` | `--decision`, `--history`, `--json`, `--outcome`, `--page`, `--page-size`, `--preview`, `--profile`, `--server`, `--tenant`, `--token`, `--verbose` |
 | `armada mission selection-recovery` | `<mission>*` | `--allow-fallback`, `--expected-revision`, `--json`, `--profile`, `--reason`, `--reserve-exception`, `--server`, `--token`, `--verbose`, `--yes\|-y` |
 | `armada mission show` | `<mission>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada model-profile list` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada model-profile show` | `<id>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada model-profile update` | `<id>*` | `--escalate-after-resumes`, `--first-output-minutes`, `--json`, `--judge-rework-rounds`, `--max-resumes`, `--max-runtime-minutes`, `--output-repair-attempts`, `--page`, `--page-size`, `--profile`, `--server`, `--stall-minutes`, `--tier`, `--token`, `--tool-wait-minutes`, `--transient-grace`, `--unclassified-resumes`, `--verbose` |
+| `armada persona ladder` | `<name>*` | `--clear`, `--json`, `--page`, `--page-size`, `--profile`, `--rung`, `--server`, `--token`, `--verbose` |
+| `armada persona list` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada persona show` | `<name>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada playbook add` | `<file-name>*` | `--content\|-c`, `--description\|-d`, `--from-file\|-f`, `--inactive`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada playbook list` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada playbook remove` | `<playbook>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
