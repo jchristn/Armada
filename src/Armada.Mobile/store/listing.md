@@ -29,7 +29,7 @@ from your phone; see armadago.ai to set one up. Your data stays on your server.
 
 ## Keywords (App Store, 100 characters max)
 
-ai,coding,agents,developer,llm,devops,automation,claude,codex,orchestration,git,pipeline
+ai,coding,agents,developer,llm,devops,automation,orchestration,git,pipeline,mcp,selfhosted,worktree
 
 ## Category
 
