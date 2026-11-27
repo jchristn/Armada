@@ -394,6 +394,15 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
 - **Live output buffers are ring buffers.** Mission, planning and refinement output no longer copies the whole buffer
   on each append past the cap (6,000 lines into 256 KiB: 192 ms before, 8 ms after) (RS-10.5).
 
+### Product surfaces
+
+- **Pipeline reliability metrics and Grafana dashboard.** New `armada_stage_attempts_duration_seconds`,
+  `armada_stage_repairs_total`, and `armada_stage_escalations_total` (labels persona, runtime, model, and repair kind
+  or failure kind; no mission ids), plus the `armada-pipeline-reliability` dashboard: completion rate by model and
+  persona, failure kinds, repairs, escalations, dispatch latency, and attempt duration (RS-12.5).
+- **The Harbor app shows its capability flags**, a banner with update steps when the Admiral needs flags this Harbor
+  lacks, and the context windows it discovered for local endpoints (RS-12.19).
+
 ### Tests
 
 - Cases that set a skip reason now also set Touchstone's skip flag; five suites ran cases that were meant to skip,

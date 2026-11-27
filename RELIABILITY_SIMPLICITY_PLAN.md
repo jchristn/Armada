@@ -1128,9 +1128,9 @@ Parity manifests (`src/Armada.Tui/parity.json`, `src/Armada.Mobile/parity.json`)
   carry the new fields; visibility rules from 1.4.0 apply. Evidence:
 - [ ] **RS-12.4** Settings: every new setting has validation in its setter, defaults documented, and appears in the
   runtime settings API and dashboard Settings page. Evidence:
-- [ ] **RS-12.5** Telemetry: Prometheus metrics for RS-1.4, Grafana dashboard panels added under
+- [x] **RS-12.5** Telemetry: Prometheus metrics for RS-1.4, Grafana dashboard panels added under
   `docker/armada/observability/grafana` (pipeline reliability: completion rate, failure kinds, repairs, escalations,
-  dispatch latency), per `TELEMETRY_REQUIREMENTS.md`. Evidence:
+  dispatch latency), per `TELEMETRY_REQUIREMENTS.md`. Evidence: `StageOutcomeMetrics`, `armada-pipeline-reliability.json`, `docs/TELEMETRY.md`; suite Services.StageOutcomeMetrics 4/4 (checks every dashboard query has an emitted series), related telemetry and stage-outcome suites 75/75.
 
 ### SDK and Postman
 
@@ -1184,8 +1184,8 @@ shipped locale per `I18N.md`, and is checked in light and dark themes at desktop
 - [ ] **RS-12.18** VS Code extension (`src/Armada.VSCode`): mission views show attempts, failure kinds, escalations,
   and blockers; dashboard pages in editor tabs pick up the new views. Unit and integration tests. Update its
   `CHANGELOG.md` and `README.md`. Evidence:
-- [ ] **RS-12.19** Harbor app: shows Harbor capability flags (RS-7.13) and an update prompt when the Admiral needs a
-  newer Harbor; discovered context for local endpoints. Evidence:
+- [x] **RS-12.19** Harbor app: shows Harbor capability flags (RS-7.13) and an update prompt when the Admiral needs a
+  newer Harbor; discovered context for local endpoints. Evidence: `HarborCapabilityReport`, `HarborCapabilityCatalog`, `HarborDiscoveredContextLog`, Harbor MainWindow banner and status lines; suite Services.HarborAppStatus 4/4, Harbor suites 33/33. Window controls build-checked only, not viewed.
 - [ ] **RS-12.20** Proxy: confirm every new REST, WebSocket, and MCP route passes through the tunnel and portal
   unchanged (route allow-lists, payload size limits). Update `docs/PROXY_API.md` if anything changes. Evidence:
 
