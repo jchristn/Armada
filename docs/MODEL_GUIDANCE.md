@@ -326,7 +326,8 @@ Encode what you learned in each persona's captain priorities ([CAPTAIN_ROUTING.m
   is a cost heuristic, not a measurement. After evaluating a model, set the tier on its model profile so every captain
   on that model routes on what you measured. With `RoutingData.SuggestTiers` on, Armada suggests a profile tier from
   outcome data as a TierSuggestion alert in Needs You; it never applies one on its own.
-- **Let outcome data order equal captains.** With `RoutingData.RankByOutcomes` (on by default), captains of one tier
+- **Let outcome data order equal captains.** With `RoutingData.RankByOutcomes` (off by default, because it slows
+  dispatch: about 29% at p50 and 74% at p95 in the 100-captain admission benchmark), captains of one tier
   whose model has at least `MinimumSamples` results for the persona (default 20, weighted with a 14-day half-life) go
   first by their record. Below that sample size nothing changes, so a new model is not punished for having no
   history.

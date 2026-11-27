@@ -122,6 +122,17 @@ load went.
   256 KiB took 192 ms before and 8 ms after.
 - **The merge queue fetches once per repository and target branch per pass**, instead of about twice per entry.
 
+Outcome ranking (`RoutingData.RankByOutcomes`) is off by default because it costs dispatch time. Each dispatch pass
+reads outcome statistics for the candidate captains. In the 100-captain admission benchmark it measured:
+
+| Admission latency, 100 captains, 200 missions | p50 | p95 |
+|---|---|---|
+| 1.4.0 (`benchmarks/baselines/1.4.0/admission-100.json`) | 1.58 s | 1.95 s |
+| 1.5.0, ranking off (`admission-100-rank-off.json`) | 1.47 s | 1.76 s |
+| 1.5.0, ranking on (`admission-100.json`) | 1.90 s | 3.07 s |
+
+Turn it on only when routing by recorded results is worth slower dispatch.
+
 Batched landing (`MergeQueueBatchSize`, off by default) is measured separately. `benchmarks/run-landing-batch.sh` lands
 the same simulated entries serially and in batches; on a six-entry run it took 3.8 seconds batched against 10.1
 seconds serially. The gain comes from verifying once per batch, so it grows with the cost of the vessel's test command.

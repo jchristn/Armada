@@ -535,7 +535,7 @@ When a threshold is crossed:
 The scorecard now feeds routing directly, within limits an administrator controls. `PersonaOutcomeStatsService`
 scores each model per persona from success, Judge pass rate, no-op rate, tool-call validity and repair rate, with older
 attempts weighted down on a `RoutingData.HalfLifeDays` half-life (default 14). With `RoutingData.RankByOutcomes` on
-(the default), captains of one tier whose model has at least `RoutingData.MinimumSamples` attempts for the persona
+(off by default, because it slows dispatch; see `CAPTAIN_ROUTING.md`), captains of one tier whose model has at least `RoutingData.MinimumSamples` attempts for the persona
 (default 20) are tried in score order, ahead of captains without enough history, and each ranked choice is recorded as
 a `mission.routing_ranked` event. Ranking never crosses a tier, never overrides a persona's captain priorities, and
 never overrides the Judge's preference for a captain that did not author the reviewed work. Tier changes stay with

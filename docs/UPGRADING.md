@@ -71,9 +71,6 @@ Migration 133 is the only one that reads existing rows; the others add tables, c
 A few behaviors change without a setting you have to flip. Each one is a default chosen for mixed open and frontier
 pipelines, and each can be put back:
 
-- **Outcome ranking is on.** Within one tier, captains whose model has at least 20 recorded results for the persona
-  are tried first, best results first. A fresh install has no results yet, so it routes exactly as 1.4.0 did until
-  the data builds up. Set `RoutingData.RankByOutcomes` to false to keep the old order permanently.
 - **New pipelines get the Judge strength rule `Wait`.** A Judge must be at least as strong as the work it reviews, and
   waits with a `judge_strength` blocker until such a captain is free. Pipelines stored before 1.5.0 read as `Off` and
   are unchanged; set `JudgeStrength` on a pipeline to opt in or out.
@@ -103,6 +100,10 @@ while `AcceptLegacyMissionMarkers` is on, which is the default, and logs a warni
 the setting off now to find custom Architect templates that still produce markers; their output then gets the output
 repair turn instead of being read. The new settings are listed with their ranges in
 [OPERATIONS.md](OPERATIONS.md#reliability-settings-added-in-150).
+
+Outcome ranking (`RoutingData.RankByOutcomes`) is new in 1.5.0 and off, so captains are ordered as in 1.4.0. Turning
+it on orders the captains of a tier by their model's recorded results, at a dispatch cost: in the 100-captain admission
+benchmark p95 went from 1.76 s to 3.07 s ([PERFORMANCE.md](PERFORMANCE.md#changes-in-150)).
 
 ### Changes to act on when coming from 1.0.0
 

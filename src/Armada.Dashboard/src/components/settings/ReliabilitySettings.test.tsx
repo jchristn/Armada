@@ -18,7 +18,7 @@ describe('ReliabilitySettings', () => {
     expect(d.timeoutScaleReferenceTokensPerSecond).toBe('30');
     expect(d.promptVariantCompactMaxContextTokens).toBe('32768');
     expect(d.mergeQueueBatchSize).toBe('1');
-    expect(d.rankByOutcomes).toBe(true);
+    expect(d.rankByOutcomes).toBe(false);
     expect(d.suggestTiers).toBe(false);
     expect(d.minimumSamples).toBe('20');
     expect(validateReliabilityDraft(d)).toEqual({});

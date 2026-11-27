@@ -590,7 +590,7 @@ dashboard Settings page under Reliability and Routing. They apply live. The two 
 | `MergeQueueLeaseSeconds` | 900 | 5 to 14400 | Lifetime of the merge queue's processing lease, renewed before every entry |
 | `AcceptLegacyMissionMarkers` | true | | Accepts an Architect plan written as `[ARMADA:MISSION]` markers, with a warning each time. Deprecated; removed in 2.0 |
 | `OutputRepairNormalizerCaptainId` | null | | Captain that runs the format-only repair turn. Null uses the captain that wrote the output |
-| `RoutingData.RankByOutcomes` | true | | Ranks the captains of one tier by their model's recorded results for the persona. Until a model has `MinimumSamples` results, the 1.4.0 order applies |
+| `RoutingData.RankByOutcomes` | false | | Ranks the captains of one tier by their model's recorded results for the persona. Until a model has `MinimumSamples` results, the 1.4.0 order applies. Off by default because it slows dispatch: in the 100-captain admission benchmark p50 went from 1.47 s to 1.90 s and p95 from 1.76 s to 3.07 s |
 | `RoutingData.SuggestTiers` | false | | Raises a `TierSuggestion` alert in Needs You when outcome data suggests a different tier for a model profile. Never applied without an administrator |
 | `RoutingData.MinimumSamples` | 20 | 5 to 1000 | Attempts a model needs for a persona before its results rank it or suggest a tier |
 | `RoutingData.HalfLifeDays` | 14 | 1 to 365 | Days after which an attempt counts half as much as a new one |

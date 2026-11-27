@@ -1372,7 +1372,7 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `promptVariantCompactMaxContextTokens` | int | `32768` |  |
 | `promptVariantLeanMaxContextTokens` | int | `65536` |  |
 | `push` | object |  |  |
-| `push.categories` | array<enum PushCategoryEnum (AskProposal\|CliPermission\|MissionReview\|DeploymentApproval\|MissionFailed\|LandingFailed\|CaptainStalled\|VoyageFinished\|ModelAlert)> | `["AskProposal","CliPermission","MissionReview","DeploymentApproval","MissionF...` |  |
+| `push.categories` | array<enum PushCategoryEnum (AskProposal\|CliPermission\|MissionReview\|DeploymentApproval\|MissionFailed\|LandingFailed\|CaptainStalled\|VoyageFinished\|ModelAlert\|MissionEscalated\|RecoveryExhausted)> | `["AskProposal","CliPermission","MissionReview","DeploymentApproval","MissionF...` |  |
 | `push.dedupeWindowSeconds` | int | `300` |  |
 | `push.enabled` | bool | `true` |  |
 | `push.expoAccessToken` | string | `null` |  |
@@ -1429,7 +1429,7 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `routingData` | object |  |  |
 | `routingData.halfLifeDays` | int | `14` |  |
 | `routingData.minimumSamples` | int | `20` |  |
-| `routingData.rankByOutcomes` | bool | `true` |  |
+| `routingData.rankByOutcomes` | bool | `false` |  |
 | `routingData.suggestTiers` | bool | `false` |  |
 | `selfVesselId` | string | `null` | experimental |
 | `sessionTokenEncryptionKey` | string | `null` |  |

@@ -326,10 +326,10 @@ namespace Test.Shared.Suites.Services
                 AssertNull(JudgeStrengthRule.Parse(DBNull.Value), "DBNull reads as null");
             }));
 
-            cases.Add(Case("routing_data_settings_clamp", "RoutingData defaults are ranking on, suggestions off, 20 samples and a 14-day half-life, and clamp to their ranges", TestTags.Positive, () =>
+            cases.Add(Case("routing_data_settings_clamp", "RoutingData defaults are ranking off, suggestions off, 20 samples and a 14-day half-life, and clamp to their ranges", TestTags.Positive, () =>
             {
                 RoutingDataSettings settings = new ArmadaSettings().RoutingData;
-                AssertTrue(settings.RankByOutcomes, "Ranking on by default");
+                AssertFalse(settings.RankByOutcomes, "Ranking off by default");
                 AssertFalse(settings.SuggestTiers, "Suggestions off by default");
                 AssertEqual(20, settings.MinimumSamples);
                 AssertEqual(14, settings.HalfLifeDays);

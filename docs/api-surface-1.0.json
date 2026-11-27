@@ -31081,8 +31081,8 @@
     },
     {
       "key": "push.categories",
-      "type": "array<enum PushCategoryEnum (AskProposal|CliPermission|MissionReview|DeploymentApproval|MissionFailed|LandingFailed|CaptainStalled|VoyageFinished|ModelAlert)>",
-      "default": "[\"AskProposal\",\"CliPermission\",\"MissionReview\",\"DeploymentApproval\",\"MissionFailed\",\"LandingFailed\",\"CaptainStalled\",\"VoyageFinished\",\"ModelAlert\"]",
+      "type": "array<enum PushCategoryEnum (AskProposal|CliPermission|MissionReview|DeploymentApproval|MissionFailed|LandingFailed|CaptainStalled|VoyageFinished|ModelAlert|MissionEscalated|RecoveryExhausted)>",
+      "default": "[\"AskProposal\",\"CliPermission\",\"MissionReview\",\"DeploymentApproval\",\"MissionFailed\",\"LandingFailed\",\"CaptainStalled\",\"VoyageFinished\",\"ModelAlert\",\"MissionEscalated\",\"RecoveryExhausted\"]",
       "experimental": false
     },
     {
@@ -31424,7 +31424,7 @@
     {
       "key": "routingData.rankByOutcomes",
       "type": "bool",
-      "default": "true",
+      "default": "false",
       "experimental": false
     },
     {

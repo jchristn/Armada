@@ -284,7 +284,12 @@ suggests Premium, 65 percent or more Standard, otherwise Economy.
 
 ### Ranking within a tier
 
-With `RoutingData.RankByOutcomes` on (default on), captains of one routing bucket are ordered by their model's
+Ranking is off by default because it slows dispatch: every pass reads outcome statistics for the
+candidates. In the 100-captain admission benchmark (`benchmarks/baselines/1.5.0/admission-100.json` against
+`admission-100-rank-off.json`), admission latency was p50 1.90 s and p95 3.07 s with ranking on, against
+1.47 s and 1.76 s with it off: about 29% slower at the median and 74% slower at p95.
+
+With `RoutingData.RankByOutcomes` on (default off), captains of one routing bucket are ordered by their model's
 recorded results for the mission's persona: completion without failed checks, Judge PASS verdicts on the work, no-op
 rate, tool-call validity and repair rate, each attempt weighted by age with a `RoutingData.HalfLifeDays` half-life
 (default 14). A model needs `RoutingData.MinimumSamples` attempts for the persona (default 20); captains without

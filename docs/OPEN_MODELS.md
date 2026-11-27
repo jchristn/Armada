@@ -170,9 +170,11 @@ once you have run the model on real work; every captain on that model then route
 TierSuggestion alert in Needs You when the data disagrees with the tier in use. Nothing changes until someone clicks
 Apply tier.
 
-Within a tier, outcome ranking is on by default (`RoutingData.RankByOutcomes`). Captains whose model has at least 20
-results for the persona (`MinimumSamples`, weighted with a 14-day half-life) are tried in order of their record before
-captains without enough history. A new model is not penalized for being new: below the sample size it keeps the 1.4.0
+Within a tier, outcome ranking (`RoutingData.RankByOutcomes`) is off by default because it slows dispatch: in the
+100-captain admission benchmark it took p50 from 1.47 s to 1.90 s and p95 from 1.76 s to 3.07 s. Turn it on under
+Server > Settings > Reliability when routing quality matters more than dispatch speed. With it on, captains whose
+model has at least 20 results for the persona (`MinimumSamples`, weighted with a 14-day half-life) are tried in
+order of their record before captains without enough history. A new model is not penalized for being new: below the sample size it keeps the 1.4.0
 order. The Reliability tab under Captains in the dashboard shows completion, failures, repairs, escalations and the
 `Unclassified` rate per model and persona, which is where you see whether a model has earned its place.
 
@@ -217,8 +219,8 @@ Some limits are in the plumbing:
   OpenCode and pi run their own tool loops; they get reasoning stripping and error classification, not the rest.
 - A Harbor older than 1.5.0 keeps its 1.4.0 behavior for streaming, context discovery and the tool-output limits, and
   is marked "Harbor update recommended". Update Harbors with the Admiral.
-- Outcome ranking and tier suggestions need history. A fresh install routes as 1.4.0 did until each model has 20
-  results for a persona.
+- Outcome ranking and tier suggestions are off by default and need history once on. A fresh install routes as 1.4.0
+  did until each model has 20 results for a persona. Ranking slows dispatch (see above).
 - Escalation spends frontier tokens. A pipeline where the open model escalates on most stages costs more than running
   the frontier model from the start, because the failed attempt is paid for too. Watch the escalation count on the
   Reliability tab before committing a persona to an open model.

@@ -44,7 +44,7 @@ namespace Test.Shared.Suites.E2E
                         AssertEqual((int?)3, before.MergeQueueRequeueLimit, "requeue default");
                         AssertEqual((int?)1, before.MergeQueueBatchSize, "batch default");
                         AssertNotNull(before.RoutingData, "routing data returned");
-                        AssertTrue(before.RoutingData!.RankByOutcomes, "ranking on by default");
+                        AssertFalse(before.RoutingData!.RankByOutcomes, "ranking off by default");
                         AssertFalse(before.RoutingData.SuggestTiers, "tier suggestions off by default");
 
                         using (HttpResponseMessage bad = await server.Client.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { TimeoutScaleReferenceTokensPerSecond = 5000, MaxEscalations = 2 }), ct).ConfigureAwait(false))
@@ -63,7 +63,7 @@ namespace Test.Shared.Suites.E2E
                             JudgeReworkRounds = 3,
                             MaxEscalations = 9,
                             EscalateOnOpenEndpointBreaker = true,
-                            RoutingData = new { RankByOutcomes = false, SuggestTiers = true, MinimumSamples = 1, HalfLifeDays = 30 }
+                            RoutingData = new { RankByOutcomes = true, SuggestTiers = true, MinimumSamples = 1, HalfLifeDays = 30 }
                         }), ct).ConfigureAwait(false);
                         AssertStatusCode(HttpStatusCode.OK, put, "PUT settings");
                         ReliabilitySettingsEnvelope after = await JsonHelper.DeserializeAsync<ReliabilitySettingsEnvelope>(put).ConfigureAwait(false);
@@ -74,7 +74,7 @@ namespace Test.Shared.Suites.E2E
                         AssertEqual((int?)4, after.MergeQueueBatchSize, "batch updated");
                         AssertEqual((int?)5, after.MaxEscalations, "escalations clamped to 5");
                         AssertEqual((bool?)true, after.EscalateOnOpenEndpointBreaker, "breaker escalation on");
-                        AssertFalse(after.RoutingData!.RankByOutcomes, "ranking off");
+                        AssertTrue(after.RoutingData!.RankByOutcomes, "ranking on");
                         AssertEqual(5, after.RoutingData.MinimumSamples, "minimum samples clamped to 5");
                         AssertEqual(16384, server.Settings.PromptVariantCompactMaxContextTokens, "applied live");
                         AssertEqual(30, server.Settings.RoutingData.HalfLifeDays, "routing data applied live");

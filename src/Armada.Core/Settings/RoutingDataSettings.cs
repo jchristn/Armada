@@ -34,9 +34,10 @@ namespace Armada.Core.Settings
         /// rate, no-op rate, tool-call validity, repair rate), most successful first. A captain whose model has fewer than
         /// <see cref="MinimumSamples"/> attempts keeps the previous order (load, then last update) after the ranked
         /// captains. Persona captain priorities and the Judge's preference for captains that did not author the reviewed
-        /// work still come first. Default true: with fewer samples than the minimum nothing changes.
+        /// work still come first. Default false: ranking reads outcome statistics on every dispatch pass and slows
+        /// admission (in the 100-captain benchmark, p50 1.90 s against 1.47 s and p95 3.07 s against 1.76 s with it off).
         /// </summary>
-        public bool RankByOutcomes { get; set; } = true;
+        public bool RankByOutcomes { get; set; } = false;
 
         /// <summary>
         /// Suggest a model profile tier from its outcome data during the model alert pass and raise a TierSuggestion

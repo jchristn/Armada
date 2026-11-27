@@ -68,7 +68,7 @@ export function toReliabilityDraft(s: ReliabilitySettingsData | null | undefined
     minimumSamples: num('minimumSamples', r.minimumSamples),
     halfLifeDays: num('halfLifeDays', r.halfLifeDays),
     escalateOnOpenEndpointBreaker: v.escalateOnOpenEndpointBreaker ?? false,
-    rankByOutcomes: r.rankByOutcomes ?? true,
+    rankByOutcomes: r.rankByOutcomes ?? false,
     suggestTiers: r.suggestTiers ?? false,
   };
 }
@@ -198,7 +198,7 @@ export default function ReliabilitySettings({ settings, locked, onSaved, notify 
           {numberInput('minimumSamples', t('Outcome samples needed'), t('Attempts a model needs for a persona before its results rank it or suggest a tier.'))}
           {numberInput('halfLifeDays', t('Outcome half-life (days)'), t('Days after which an attempt counts half as much as a new one.'))}
           {checkbox('escalateOnOpenEndpointBreaker', t('Escalate when the endpoint breaker is open'), t('A transient failure on a captain whose endpoint circuit breaker is open escalates right away instead of resuming.'))}
-          {checkbox('rankByOutcomes', t('Rank captains by outcomes'), t('Within a tier, captains whose model has enough recorded results for the persona are tried most successful first.'))}
+          {checkbox('rankByOutcomes', t('Rank captains by outcomes'), t('Within a tier, captains whose model has enough recorded results for the persona are tried most successful first. Off by default because it slows dispatch: in benchmarks, admitting 100 missions took about 29% longer at the median and 74% longer at p95.'))}
           {checkbox('suggestTiers', t('Suggest model profile tiers'), t('Raise a tier suggestion in Needs You from outcome data. A suggestion changes nothing until an administrator applies it.'))}
         </div>
         <div className="settings-actions">
