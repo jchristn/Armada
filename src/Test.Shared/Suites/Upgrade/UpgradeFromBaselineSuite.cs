@@ -131,17 +131,19 @@ namespace Test.Shared.Suites.Upgrade
             _Seed.VesselName = "upgrade-vessel";
             _Seed.VesselRepoUrl = "https://example.invalid/armada-upgrade.git";
             _Seed.VesselProjectContext = "Upgrade test project context.";
-            Vessel vessel = await SendAsync<Vessel>(api, HttpMethod.Post, "/api/v1/vessels", new
-            {
-                Name = _Seed.VesselName,
-                RepoUrl = _Seed.VesselRepoUrl,
-                FleetId = fleet.Id,
-                DefaultBranch = "main",
-                ProjectContext = _Seed.VesselProjectContext,
-                StyleGuide = "Upgrade test style guide."
-            }).ConfigureAwait(false);
+
+            // v1.3.0 replaced AllowConcurrentMissions with numeric limits and refuses the old flag, so a v1.3+ baseline gets
+            // the limits the v1.2 flag migrates to (serial 1/1, concurrent 0/0) and the same assertions hold.
+            bool numericLimits = Version.TryParse(_Seed.BaselineVersion.Split('-')[0], out Version? baselineVersion) && baselineVersion >= new Version(1, 3);
+            object vesselBody = numericLimits
+                ? new { Name = _Seed.VesselName, RepoUrl = _Seed.VesselRepoUrl, FleetId = fleet.Id, DefaultBranch = "main", ProjectContext = _Seed.VesselProjectContext, StyleGuide = "Upgrade test style guide.", MaxParallelVoyages = 1, MaxParallelMissionsPerVoyage = 1 }
+                : (object)new { Name = _Seed.VesselName, RepoUrl = _Seed.VesselRepoUrl, FleetId = fleet.Id, DefaultBranch = "main", ProjectContext = _Seed.VesselProjectContext, StyleGuide = "Upgrade test style guide." };
+            Vessel vessel = await SendAsync<Vessel>(api, HttpMethod.Post, "/api/v1/vessels", vesselBody).ConfigureAwait(false);
             _Seed.VesselId = vessel.Id;
-            Vessel loose = await SendAsync<Vessel>(api, HttpMethod.Post, "/api/v1/vessels", new { Name = "upgrade-loose-vessel", RepoUrl = "https://example.invalid/loose.git", DefaultBranch = "main", AllowConcurrentMissions = true }).ConfigureAwait(false);
+            object looseBody = numericLimits
+                ? new { Name = "upgrade-loose-vessel", RepoUrl = "https://example.invalid/loose.git", DefaultBranch = "main", MaxParallelVoyages = 0, MaxParallelMissionsPerVoyage = 0 }
+                : (object)new { Name = "upgrade-loose-vessel", RepoUrl = "https://example.invalid/loose.git", DefaultBranch = "main", AllowConcurrentMissions = true };
+            Vessel loose = await SendAsync<Vessel>(api, HttpMethod.Post, "/api/v1/vessels", looseBody).ConfigureAwait(false);
             _Seed.LooseVesselId = loose.Id;
 
             // One mission per status, reached through the baseline's status transitions.
@@ -196,6 +198,28 @@ namespace Test.Shared.Suites.Upgrade
 
             Voyage bare = await SendAsync<Voyage>(api, HttpMethod.Post, "/api/v1/voyages", new { Title = "upgrade-bare-voyage", Description = "No missions." }).ConfigureAwait(false);
             _Seed.BareVoyageId = bare.Id;
+
+            // Missions in every text-marker state migration 133 backfills: an escalation heading, a completed fan-out, and an
+            // Architect's slices with the handoff marker (plus a Judge that carries the marker but is not a slice).
+            string[][] markerMissions = new string[][]
+            {
+                new string[] { "escalated", "Do the work.\n\n## Escalated to opus\nqwen could not finish this mission." },
+                new string[] { "architect", "Plan the work.\n<!-- armada:fanout-complete -->" },
+                new string[] { "slice0", "<!-- ARMADA:ARCHITECT-HANDOFF -->\nFirst slice" },
+                new string[] { "slice1", "<!-- ARMADA:ARCHITECT-HANDOFF -->\nSecond slice" },
+                new string[] { "slice2", "<!-- ARMADA:ARCHITECT-HANDOFF -->\nThird slice" },
+                new string[] { "judge", "<!-- ARMADA:ARCHITECT-HANDOFF -->\nReview the first slice" }
+            };
+            foreach (string[] marker in markerMissions)
+            {
+                UpgradeMissionCreateResponse markerCreated = await SendAsync<UpgradeMissionCreateResponse>(api, HttpMethod.Post, "/api/v1/missions", new
+                {
+                    Title = "upgrade-marker-" + marker[0],
+                    Description = marker[1],
+                    VesselId = loose.Id
+                }).ConfigureAwait(false);
+                _Seed.MarkerMissionIds[marker[0]] = markerCreated.MissionId ?? throw new AssertionException("mission create returned no id");
+            }
 
             // Merge queue: one queued entry, one cancelled.
             // Prefer the natural statuses; a baseline that refused those transitions still gets two distinct entries.
@@ -315,7 +339,32 @@ namespace Test.Shared.Suites.Upgrade
             Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
 
             IsolatedTestDatabase isolated = RequireDatabase();
+
+            // The baseline's mission create takes no persona or dependency, so the marker missions get the persona,
+            // Architect link and creation order an Architect fan-out writes, directly on the baseline schema.
+            string early = isolated.Type == DatabaseTypeEnum.Mysql ? "'2026-11-01 00:00:00'" : "'2026-11-01T00:00:00Z'";
+            string later = isolated.Type == DatabaseTypeEnum.Mysql ? "'2026-11-01 00:05:00'" : "'2026-11-01T00:05:00Z'";
+            string latest = isolated.Type == DatabaseTypeEnum.Mysql ? "'2026-11-01 00:06:00'" : "'2026-11-01T00:06:00Z'";
+            Dictionary<string, string> ids = _Seed.MarkerMissionIds;
+            string architect = ids["architect"];
+            await isolated.QueryStringsAsync("UPDATE missions SET persona = 'Worker' WHERE id = '" + ids["escalated"] + "'", ct).ConfigureAwait(false);
+            await isolated.QueryStringsAsync("UPDATE missions SET persona = 'Architect', created_utc = " + early + " WHERE id = '" + architect + "'", ct).ConfigureAwait(false);
+            string[] sliceTimes = new string[] { early, later, latest };
+            for (int i = 0; i < 3; i++)
+            {
+                await isolated.QueryStringsAsync("UPDATE missions SET persona = 'Worker', depends_on_mission_id = '" + architect + "', created_utc = " + sliceTimes[i]
+                    + " WHERE id = '" + ids["slice" + i] + "'", ct).ConfigureAwait(false);
+            }
+
+            await isolated.QueryStringsAsync("UPDATE missions SET persona = 'Judge', depends_on_mission_id = '" + ids["slice0"] + "' WHERE id = '" + ids["judge"] + "'", ct).ConfigureAwait(false);
+
             _Seed.EventCount = await isolated.CountAsync("events", ct).ConfigureAwait(false);
+            List<string> baselineSchema = await isolated.QueryStringsAsync("SELECT MAX(version) FROM schema_migrations", ct).ConfigureAwait(false);
+            if (baselineSchema.Count > 0 && Int32.TryParse(baselineSchema[0], out int baselineSchemaVersion) && baselineSchemaVersion >= 123)
+            {
+                List<string> decisions = await isolated.QueryStringsAsync("SELECT COUNT(*) FROM captain_selection_decisions WHERE mission_id = '" + _Seed.MissionStatuses.Keys.First() + "'", ct).ConfigureAwait(false);
+                _Seed.BaselineSelectionDecisionCount = decisions.Count > 0 && Int64.TryParse(decisions[0], out long count) ? count : 0;
+            }
             _Seed.RequestHistoryCount = await isolated.CountAsync("request_history", ct).ConfigureAwait(false);
             AssertTrue(_Seed.EventCount > 0, "baseline recorded events");
         }
@@ -383,6 +432,27 @@ namespace Test.Shared.Suites.Upgrade
                 }
 
                 AssertEqual(_AllStatuses.Length + 2, _Seed.MissionStatuses.Count, "one mission per status plus two voyage missions");
+
+                // Migration 133 moved the text markers into typed columns and left the descriptions as written.
+                Dictionary<string, string> marker = _Seed.MarkerMissionIds;
+                Mission escalated = (await db.Missions.ReadAsync(marker["escalated"], ct).ConfigureAwait(false))!;
+                AssertEqual(1, escalated.EscalationCount, "escalation heading backfilled");
+                AssertTrue(escalated.Description!.Contains("## Escalated to opus", StringComparison.Ordinal), "escalated description kept");
+                Mission architectMission = (await db.Missions.ReadAsync(marker["architect"], ct).ConfigureAwait(false))!;
+                AssertTrue(architectMission.FanOutCompletedUtc.HasValue, "fan-out completion backfilled");
+                AssertEqual(0, architectMission.EscalationCount, "architect not escalated");
+                for (int i = 0; i < 3; i++)
+                {
+                    Mission slice = (await db.Missions.ReadAsync(marker["slice" + i], ct).ConfigureAwait(false))!;
+                    AssertEqual(marker["architect"], slice.ArchitectSourceMissionId, "slice " + i + " source backfilled");
+                    AssertEqual((int?)i, slice.ArchitectPlanIndex, "slice " + i + " plan index backfilled");
+                }
+
+                Mission judgeMission = (await db.Missions.ReadAsync(marker["judge"], ct).ConfigureAwait(false))!;
+                AssertNull(judgeMission.ArchitectSourceMissionId, "a Judge with the marker is not a slice");
+                Mission plainMission = (await db.Missions.ReadAsync(_Seed.MissionStatuses.Keys.First(), ct).ConfigureAwait(false))!;
+                AssertEqual(0, plainMission.EscalationCount, "an unmarked mission is not escalated");
+                AssertNull(plainMission.ArchitectSourceMissionId, "an unmarked mission is not a slice");
                 AssertNotNull(await db.Voyages.ReadAsync(_Seed.VoyageId, ct).ConfigureAwait(false), "voyage");
                 AssertNotNull(await db.Voyages.ReadAsync(_Seed.BareVoyageId, ct).ConfigureAwait(false), "bare voyage");
                 foreach (string missionId in _Seed.VoyageMissionIds)
@@ -479,10 +549,11 @@ namespace Test.Shared.Suites.Upgrade
             AssertTrue(upgradedSettings.UsageSelectionRevision >= 0, "selection revision readable");
             string upgradedMission = _Seed.MissionStatuses.Keys.First();
             CaptainSelectionSummary selection = await GetAsync<CaptainSelectionSummary>(api, "/api/v1/missions/" + upgradedMission + "/captain-selection").ConfigureAwait(false);
-            AssertFalse(selection.HistoryAvailable, "a pre-upgrade mission has no fabricated selection history");
+            // A v1.3+ baseline records its own decisions when it dispatches; the upgrade keeps exactly those and adds none.
+            AssertEqual(_Seed.BaselineSelectionDecisionCount != 0, selection.HistoryAvailable, "a pre-upgrade mission has only the selection history its baseline recorded");
             EnumerationResult<CaptainSelectionDecisionView> selectionHistory = await GetAsync<EnumerationResult<CaptainSelectionDecisionView>>(api,
                 "/api/v1/missions/" + upgradedMission + "/captain-selection/history").ConfigureAwait(false);
-            AssertEqual(0L, selectionHistory.TotalRecords, "empty selection history after upgrade");
+            AssertEqual(_Seed.BaselineSelectionDecisionCount, selectionHistory.TotalRecords, "no fabricated selection history after upgrade");
 
             // The seeded tenant's credential still authenticates, and stays scoped to its tenant.
             using (HttpClient tenantApi = BearerClient(_Current.BaseUrl, _Seed.BearerToken))
