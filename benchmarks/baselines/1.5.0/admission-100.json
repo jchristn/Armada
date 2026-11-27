@@ -1,0 +1,277 @@
+{
+  "schemaVersion": 1,
+  "command": "admission",
+  "provenance": {
+    "commit": "781691951c76bbe996fc571dc34cf3a199cb34d7",
+    "dirty": true,
+    "os": "macOS 26.6.0",
+    "architecture": "Arm64",
+    "processors": 18,
+    "framework": ".NET 10.0.14",
+    "databaseProvider": "Sqlite",
+    "maxConnections": 32,
+    "timeoutSeconds": 120,
+    "scenarioHash": "9f4014b38dd071facc9410881fdf226ad76f69f2dc27c472349137b94d920188",
+    "startedUtc": "2026-11-27T05:44:14.897683Z"
+  },
+  "scenario": {
+    "candidates": 100,
+    "captainConcurrency": 4,
+    "missions": 200,
+    "accountUsedPercents": [
+      10,
+      20,
+      30,
+      50,
+      89
+    ],
+    "strategy": "MostRemainingAllowance",
+    "reservePercent": 10,
+    "perAttemptReservationPercent": 0.25,
+    "submitConcurrency": 16,
+    "seed": 42
+  },
+  "arms": [
+    {
+      "mode": "Enforce",
+      "strategy": "MostRemainingAllowance",
+      "missions": 200,
+      "admitted": 200,
+      "incomplete": 0,
+      "finalStatuses": {
+        "Complete": 200
+      },
+      "errors": 0,
+      "admissionLatency": {
+        "count": 200,
+        "p50Ms": 1897.5,
+        "p95Ms": 3065.7,
+        "p99Ms": 4265.2,
+        "meanMs": 1891.3,
+        "maxMs": 5817
+      },
+      "startLatency": {
+        "count": 200,
+        "p50Ms": 79390,
+        "p95Ms": 137274.3,
+        "p99Ms": 142405.2,
+        "meanMs": 77498.9,
+        "maxMs": 146864.4
+      },
+      "throughputPerSecond": 8.5,
+      "waitedOverFiveSeconds": 2,
+      "accounts": [
+        {
+          "account": "bench-account-0",
+          "usedPercent": 10,
+          "admissions": 100,
+          "capacity": 320,
+          "maxReservedPercent": 25,
+          "headroomPercent": 80,
+          "violation": false
+        },
+        {
+          "account": "bench-account-1",
+          "usedPercent": 20,
+          "admissions": 70,
+          "capacity": 280,
+          "maxReservedPercent": 17.5,
+          "headroomPercent": 70,
+          "violation": false
+        },
+        {
+          "account": "bench-account-2",
+          "usedPercent": 30,
+          "admissions": 30,
+          "capacity": 240,
+          "maxReservedPercent": 7.5,
+          "headroomPercent": 60,
+          "violation": false
+        },
+        {
+          "account": "bench-account-3",
+          "usedPercent": 50,
+          "admissions": 0,
+          "capacity": 160,
+          "maxReservedPercent": 0,
+          "headroomPercent": 40,
+          "violation": false
+        },
+        {
+          "account": "bench-account-4",
+          "usedPercent": 89,
+          "admissions": 0,
+          "capacity": 4,
+          "maxReservedPercent": 0,
+          "headroomPercent": 1,
+          "violation": false
+        }
+      ],
+      "accountingViolations": 0,
+      "durationSeconds": 168.1
+    },
+    {
+      "mode": "Observe",
+      "strategy": "MostRemainingAllowance",
+      "missions": 200,
+      "admitted": 200,
+      "incomplete": 0,
+      "finalStatuses": {
+        "Complete": 200
+      },
+      "errors": 0,
+      "admissionLatency": {
+        "count": 200,
+        "p50Ms": 1975,
+        "p95Ms": 2667.5,
+        "p99Ms": 3025.8,
+        "meanMs": 1895.5,
+        "maxMs": 3111.2
+      },
+      "startLatency": {
+        "count": 200,
+        "p50Ms": 75423.9,
+        "p95Ms": 133940.6,
+        "p99Ms": 138885.4,
+        "meanMs": 74721.9,
+        "maxMs": 139939.1
+      },
+      "throughputPerSecond": 8.25,
+      "waitedOverFiveSeconds": 0,
+      "accounts": [
+        {
+          "account": "bench-account-0",
+          "usedPercent": 10,
+          "admissions": 60,
+          "capacity": 320,
+          "maxReservedPercent": 15,
+          "headroomPercent": 80,
+          "violation": false
+        },
+        {
+          "account": "bench-account-1",
+          "usedPercent": 20,
+          "admissions": 58,
+          "capacity": 280,
+          "maxReservedPercent": 14.5,
+          "headroomPercent": 70,
+          "violation": false
+        },
+        {
+          "account": "bench-account-2",
+          "usedPercent": 30,
+          "admissions": 58,
+          "capacity": 240,
+          "maxReservedPercent": 14.5,
+          "headroomPercent": 60,
+          "violation": false
+        },
+        {
+          "account": "bench-account-3",
+          "usedPercent": 50,
+          "admissions": 12,
+          "capacity": 160,
+          "maxReservedPercent": 3,
+          "headroomPercent": 40,
+          "violation": false
+        },
+        {
+          "account": "bench-account-4",
+          "usedPercent": 89,
+          "admissions": 12,
+          "capacity": 4,
+          "maxReservedPercent": 3,
+          "headroomPercent": 1,
+          "violation": false
+        }
+      ],
+      "accountingViolations": 0,
+      "durationSeconds": 164.6
+    },
+    {
+      "mode": "Disabled",
+      "strategy": "MostRemainingAllowance",
+      "missions": 200,
+      "admitted": 200,
+      "incomplete": 0,
+      "finalStatuses": {
+        "WorkProduced": 1,
+        "Complete": 199
+      },
+      "errors": 0,
+      "admissionLatency": {
+        "count": 200,
+        "p50Ms": 1731,
+        "p95Ms": 2084.6,
+        "p99Ms": 2136.1,
+        "meanMs": 1618.9,
+        "maxMs": 2153.4
+      },
+      "startLatency": {
+        "count": 200,
+        "p50Ms": 80115.5,
+        "p95Ms": 150467,
+        "p99Ms": 156940.9,
+        "meanMs": 80680.5,
+        "maxMs": 158786.8
+      },
+      "throughputPerSecond": 9.54,
+      "waitedOverFiveSeconds": 0,
+      "accounts": [
+        {
+          "account": "bench-account-0",
+          "usedPercent": 10,
+          "admissions": 59,
+          "capacity": 320,
+          "maxReservedPercent": 0,
+          "headroomPercent": 80,
+          "violation": false
+        },
+        {
+          "account": "bench-account-1",
+          "usedPercent": 20,
+          "admissions": 56,
+          "capacity": 280,
+          "maxReservedPercent": 0.25,
+          "headroomPercent": 70,
+          "violation": false
+        },
+        {
+          "account": "bench-account-2",
+          "usedPercent": 30,
+          "admissions": 57,
+          "capacity": 240,
+          "maxReservedPercent": 0,
+          "headroomPercent": 60,
+          "violation": false
+        },
+        {
+          "account": "bench-account-3",
+          "usedPercent": 50,
+          "admissions": 14,
+          "capacity": 160,
+          "maxReservedPercent": 0,
+          "headroomPercent": 40,
+          "violation": false
+        },
+        {
+          "account": "bench-account-4",
+          "usedPercent": 89,
+          "admissions": 14,
+          "capacity": 4,
+          "maxReservedPercent": 0,
+          "headroomPercent": 1,
+          "violation": false
+        }
+      ],
+      "accountingViolations": 0,
+      "durationSeconds": 180.3
+    }
+  ],
+  "p95RegressionBudget": 0.2,
+  "findings": [
+    "Enforce p95 admission 3065.7 ms exceeds Disabled 2084.6 ms by more than 20% plus 50.0 ms",
+    "Observe p95 admission 2667.5 ms exceeds Disabled 2084.6 ms by more than 20% plus 50.0 ms"
+  ],
+  "incomparable": false
+}

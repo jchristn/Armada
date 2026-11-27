@@ -26,6 +26,10 @@ namespace Armada.Benchmark.Client
         [JsonPropertyName("assignedUtc")]
         public DateTime? AssignedUtc { get; set; }
 
+        /// <summary>Server time the agent process started work.</summary>
+        [JsonPropertyName("startedUtc")]
+        public DateTime? StartedUtc { get; set; }
+
         /// <summary>Server completion time.</summary>
         [JsonPropertyName("completedUtc")]
         public DateTime? CompletedUtc { get; set; }

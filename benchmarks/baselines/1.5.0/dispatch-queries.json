@@ -1,0 +1,114 @@
+{
+  "commit": "781691951c76bbe996fc571dc34cf3a199cb34d7",
+  "windowSeconds": 60,
+  "pendingMissions": 50,
+  "totalCalls": 894,
+  "protocolCalls": 422,
+  "queryCalls": 472,
+  "queriesPerMinute": 472.0,
+  "missionCalls": 244,
+  "pendingReads": 201,
+  "distinctStatements": 76,
+  "top": [
+    {
+      "calls": 392,
+      "query": "DISCARD ALL"
+    },
+    {
+      "calls": 66,
+      "query": "SELECT * FROM missions WHERE status = $1 ORDER BY priority ASC, created_utc ASC"
+    },
+    {
+      "calls": 24,
+      "query": "SELECT id, tenant_id, user_id, voyage_id, vessel_id, captain_id, title, status, priority, parent_mission_id, branch_strategy, depth, ready_utc, assigned_utc, wait_for_voyage_workers, branch_name, dock_id, process_id, pr_url, commit_hash, persona, depends_on_mission_id, failure_reason, failure_kind, "
+    },
+    {
+      "calls": 24,
+      "query": "SELECT COUNT(*) FROM missions WHERE status = $1"
+    },
+    {
+      "calls": 24,
+      "query": "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT $1 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ($2,$3)) OR NOT EXISTS (SELECT $4 FROM missions vm WHERE vm.id=s.mission_id))),$5) AS active_"
+    },
+    {
+      "calls": 18,
+      "query": "SELECT * FROM voyages WHERE status = $1 ORDER BY created_utc DESC"
+    },
+    {
+      "calls": 15,
+      "query": "COMMIT"
+    },
+    {
+      "calls": 15,
+      "query": "BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED"
+    },
+    {
+      "calls": 13,
+      "query": "SELECT * FROM missions WHERE captain_id = $1 ORDER BY created_utc DESC"
+    },
+    {
+      "calls": 12,
+      "query": "SELECT * FROM ask_tracked_work WHERE state = $1 ORDER BY created_utc ASC, id ASC"
+    },
+    {
+      "calls": 12,
+      "query": "SELECT COUNT(*) FROM missions WHERE status IN ($1,$2)"
+    },
+    {
+      "calls": 12,
+      "query": "SELECT * FROM cli_permission_requests WHERE $2 = $3 AND status = $1 ORDER BY created_utc DESC, id DESC LIMIT $4"
+    },
+    {
+      "calls": 12,
+      "query": "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT $2 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ($3,$4)) OR NOT EXISTS (SELECT $5 FROM missions vm WHERE vm.id=s.mission_id))),$6) AS active_"
+    },
+    {
+      "calls": 12,
+      "query": "SELECT * FROM missions WHERE id = $1"
+    },
+    {
+      "calls": 12,
+      "query": "SELECT * FROM merge_entries WHERE status = $1 ORDER BY priority ASC, created_utc ASC"
+    },
+    {
+      "calls": 12,
+      "query": "SELECT * FROM ask_action_proposals WHERE status = $1 AND created_utc < $2 ORDER BY created_utc ASC, id ASC"
+    },
+    {
+      "calls": 12,
+      "query": "SELECT * FROM missions WHERE status = $1 AND last_update_utc >= $2 ORDER BY priority ASC, created_utc ASC"
+    },
+    {
+      "calls": 7,
+      "query": "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT $2 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ($3,$4)) OR NOT EXISTS (SELECT $5 FROM missions vm WHERE vm.id=s.mission_id))),$6) AS active_"
+    },
+    {
+      "calls": 7,
+      "query": "SELECT * FROM docks WHERE id = $1"
+    },
+    {
+      "calls": 7,
+      "query": "SELECT $2 FROM ONLY \"public\".\"tenants\" x WHERE \"id\" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x"
+    },
+    {
+      "calls": 7,
+      "query": "UPDATE captains SET last_process_alive_utc = $1, last_update_utc = $2 WHERE id = $3"
+    },
+    {
+      "calls": 6,
+      "query": "UPDATE captains SET active_mission_count=active_mission_count"
+    },
+    {
+      "calls": 6,
+      "query": "SELECT m.id FROM missions m WHERE m.tenant_id IS NOT NULL AND m.captain_id IS NOT NULL AND EXISTS(SELECT $3 FROM captains cp WHERE cp.id=m.captain_id AND cp.tenant_id=m.tenant_id) AND m.status IN ($4,$5) AND m.usage_execution_key IS NOT NULL AND NOT EXISTS(SELECT $6 FROM usage_untracked_executions u"
+    },
+    {
+      "calls": 6,
+      "query": "SELECT * FROM model_endpoints ORDER BY created_utc DESC"
+    },
+    {
+      "calls": 6,
+      "query": "INSERT INTO captain_mission_slots(mission_id,captain_id,process_id,dock_id) SELECT m.id,m.captain_id,m.process_id,m.dock_id FROM missions m JOIN captains c ON c.id=m.captain_id WHERE m.status IN ($1,$2,$3) AND NOT EXISTS (SELECT $4 FROM captain_mission_slots s WHERE s.mission_id=m.id)"
+    }
+  ]
+}

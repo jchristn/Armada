@@ -1,0 +1,114 @@
+{
+  "commit": "6bbd5ba0bbe9da79bdc8b5befab7c48ab42803d0",
+  "windowSeconds": 60,
+  "pendingMissions": 50,
+  "totalCalls": 4421,
+  "protocolCalls": 2033,
+  "queryCalls": 2388,
+  "queriesPerMinute": 2388.0,
+  "missionCalls": 1144,
+  "pendingReads": 955,
+  "distinctStatements": 80,
+  "top": [
+    {
+      "calls": 2003,
+      "query": "DISCARD ALL"
+    },
+    {
+      "calls": 522,
+      "query": "SELECT * FROM missions WHERE status = $1 ORDER BY created_utc DESC"
+    },
+    {
+      "calls": 292,
+      "query": "SELECT * FROM persona_captain_priorities WHERE persona_id = $1 ORDER BY priority_order"
+    },
+    {
+      "calls": 292,
+      "query": "SELECT * FROM vessels WHERE id = $1"
+    },
+    {
+      "calls": 292,
+      "query": "SELECT * FROM personas WHERE tenant_id = $1 AND name = $2"
+    },
+    {
+      "calls": 170,
+      "query": "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT $1 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ($2,$3)) OR NOT EXISTS (SELECT $4 FROM missions vm WHERE vm.id=s.mission_id))),$5) AS active_"
+    },
+    {
+      "calls": 158,
+      "query": "SELECT * FROM missions WHERE id = $1"
+    },
+    {
+      "calls": 152,
+      "query": "SELECT m.id, m.voyage_id, m.depends_on_mission_id, m.status, v.status FROM missions m LEFT JOIN voyages v ON v.id = m.voyage_id WHERE m.vessel_id = $1"
+    },
+    {
+      "calls": 146,
+      "query": "SELECT * FROM usage_selection_recovery WHERE tenant_id=$1 AND mission_id=$2 ORDER BY revision DESC LIMIT $3 OFFSET $4"
+    },
+    {
+      "calls": 36,
+      "query": "SELECT COUNT(*) FROM missions WHERE status = $1"
+    },
+    {
+      "calls": 30,
+      "query": "SELECT id, tenant_id, user_id, voyage_id, vessel_id, captain_id, title, status, priority, parent_mission_id, branch_strategy, depth, ready_utc, assigned_utc, wait_for_voyage_workers, branch_name, dock_id, process_id, pr_url, commit_hash, persona, depends_on_mission_id, failure_reason, failure_kind, "
+    },
+    {
+      "calls": 15,
+      "query": "COMMIT"
+    },
+    {
+      "calls": 15,
+      "query": "BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED"
+    },
+    {
+      "calls": 13,
+      "query": "SELECT * FROM missions WHERE captain_id = $1 ORDER BY created_utc DESC"
+    },
+    {
+      "calls": 12,
+      "query": "SELECT * FROM merge_entries WHERE status = $1 ORDER BY priority ASC, created_utc ASC"
+    },
+    {
+      "calls": 12,
+      "query": "SELECT * FROM cli_permission_requests WHERE $2 = $3 AND status = $1 ORDER BY created_utc DESC, id DESC LIMIT $4"
+    },
+    {
+      "calls": 12,
+      "query": "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT $2 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ($3,$4)) OR NOT EXISTS (SELECT $5 FROM missions vm WHERE vm.id=s.mission_id))),$6) AS active_"
+    },
+    {
+      "calls": 12,
+      "query": "SELECT * FROM ask_action_proposals WHERE status = $1 AND created_utc < $2 ORDER BY created_utc ASC, id ASC"
+    },
+    {
+      "calls": 12,
+      "query": "SELECT * FROM ask_tracked_work WHERE state = $1 ORDER BY created_utc ASC, id ASC"
+    },
+    {
+      "calls": 12,
+      "query": "SELECT * FROM voyages WHERE status = $1 ORDER BY created_utc DESC"
+    },
+    {
+      "calls": 7,
+      "query": "UPDATE captains SET last_process_alive_utc = $1, last_update_utc = $2 WHERE id = $3"
+    },
+    {
+      "calls": 7,
+      "query": "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT $2 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ($3,$4)) OR NOT EXISTS (SELECT $5 FROM missions vm WHERE vm.id=s.mission_id))),$6) AS active_"
+    },
+    {
+      "calls": 7,
+      "query": "SELECT * FROM docks WHERE id = $1"
+    },
+    {
+      "calls": 7,
+      "query": "SELECT $2 FROM ONLY \"public\".\"tenants\" x WHERE \"id\" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x"
+    },
+    {
+      "calls": 6,
+      "query": "UPDATE usage_untracked_executions SET last_update_utc=$1,state=$2,active=$3,revision=revision+$10, execution_ended_utc=$4,settled_by_snapshot_id=$5,transition_reason=$6 WHERE tenant_id=$7 AND id=$8 AND revision=$9 AND (execution_ended_utc IS NULL OR execution_ended_utc=$4) AND last_update_utc<=$1 AN"
+    }
+  ]
+}

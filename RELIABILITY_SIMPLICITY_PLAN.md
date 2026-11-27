@@ -273,8 +273,8 @@ branch starts adding tests to it.
 - [ ] **RS-0.6** Baseline run of everything: `dotnet build src/Armada.sln -c Release -warnaserror` (both frameworks),
   `Test.Automated` net8.0 and net10.0, xUnit and NUnit adapters, dashboard, mobile, TUI parity, VS Code extension.
   Record counts in the validation log. Evidence:
-- [ ] **RS-0.7** Baseline performance with `Armada.Benchmark` (admission runner and dispatch latency) and the
-  `benchmarks/run-baseline.sh` flow, saved under `benchmarks/baselines/1.4.0/`. Evidence:
+- [x] **RS-0.7** Baseline performance with `Armada.Benchmark` (admission runner and dispatch latency) and the
+  `benchmarks/run-baseline.sh` flow, saved under `benchmarks/baselines/1.4.0/`. Evidence: benchmarks/baselines/1.4.0/ (Release v1.4.0 commit): admission p50 40.9 s with 10 captains and 1.58 s with 100; 2388 queries in the one-minute dispatch sample; start latency p50 2.9 ms.
 - [ ] **RS-0.8** Baseline reliability: after RS-1.6 exists, run the four reference pipelines on 1.4.0 code (a
   worktree at `a2503b7a2`) with the same battery and record G1 to G12. This is the "before" column of the release
   notes. Evidence:
@@ -1086,7 +1086,7 @@ Most performance work lands in Phase 4. These are the remaining hot spots and th
 - [x] **RS-10.5** `BoundedTextBuffer.Trim` becomes a ring buffer (no full `ToString()` per line over the cap).
   Evidence: 5c361f92b; ring buffer, output identical to the old trim on random input; 6,000 lines 192 ms to 8 ms.
 - [ ] **RS-10.6** Benchmark gate: rerun RS-0.7, save under `benchmarks/baselines/1.5.0/`, and record G10 and G11.
-  Any regression against 1.4.0 on another benchmark is explained or fixed. Evidence:
+  Any regression against 1.4.0 on another benchmark is explained or fixed. Evidence: Partial, run stopped 2026-11-26. G11 pass: 472 queries against 2388 (5.06x fewer). G10 not measured on 1.5.0 (start-latency arm not run). Admission regressed with RoutingData.RankByOutcomes on: 100 captains p50 1.90 s and p95 3.07 s against 1.58 s and 1.95 s on 1.4.0; with ranking off 1.47 s and 1.76 s. 10 captains p50 56.3 s against 40.9 s.
 
 ## Phase 11: Code health
 
@@ -1232,7 +1232,7 @@ humanizer pass and a manual check against the Signs of AI writing page before an
 ## Phase 14: Verification
 
 - [ ] **RS-14.1** Full local run: warning-free Release build; `Test.Automated` net8.0 and net10.0; xUnit and NUnit
-  adapters; dashboard; mobile; TUI parity; VS Code extension. Record counts. Evidence:
+  adapters; dashboard; mobile; TUI parity; VS Code extension. Record counts. Evidence: Partial, stopped 2026-11-26. Test.Automated net10.0 7742/7785 and net8.0 7739/7780 before fixes; mobile 1462/1462; VS Code 198/198. Fixed and merged: client contract coverage for the enumerate twins, MissionTransitions status restore, FailureKindCoverage, VS Code Captains tabs. Open: [CollectionBound] missing on 1.5.0 response models (E2E.ResponseShape, 3 cases), Battery.CSharpPack fixture build under xUnit; NUnit not run.
 - [ ] **RS-14.2** `full.yml`, `security.yml`, `db-parity.yml` (`RESULT: PARITY OK`), and `install-verify.yml` green on
   the release candidate commit. Evidence:
 - [x] **RS-14.3** Upgrade test from the v1.4.0 baseline on all four providers (`scripts/common/run-upgrade-test.sh
