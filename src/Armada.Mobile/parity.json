@@ -393,6 +393,22 @@
     },
     {
       "kind": "route",
+      "key": "/model-profiles",
+      "status": "implemented",
+      "mobile": "src/app/(app)/(work)/model-profiles/index.tsx",
+      "workstream": "W0.5",
+      "notes": "redirect to /captains?tab=profiles"
+    },
+    {
+      "kind": "route",
+      "key": "/model-profiles/:id",
+      "status": "implemented",
+      "mobile": "src/app/(app)/(work)/model-profiles/[id].tsx",
+      "workstream": "W3.2",
+      "notes": "ModelProfileDetailScreen, read-only: served context and source, configured or probed tools and MCP, tier and suggestion, recovery policy and timeouts in effect, rendering, measured speed"
+    },
+    {
+      "kind": "route",
       "key": "/more",
       "status": "extension",
       "mobile": "src/app/(app)/(more)/more.tsx",
@@ -878,6 +894,14 @@
       "mobile": "src/screens/captains/DocksTab.tsx",
       "workstream": "W3.2",
       "notes": "paged list with delete and bulk delete; rows open /docks/:id (W2)"
+    },
+    {
+      "kind": "tab",
+      "key": "CaptainsHub:profiles",
+      "status": "implemented",
+      "mobile": "src/screens/captains/ModelProfilesTab.tsx",
+      "workstream": "W3.2",
+      "notes": "paged list with search; rows open /model-profiles/:id (detail beside the list on tablets)"
     },
     {
       "kind": "tab",
@@ -2889,6 +2913,14 @@
     },
     {
       "kind": "api",
+      "key": "getMissionAttempts",
+      "status": "implemented",
+      "mobile": "MissionAttemptsSection",
+      "workstream": "W2.2",
+      "notes": "Mission detail attempts timeline (RS-12.16)"
+    },
+    {
+      "kind": "api",
       "key": "getMissionBlackBox",
       "status": "implemented",
       "mobile": "src/screens/blackbox/BlackBoxPanel.tsx",
@@ -2954,10 +2986,10 @@
     {
       "kind": "api",
       "key": "getMissionWaits",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MissionWaitsSection",
       "workstream": "W2.3",
-      "notes": "Voyages"
+      "notes": "Mission detail wait time"
     },
     {
       "kind": "api",
@@ -2974,6 +3006,14 @@
       "mobile": "",
       "workstream": "W4.3",
       "notes": "the mobile app has no captain or model endpoint evaluation screen: the dashboard runs Quick probe runs from the captain page and the endpoint health dialog (MODEL_HETEROGENEITY.md Phase 2); the app adds one when evaluation needs it on the go"
+    },
+    {
+      "kind": "api",
+      "key": "getModelProfile",
+      "status": "implemented",
+      "mobile": "ModelProfileDetailScreen",
+      "workstream": "W4.3",
+      "notes": "Model profile detail"
     },
     {
       "kind": "api",
@@ -3258,10 +3298,10 @@
     {
       "kind": "api",
       "key": "getVesselConcurrency",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "VesselConcurrencySection",
       "workstream": "W2.3",
-      "notes": "Voyages"
+      "notes": "Vessel detail concurrency"
     },
     {
       "kind": "api",
@@ -3354,10 +3394,10 @@
     {
       "kind": "api",
       "key": "getVoyageTree",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "VoyageTreeSection",
       "workstream": "W2.3",
-      "notes": "Voyages"
+      "notes": "Voyage detail mission tree"
     },
     {
       "kind": "api",
@@ -3705,6 +3745,14 @@
     },
     {
       "kind": "api",
+      "key": "listMissionSubmissions",
+      "status": "implemented",
+      "mobile": "MissionFindingsSection",
+      "workstream": "W2.2",
+      "notes": "Mission detail submitted results and findings (RS-12.16)"
+    },
+    {
+      "kind": "api",
       "key": "listMissionSummaries",
       "status": "implemented",
       "mobile": "MissionsList",
@@ -3734,6 +3782,14 @@
       "mobile": "",
       "workstream": "W4.3",
       "notes": "the mobile app has no captain or model endpoint evaluation screen: the dashboard runs Quick probe runs from the captain page and the endpoint health dialog (MODEL_HETEROGENEITY.md Phase 2); the app adds one when evaluation needs it on the go"
+    },
+    {
+      "kind": "api",
+      "key": "listModelProfiles",
+      "status": "implemented",
+      "mobile": "ModelProfilesTab",
+      "workstream": "W4.3",
+      "notes": "Captains hub Model Profiles tab"
     },
     {
       "kind": "api",
@@ -4737,6 +4793,14 @@
     },
     {
       "kind": "api",
+      "key": "updateModelProfile",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W4.3",
+      "notes": "Mobile shows model profiles read-only (RS-12.16); tier, recovery, and timeout edits stay on the dashboard"
+    },
+    {
+      "kind": "api",
       "key": "updateObjective",
       "status": "not-applicable",
       "mobile": "",
@@ -5161,14 +5225,6 @@
     },
     {
       "kind": "setting",
-      "key": "settings.outputRepairNormalizerCaptainId",
-      "status": "implemented",
-      "mobile": "src/screens/system/ServerSettingsTab.tsx",
-      "workstream": "W4.4",
-      "notes": ""
-    },
-    {
-      "kind": "setting",
       "key": "settings.admiralPort",
       "status": "implemented",
       "mobile": "src/screens/system/ServerSettingsTab.tsx",
@@ -5394,6 +5450,14 @@
     {
       "kind": "setting",
       "key": "settings.mcpPort",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.outputRepairNormalizerCaptainId",
       "status": "implemented",
       "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",

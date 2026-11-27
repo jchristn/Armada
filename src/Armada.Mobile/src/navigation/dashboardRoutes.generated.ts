@@ -25,6 +25,8 @@ export const DASHBOARD_ROUTES: DashboardRoute[] = [
   { pattern: "/workspace/:vesselId/:panel", dashboard: "/workspace/:vesselId/:panel", tab: "work", title: "Workspace", workstream: "W3.1", redirect: null, file: "(app)/(work)/workspace/[vesselId]/[panel].tsx" },
   { pattern: "/captains", dashboard: "/captains", tab: "work", title: "Captains", workstream: "W3.2", redirect: null, file: "(app)/(work)/captains/index.tsx" },
   { pattern: "/captains/:id", dashboard: "/captains/:id", tab: "work", title: "Captain", workstream: "W3.2", redirect: null, file: "(app)/(work)/captains/[id].tsx" },
+  { pattern: "/model-profiles", dashboard: "/model-profiles", tab: "work", title: "Model Profiles", workstream: "W0.5", redirect: "/captains?tab=profiles", file: "(app)/(work)/model-profiles/index.tsx" },
+  { pattern: "/model-profiles/:id", dashboard: "/model-profiles/:id", tab: "work", title: "Model Profile", workstream: "W3.2", redirect: null, file: "(app)/(work)/model-profiles/[id].tsx" },
   { pattern: "/missions", dashboard: "/missions", tab: "work", title: "Missions", workstream: "W2.2", redirect: null, file: "(app)/(work)/missions/index.tsx" },
   { pattern: "/missions/:id", dashboard: "/missions/:id", tab: "work", title: "Mission", workstream: "W2.2", redirect: null, file: "(app)/(work)/missions/[id].tsx" },
   { pattern: "/voyages", dashboard: "/voyages", tab: "work", title: "Voyages", workstream: "W0.5", redirect: "/missions?tab=voyages", file: "(app)/(work)/voyages/index.tsx" },

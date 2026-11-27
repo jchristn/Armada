@@ -5301,3 +5301,97 @@ export interface ModelProfileListQuery {
   pageNumber?: number;
   pageSize?: number;
 }
+
+/** One stage attempt of a mission (GET /api/v1/missions/{id}/attempts, Armada.Core.Models.MissionAttempt). */
+export interface MissionAttempt {
+  outcomeId: string;
+  attempt: number;
+  reworkRound: number;
+  captainId: string | null;
+  captainName: string | null;
+  runtime: string | null;
+  model: string | null;
+  modelProvider: string | null;
+  modelEndpointId: string | null;
+  disposition: string;
+  failureKind: string | null;
+  failureReason: string | null;
+  runtimeFailureKind: string | null;
+  contractRepairKind: string | null;
+  isRepair: boolean;
+  escalated: boolean;
+  nextCaptainId: string | null;
+  judgeVerdict: string | null;
+  suspectedCause: string | null;
+  isEvaluation: boolean;
+  startedUtc: string | null;
+  endedUtc: string;
+  durationMs: number | null;
+}
+
+/** A mission's attempt history with its escalation and recovery counters (RS-12.1). */
+export interface MissionAttemptHistory {
+  missionId: string;
+  voyageId: string | null;
+  persona: string | null;
+  mode: MissionMode;
+  status: string;
+  captainId: string | null;
+  tier: CaptainTier | null;
+  escalationCount: number;
+  escalatedFromCaptainId: string | null;
+  escalatedFromModel: string | null;
+  reworkEscalated: boolean;
+  redispatchAttempts: number;
+  outputRepairAttempts: number;
+  noOpRedispatchAttempts: number;
+  stallRecoveryAttempts: number;
+  attempts: MissionAttempt[];
+}
+
+/** A finding in a submitted verdict or result (Armada.Core.Models.StageFinding). */
+export interface StageFinding {
+  file: string | null;
+  line: number | null;
+  severity: string;
+  scenario: string;
+  requiredFix: string | null;
+}
+
+/** A submitted Judge verdict (Armada.Core.Models.StageVerdictSubmission). */
+export interface StageVerdictSubmission {
+  verdict: string;
+  correctness: string;
+  blastRadius: string;
+  sourceFidelity: string;
+  summary: string | null;
+  findings: StageFinding[];
+  specConflict: string | null;
+}
+
+/** A submitted stage result (Armada.Core.Models.StageResultSubmission). */
+export interface StageResultSubmission {
+  status: string;
+  summary: string;
+  findings: StageFinding[];
+}
+
+/** The typed body of a stage submission: exactly one of plan, verdict, or result is set. */
+export interface StageSubmissionEnvelope {
+  kind: string;
+  plan?: unknown;
+  verdict?: StageVerdictSubmission | null;
+  result?: StageResultSubmission | null;
+}
+
+/** A plan, verdict, or result a captain submitted (GET /api/v1/missions/{id}/submissions), newest first. */
+export interface StageSubmission {
+  tenantId: string | null;
+  missionId: string;
+  attemptId: string;
+  persona: string;
+  kind: string;
+  source: string;
+  submission: StageSubmissionEnvelope;
+  createdUtc: string;
+}

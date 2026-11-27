@@ -52,6 +52,18 @@ wizard's captain step asks **How many missions should run at once?**: a CLI runt
 captains and a Mux runtime creates one captain with that many slots (the button reads **Create N
 Captains**). See [SCHEDULING.md](SCHEDULING.md#capacity).
 
+Mixed open-model and frontier pipelines (v1.5.0) appear on the same screens. A mission that a captain has run has
+an **Attempts (N)** section, newest first: each attempt's captain and model, its disposition, failure kind, runtime
+failure, contract repair, escalation, Judge verdict, and duration, with the escalation, redispatch, output repair,
+and stall recovery counts underneath; it refreshes on the `mission.attempt_changed`, `mission.escalated`, and
+`mission.repaired` events. A **Submitted Results** section shows the verdict or result that decided each attempt,
+its summary, and its findings with severity, file and line, and the required fix. The Captains hub has a **Model
+Profiles** tab: each model as served, with its tier; a profile shows its served context and where that came from,
+tools and MCP as set by an administrator or as probed, the tier and the outcome-data suggestion, the recovery policy
+and timeouts in effect (and which ones the profile overrides), rendering, and measured speed. Model profiles are
+read-only in the app; edit them on the dashboard. A persona shows its escalation ladder (editable by administrators,
+as on the dashboard), and a pending mission's blocker shows its typed reason with the action that clears it.
+
 On a tablet (768 dp and wider) the tabs become the dashboard's sidebar and lists open their detail side by side.
 Links work both ways: `armada://` links and pasted dashboard URLs (`https://admiral.example.com/dashboard/missions/msn_...`)
 open the same screen in the app, and every screen can open its page on the web dashboard.
@@ -139,6 +151,9 @@ The Admiral can notify your phone about the things that need a person, the same 
 | Deployment approval | A deployment is waiting for approval | The owner and the tenant's admins |
 | Mission failed, landing failed, captain stalled, voyage finished | As named | The owner (the tenant's admins when there is no active owner) |
 
+- Escalation and recovery-exhausted notifications (a mission moved to the next captain on its persona's
+  escalation ladder, or ran out of resumes, repairs, and escalations) open the mission. The app accepts them now;
+  they get their own switches in Preferences once the Admiral has categories for them.
 - The app asks for permission once after sign-in (or from **More > Preferences**), never at launch.
 - Each signed-in server registers the device separately. Preferences shows whether this device receives
   notifications from the current server, a switch for each category, and **Send a test notification**.

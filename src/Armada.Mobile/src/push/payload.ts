@@ -25,6 +25,12 @@ export const PUSH_KINDS = [
   'voyage_finished',
   // Advisory model scorecard alert: opens Needs You; never Approve / Deny (not in ACTIONABLE_KINDS).
   'model_alert',
+  // A mission moved to the next captain on its persona escalation ladder, and a mission whose recovery policy ran out
+  // (resumes, repairs, and escalations spent). Both open the mission; never Approve / Deny. The app accepts them now
+  // so an Admiral that sends them is handled; the settings list them once the server has matching PushCategoryEnum
+  // values (registering an unknown category would be refused).
+  'escalated',
+  'recovery_exhausted',
   'test',
 ] as const;
 

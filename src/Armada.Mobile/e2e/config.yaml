@@ -17,4 +17,5 @@ executionOrder:
     - 07-build-captains
     - 08-build-planning
     - 09-w4
+    - 09-reliability
     - 03-sign-out

@@ -1,3 +1,4 @@
+import type { MissionAttemptHistory, StageSubmission } from '../types/models';
 import type { UsageSelectionRecovery, UsageSelectionRecoveryRequest, CaptainSelectionSummary, CaptainSelectionDecisionView, CaptainSelectionDecisionDetail, CaptainSelectionCandidateView, CaptainSelectionPreview, CaptainSelectionHistoryQuery } from '../types/models';
 import type {
   ScopeEnum,
@@ -1384,6 +1385,10 @@ export const getTokenUsage = (params?: { fromUtc?: string; toUtc?: string; bucke
     ),
   } : undefined)}`, opts);
 export const getMissionLandingPreview = (id: string) => get<LandingPreviewResult>(`/api/v1/missions/${encodeURIComponent(id)}/landing-preview`);
+/** The mission's stage attempts, oldest first, with its escalation and recovery counters. */
+export const getMissionAttempts = (id: string) => get<MissionAttemptHistory>(`/api/v1/missions/${encodeURIComponent(id)}/attempts`);
+/** Every plan, verdict, or result the mission's captains submitted, newest first. */
+export const listMissionSubmissions = (id: string) => get<StageSubmission[]>(`/api/v1/missions/${encodeURIComponent(id)}/submissions`);
 export const getMissionGitHubPullRequest = (id: string) => get<GitHubPullRequestDetail>(`/api/v1/missions/${encodeURIComponent(id)}/github/pull-request`);
 /** One page (1 to 100, GitHub's largest page) of the mission pull request's reviews; newest first unless order is CreatedAscending. */
 export const enumerateMissionPullRequestReviews = (id: string, query?: { pageNumber?: number; pageSize?: number; order?: string }) =>
