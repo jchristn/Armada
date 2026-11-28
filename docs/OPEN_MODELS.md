@@ -196,7 +196,7 @@ Admiral, and the latest report shows on the Reliability tab and at `GET /api/v1/
 ## Measured results
 
 The 1.5.0 numbers are recorded here after the release gate run, measure by measure, with the 1.4.0 baseline beside
-them. The measures are the twelve gate measures in `RELIABILITY_SIMPLICITY_PLAN.md`: voyages finishing with no human
+them. The measures are the twelve gate measures in `archive/RELIABILITY_SIMPLICITY_PLAN.md`: voyages finishing with no human
 intervention (target 99 percent), no stuck missions, no duplicate work, format failures repaired without a rerun, the
 `Unclassified` share of runtime failures (under 2 percent), no Judge PASS on a seeded defect, no open-model Judge of its
 own tier's work without an exception, crash consistency, dispatch latency, queries per dispatch pass, and escalations

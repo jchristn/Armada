@@ -50,7 +50,7 @@ scenario hashes differ.
 
 ## Acceptance gate (1.5.0)
 
-The gate in `RELIABILITY_SIMPLICITY_PLAN.md` measures whether open models such as Qwen3.8 can live in a pipeline with
+The gate in `archive/RELIABILITY_SIMPLICITY_PLAN.md` measures whether open models such as Qwen3.8 can live in a pipeline with
 Opus and GPT-6.1. It is its own program, `src/Armada.Gate`, because it drives the Admiral through the public .NET SDK
 while this harness stays black-box.
 

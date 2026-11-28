@@ -1,5 +1,5 @@
 {
-  "_comment": "Reference pipelines for the 1.5.0 acceptance gate (RELIABILITY_SIMPLICITY_PLAN.md RS-1.6, Run budget). Roles name models; benchmarks/config/gate-endpoints.local.json (git-ignored) says where each open model is served. Frontier roles use the local Claude Code and Codex logins.",
+  "_comment": "Reference pipelines for the 1.5.0 acceptance gate (archive/RELIABILITY_SIMPLICITY_PLAN.md RS-1.6, Run budget). Roles name models; benchmarks/config/gate-endpoints.local.json (git-ignored) says where each open model is served. Frontier roles use the local Claude Code and Codex logins.",
   "roles": [
     { "name": "opus", "runtime": "ClaudeCode", "model": "claude-opus-5-5", "tier": "Premium" },
     { "name": "gpt", "runtime": "Codex", "model": "gpt-6.1", "tier": "Premium" },

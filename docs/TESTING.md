@@ -222,7 +222,7 @@ dotnet run --project src/Test.Automated --framework net10.0 -- --suites Runtimes
 ```
 
 That suite checks the simulator's wire formats and that the API runtime ends, rather than hangs, for every kind. The
-suites for the reliability work in `RELIABILITY_SIMPLICITY_PLAN.md` use the simulator to assert the recovery each kind
+suites for the reliability work in `archive/RELIABILITY_SIMPLICITY_PLAN.md` use the simulator to assert the recovery each kind
 should get.
 
 ## Crash-point harness

@@ -20142,7 +20142,7 @@
         },
         {
             "name": "Reliability",
-            "description": "Pipeline reliability (RELIABILITY_SIMPLICITY_PLAN.md RS-12.1): a mission attempt history (failure kind, repairs, escalations), reliability per model and persona from stage outcomes, and the acceptance gate reports the Armada.Gate runner uploads. See docs/REST_API.md, Reliability.",
+            "description": "Pipeline reliability (archive/RELIABILITY_SIMPLICITY_PLAN.md RS-12.1): a mission attempt history (failure kind, repairs, escalations), reliability per model and persona from stage outcomes, and the acceptance gate reports the Armada.Gate runner uploads. See docs/REST_API.md, Reliability.",
             "item": [
                 {
                     "name": "Get Mission Attempts",

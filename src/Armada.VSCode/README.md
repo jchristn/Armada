@@ -10,7 +10,7 @@ your coding agent, and runs recovery paths with a dry run and a confirmation.
 Everything is native VS Code: trees with live updates, context menus and inline actions, pages drawn with the editor's
 own theme, logs and changes as read-only documents, forms for dispatch, create and edit, and Ask Armada as a sidebar
 chat. The extension is being built out to full parity with the dashboard, the TUI, Harbor and the CLI
-([VSCODE_EXTENSION_PLAN.md](../../VSCODE_EXTENSION_PLAN.md)); the areas without a native view yet are listed there.
+([archive/VSCODE_EXTENSION_PLAN.md](../../archive/VSCODE_EXTENSION_PLAN.md)); the areas without a native view yet are listed there.
 
 ## The Armada view container
 

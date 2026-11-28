@@ -1,5 +1,5 @@
 {
-  "_comment": "Copy to gate-endpoints.local.json (git-ignored) and fill in real values. The acceptance gate harness (RELIABILITY_SIMPLICITY_PLAN.md RS-1.5) reads the local file.",
+  "_comment": "Copy to gate-endpoints.local.json (git-ignored) and fill in real values. The acceptance gate harness (archive/RELIABILITY_SIMPLICITY_PLAN.md RS-1.5) reads the local file.",
   "conductor": {
     "baseUrl": "http://<conductor-host>:<port>/v1.0/api/",
     "bearerToken": "<conductor bearer token>",

@@ -315,13 +315,17 @@ namespace Armada.Harbor
 
         private void InstallTray()
         {
+            // On macOS the menu bar icon is a template image: the black logo on transparent, which the system tints to
+            // match the other menu bar icons in light and dark mode. Elsewhere the tray keeps the color logo.
+            WindowIcon? macTemplate = OperatingSystem.IsMacOS() ? LoadIcon("logo-tray-dark.png") : null;
             _TrayIcon = new TrayIcon
             {
-                Icon = WindowIcon,
+                Icon = macTemplate ?? WindowIcon,
                 ToolTipText = "Armada Harbor",
                 Menu = _Menus?.BuildTrayMenu(),
                 IsVisible = true
             };
+            if (macTemplate != null) MacOSProperties.SetIsTemplateIcon(_TrayIcon, true);
             _TrayIcon.Clicked += (sender, args) => ShowWindow();
 
             TrayIcons icons = new TrayIcons { _TrayIcon };
@@ -425,11 +429,11 @@ namespace Armada.Harbor
             }
         }
 
-        private static WindowIcon? LoadIcon()
+        private static WindowIcon? LoadIcon(string asset = "logo.png")
         {
             try
             {
-                using (Stream stream = AssetLoader.Open(new Uri("avares://Armada.Harbor/Assets/logo.png")))
+                using (Stream stream = AssetLoader.Open(new Uri("avares://Armada.Harbor/Assets/" + asset)))
                 {
                     return new WindowIcon(stream);
                 }

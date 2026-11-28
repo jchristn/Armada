@@ -257,7 +257,7 @@ detail line. [SCHEDULING.md](SCHEDULING.md#why-a-mission-is-waiting) explains ea
 
 ## Capability-aware routing (1.5.0)
 
-Four rules use what Armada measures about each model (RELIABILITY_SIMPLICITY_PLAN.md RS-8.4 to RS-8.7).
+Four rules use what Armada measures about each model (archive/RELIABILITY_SIMPLICITY_PLAN.md RS-8.4 to RS-8.7).
 
 ### Served context is a hard filter
 

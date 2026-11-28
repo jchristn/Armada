@@ -1,6 +1,6 @@
 # Open-model behavior simulation
 
-The open-model simulator (RELIABILITY_SIMPLICITY_PLAN.md RS-1.1) is not a Postman simulation. It runs in-process as
+The open-model simulator (archive/RELIABILITY_SIMPLICITY_PLAN.md RS-1.1) is not a Postman simulation. It runs in-process as
 `OpenModelSimulator` under `src/Test.Shared/Infrastructure/OpenModel`, an OpenAI-compatible and Ollama `/api/chat` fake
 scripted per request. It produces the failure shapes open models show in practice: Hermes or Qwen `<tool_call>` text,
 `<function=...>` text, fenced JSON tool calls, malformed tool arguments, Ollama's malformed-tool-call HTTP 500, unknown

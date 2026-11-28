@@ -1,6 +1,6 @@
 name: vscode-extension
 
-# Builds and checks the VS Code extension (src/Armada.VSCode, VSCODE_EXTENSION_PLAN.md 9.2) on every push and pull
+# Builds and checks the VS Code extension (src/Armada.VSCode, archive/VSCODE_EXTENSION_PLAN.md 9.2) on every push and pull
 # request that touches it, the dashboard modules it shares (api/, types/, lib/), the sharing contract, or the inputs of
 # its parity manifest. Publishing is not wired up yet (milestone V1).
 
