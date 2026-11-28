@@ -4,7 +4,7 @@ All notable changes to Armada are documented in this file.
 
 ---
 
-## v1.5.0 (unreleased)
+## v1.5.0 (2026-11-27)
 
 Armada 1.5.0 makes pipelines that mix open models (Qwen3.8 and others served by Ollama, vLLM, or a proxy such as
 Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `RELIABILITY_SIMPLICITY_PLAN.md`.
