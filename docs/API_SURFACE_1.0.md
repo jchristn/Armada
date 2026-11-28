@@ -33,7 +33,7 @@ Client contract version: `1.0` (reported as `ContractVersion` by
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 84 | 0 |
 | CLI commands | 111 | 0 |
-| Settings keys | 368 | 12 |
+| Settings keys | 367 | 12 |
 
 ## REST API
 
@@ -1118,7 +1118,6 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 
 | Key | Type | Default | Status |
 |---|---|---|---|
-| `acceptLegacyMissionMarkers` | bool | `true` |  |
 | `admiralPort` | int | `7890` |  |
 | `agents` | array<object> | `[{"runtime":"ClaudeCode","command":"claude","args":"--dangerously-skip-permis...` |  |
 | `agents[].args` | string | `""` |  |

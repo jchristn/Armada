@@ -36,13 +36,13 @@ namespace Test.Shared.Suites.Services
                 string output =
                     "Plan follows.\n" +
                     "```armada-plan\n" +
-                    "{\"missions\":[{\"title\":\"A\",\"description\":\"do a\"},{\"title\":\"B\",\"description\":\"do b\",\"dependsOn\":1},{\"title\":\"C\",\"waitForOtherMissions\":true}]}\n" +
+                    "{\"missions\":[{\"title\":\"A\",\"description\":\"do a\"},{\"title\":\"B\",\"description\":\"do b\",\"parent\":1},{\"title\":\"C\",\"waitForOtherMissions\":true}]}\n" +
                     "```\n";
                 AssertTrue(ArchitectPlanParser.TryParse(output, out ArchitectPlan? plan), "plan found");
                 AssertEqual(3, plan!.Missions.Count);
                 AssertEqual("A", plan.Missions[0].Title);
                 AssertNull(plan.Missions[0].Parent);
-                AssertEqual(1, plan.Missions[1].Parent, "a legacy dependsOn is read as the parent");
+                AssertEqual(1, plan.Missions[1].Parent, "parent names an earlier mission");
                 AssertTrue(plan.Missions[2].WaitForOtherMissions, "wait flag");
                 AssertEqual("C", plan.Missions[2].Description, "a missing description falls back to the title");
             }));
@@ -87,7 +87,7 @@ namespace Test.Shared.Suites.Services
             {
                 string output =
                     "```armada-plan\n" +
-                    "{\"missions\":[{\"title\":\"<title>\"},{\"title\":\"Core\"},{\"title\":\"\"},{\"title\":\"Backend\",\"dependsOn\":2}]}\n" +
+                    "{\"missions\":[{\"title\":\"<title>\"},{\"title\":\"Core\"},{\"title\":\"\"},{\"title\":\"Backend\",\"parent\":2}]}\n" +
                     "```";
                 AssertTrue(ArchitectPlanParser.TryParse(output, out ArchitectPlan? plan));
                 AssertEqual(2, plan!.Missions.Count);
@@ -99,7 +99,7 @@ namespace Test.Shared.Suites.Services
             {
                 string output =
                     "```armada-plan\n" +
-                    "{\"missions\":[{\"title\":\"A\",\"dependsOn\":1},{\"title\":\"B\",\"dependsOn\":3},{\"title\":\"C\",\"dependsOn\":0},{\"title\":\"\"},{\"title\":\"E\",\"parent\":4}]}\n" +
+                    "{\"missions\":[{\"title\":\"A\",\"parent\":1},{\"title\":\"B\",\"parent\":3},{\"title\":\"C\",\"parent\":0},{\"title\":\"\"},{\"title\":\"E\",\"parent\":4}]}\n" +
                     "```";
                 AssertFalse(ArchitectPlanParser.TryParse(output, out ArchitectPlan? plan, out string? error), "rejected, not flattened");
                 AssertNull(plan);
@@ -131,7 +131,7 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(result.IsValid);
                 List<PlanFindingCodeEnum> codes = result.Errors.Select(e => e.Code).ToList();
                 foreach (PlanFindingCodeEnum expected in new[] { PlanFindingCodeEnum.DuplicateKey, PlanFindingCodeEnum.UnknownParentKey, PlanFindingCodeEnum.UnresolvedParent,
-                    PlanFindingCodeEnum.ParentDependsOnConflict, PlanFindingCodeEnum.BranchStrategyNeedsParent, PlanFindingCodeEnum.BranchStrategyInvalid })
+                    PlanFindingCodeEnum.DependsOnRemoved, PlanFindingCodeEnum.BranchStrategyNeedsParent, PlanFindingCodeEnum.BranchStrategyInvalid })
                     AssertTrue(codes.Contains(expected), "reports " + expected);
                 AssertEqual(2, result.Errors.Single(e => e.Code == PlanFindingCodeEnum.DuplicateKey).Position);
 
@@ -140,13 +140,12 @@ namespace Test.Shared.Suites.Services
                     new PlanNode { OwnedPaths = new List<string> { "src/" } },
                     new PlanNode { OwnedPaths = new List<string> { "src/A.cs" } },
                     new PlanNode { Parent = 1, OwnedPaths = new List<string> { "src/A.cs" } },
-                    new PlanNode { DependsOn = 3 }
+                    new PlanNode { Parent = 3 }
                 };
                 PlanValidationResult warned = MissionPlanValidator.Validate(siblings, 4, false);
                 AssertTrue(warned.IsValid, "an overlap only warns by default (R11)");
                 AssertTrue(warned.Warnings.Any(w => w.Code == PlanFindingCodeEnum.OwnershipOverlap && w.Message.StartsWith("Missions 1 and 2")), "parallel siblings overlap");
                 AssertFalse(warned.Warnings.Any(w => w.Message.StartsWith("Missions 1 and 3")), "a parent and its child may share a path");
-                AssertTrue(warned.Warnings.Any(w => w.Code == PlanFindingCodeEnum.DependsOnReadAsParent), "dependsOn alone is read as the parent");
                 AssertEqual(3, warned.ParentOf(4));
                 AssertEqual(2, warned.DepthOf(4));
                 AssertFalse(MissionPlanValidator.Validate(siblings, 4, true).IsValid, "contract v4 rejects the overlap");
@@ -158,7 +157,7 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(ArchitectPlanParser.TryParse(null, out _));
                 AssertFalse(ArchitectPlanParser.TryParse("{\"missions\":[{\"title\":\"A\"}]}", out _), "unfenced JSON");
                 AssertFalse(ArchitectPlanParser.TryParse("```json\n{\"missions\":[{\"title\":\"A\"}]}\n```", out _), "other info string");
-                AssertFalse(ArchitectPlanParser.TryParse("```armada-plan\n{\"missions\":[{\"title\":\"A\",\"dependsOn\":\"Mission 1\"}]}\n```", out _), "dependsOn must be a number");
+                AssertFalse(ArchitectPlanParser.TryParse("```armada-plan\n{\"missions\":[{\"title\":\"A\",\"dependsOn\":\"Mission 1\"}]}\n```", out _), "a removed dependsOn with a non-number value is still rejected");
                 AssertFalse(ArchitectPlanParser.TryParse("```armada-plan\nnot json\n```", out _), "malformed");
                 AssertFalse(ArchitectPlanParser.TryParse("```armada-plan\n{\"missions\":[{\"title\":\"<title>\",\"description\":\"<what to do>\"}]}\n```", out _), "echoed prompt example");
                 AssertFalse(ArchitectPlanParser.TryParse("```armada-plan\n{\"missions\":[{\"title\":\"A\"}]}", out _), "unterminated block");
@@ -284,17 +283,32 @@ namespace Test.Shared.Suites.Services
                 AssertContains("the maximum is 1", depthError!);
             }));
 
-            cases.Add(Case("v3_dependsOn_maps_to_parent_with_warning", "A v3 dependsOn is read as the parent with a warning, and a v3 ownership overlap only warns", TestTags.Positive, () =>
+            cases.Add(Case("dependsOn_is_rejected", "dependsOn was removed (D-026): a v3 or unversioned plan that uses it is rejected with an error naming parent, never ignored", TestTags.Negative, () =>
             {
                 ArchitectPlan plan = OwnershipPlan();
                 plan.ContractVersion = 3;
                 plan.Missions[1].DependsOn = 1;
+                AssertFalse(ArchitectPlanParser.TryParse(Fence(plan), out ArchitectPlan? parsed, out string? error), "v3 plan with dependsOn is rejected");
+                AssertNull(parsed);
+                AssertContains("dependsOn is no longer supported; write parent 1 instead", error!);
+
+                string unversioned = "```armada-plan\n{\"missions\":[{\"title\":\"A\"},{\"title\":\"B\",\"dependsOn\":1}]}\n```";
+                AssertFalse(ArchitectPlanParser.TryParse(unversioned, out _, out string? unversionedError), "unversioned plan with dependsOn is rejected");
+                AssertContains("write parent 1 instead", unversionedError!);
+
+                PlanValidationResult result = MissionPlanValidator.Validate(new List<PlanNode> { new PlanNode(), new PlanNode { DependsOn = 1 } }, 4, false);
+                AssertTrue(result.Errors.Any(e => e.Code == PlanFindingCodeEnum.DependsOnRemoved && e.Position == 2), "typed code at the mission's position");
+            }));
+
+            cases.Add(Case("v3_overlap_only_warns", "A v3 ownership overlap only warns", TestTags.Positive, () =>
+            {
+                ArchitectPlan plan = OwnershipPlan();
+                plan.ContractVersion = 3;
+                plan.Missions[1].Parent = 1;
                 plan.Missions[2].OwnedPaths = new List<string> { "src/Foo.cs" };
                 plan.Missions[0].OwnedPaths = new List<string> { "src/Foo.cs" };
                 AssertTrue(ArchitectPlanParser.TryParse(Fence(plan), out ArchitectPlan? parsed, out string? error), error ?? "");
                 AssertEqual(1, parsed!.Missions[1].Parent);
-                AssertNull(parsed.Missions[1].DependsOn);
-                AssertTrue(parsed.Warnings.Any(w => w.Contains("dependsOn 1 was read as parent 1")), "mapping warning");
                 AssertTrue(parsed.Warnings.Any(w => w.Contains("Missions 1 and 3 can run in parallel")), "v3 overlap is a warning");
             }));
 
@@ -468,7 +482,7 @@ namespace Test.Shared.Suites.Services
                 Title = i == 0 ? "Discovery" : "Integration",
                 Description = "Verify inventory and connection status.",
                 Kind = i == 0 ? "implementation" : "integration",
-                DependsOn = i == 0 ? null : 1,
+                Parent = i == 0 ? null : 1,
                 WaitForOtherMissions = i == 1,
                 ValidationCommands = new List<string> { "dotnet test" },
                 AcceptanceCriteria = new List<ArchitectAcceptanceCriterion> { new ArchitectAcceptanceCriterion

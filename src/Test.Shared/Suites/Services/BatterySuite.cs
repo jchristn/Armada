@@ -331,7 +331,7 @@ namespace Test.Shared.Suites.Services
             cases.Add(CaseAsync("rubric_pending_and_schema_check", "Rubric tasks are PendingEvaluation with the rubric; the armada-plan schema check fails a missing plan", TestTags.Positive, async () =>
             {
                 BatteryPack pack = CSharpPack();
-                string plan = "```armada-plan\n{\"missions\":[{\"title\":\"Parser\",\"description\":\"parse csv\"},{\"title\":\"Import\",\"dependsOn\":1,\"waitForOtherMissions\":true}]}\n```\n";
+                string plan = "```armada-plan\n{\"missions\":[{\"title\":\"Parser\",\"description\":\"parse csv\"},{\"title\":\"Import\",\"parent\":1,\"waitForOtherMissions\":true}]}\n```\n";
                 BatteryGrade ok = await BatteryTaskGrader.GradeAsync(pack, CSharpTask("architect-plan"), plan, null).ConfigureAwait(false);
                 AssertEqual(BatteryTaskOutcomeEnum.PendingEvaluation, ok.Outcome, ok.Reason);
                 AssertContains("Slicing", ok.Details.Rubric!);

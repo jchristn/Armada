@@ -296,8 +296,7 @@ namespace Armada.Core.Models
 
         /// <summary>
         /// Accumulated agent stdout output captured during mission execution.
-        /// Used by architect missions for [ARMADA:MISSION] marker parsing
-        /// and by pipeline handoff to pass context to the next stage.
+        /// Used to read an architect's plan block and by pipeline handoff to pass context to the next stage.
         /// </summary>
         public string? AgentOutput { get; set; } = null;
 

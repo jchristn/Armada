@@ -7552,7 +7552,7 @@ Paginated result wrapper returned by `enumerate`.
 | `Mode` | string | MissionModeEnum value. Execution mode. Implementation (default) is a write mission that lands its diff; Audit and Research are read-only modes that produce a written report and whose empty diff is treated as success rather than a no-op failure. |
 | `RedispatchAttempts` | int | Number of times this mission has been automatically re-dispatched after a detected no-op completion. Bounds the auto-retry before the mission is failed and surfaced to the operator. |
 | `Tier` | string \| null | CaptainTierEnum value. Optional required capability tier. Dispatch routes the mission to an idle captain at or above this tier (preferring the lowest eligible tier). Null means Standard. |
-| `AgentOutput` | string \| null | Accumulated agent stdout output captured during mission execution. Used by architect missions for [ARMADA:MISSION] marker parsing and by pipeline handoff to pass context to the next stage. |
+| `AgentOutput` | string \| null | Accumulated agent stdout output captured during mission execution. Used to read an architect's plan block and by pipeline handoff to pass context to the next stage. |
 | `Persona` | string \| null | Persona assigned to this mission (e.g. "Worker", "Architect", "Judge"). Null defaults to "Worker" for backward compatibility. |
 | `DependsOnMissionId` | string \| null | Mission ID that this mission depends on. When set, this mission cannot be assigned until the dependency completes successfully. Used by pipelines to chain persona stages. |
 | `FailureReason` | string \| null | Human-readable reason for failure or landing failure. Set when a mission transitions to Failed or LandingFailed status. |

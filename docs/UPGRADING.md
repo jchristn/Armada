@@ -95,10 +95,8 @@ capability flag, and a Harbor without the flag keeps its 1.4.0 behavior. The Adm
 `updateRecommended`, and the dashboard, TUI, mobile app and the Harbor app itself say so. The flag table is in
 [HARBOR_PROTOCOL.md](HARBOR_PROTOCOL.md#api-captain-capability-flags).
 
-The legacy `[ARMADA:MISSION]` plan format is deprecated (D-027 in [DEPRECATION.md](../DEPRECATION.md)). It still works
-while `AcceptLegacyMissionMarkers` is on, which is the default, and logs a warning each time. It is removed in 2.0. Turn
-the setting off now to find custom Architect templates that still produce markers; their output then gets the output
-repair turn instead of being read. The new settings are listed with their ranges in
+The legacy `[ARMADA:MISSION]` plan format was deprecated in 1.5.0 and has since been removed (D-027 in
+[DEPRECATION.md](../DEPRECATION.md#removed)); custom Architect templates must emit an `armada-plan` block. The new settings are listed with their ranges in
 [OPERATIONS.md](OPERATIONS.md#reliability-settings-added-in-150).
 
 Outcome ranking (`RoutingData.RankByOutcomes`) is new in 1.5.0 and off, so captains are ordered as in 1.4.0. Turning
@@ -539,7 +537,7 @@ v1.0.0 is the first stable release: security hardening, a frozen and documented 
 **Missions, agents, and prompt templates**
 
 - Judges must end with a standalone `[ARMADA:VERDICT] PASS`, `FAIL`, or `NEEDS_REVISION` line (outside a code block). "Verdict: PASS" prose and bare PASS/FAIL lines no longer count. If you edited the Judge persona template, make sure it still asks for that line.
-- Architects emit their plan as a fenced `armada-plan` JSON block (`[ARMADA:MISSION]` blocks are still accepted). `[ARMADA:STATUS]` can only move a mission between InProgress and Testing.
+- Architects emit their plan as a fenced `armada-plan` JSON block (`[ARMADA:MISSION]` blocks were still accepted then; they were removed after 1.5.0). `[ARMADA:STATUS]` can only move a mission between InProgress and Testing.
 - Missions carry a typed `FailureKind` (`MissionFailureKindEnum`), and auto-rescue decides on it. `FailureReason` is plain text without the old prefixes. Failures recorded before the upgrade have no kind and are not auto-rescued.
 - Runtime failures are classified from exit codes and structured provider errors, not by searching output text, so a build error mentioning "403" no longer quarantines a captain.
 - A vessel with Landing Mode `None` stops at WorkProduced and `MergeQueue` enqueues; neither merges into the vessel's working directory any more.
@@ -625,7 +623,7 @@ See [SCHEDULING.md](SCHEDULING.md#capacity) for how the limits combine and [CONC
 
 **Settings.** The new `Concurrency` group (defaults for new vessels and captains, `MaxCaptainConcurrency` 256, `MaxHierarchyDepth` 4, `StarvationWarningMinutes` 60, `AdmissionLockTimeoutSeconds` 30, `WaitIntervalRetentionDays`) is written into the settings file on first start and is editable at `PUT /api/v1/settings` with its revision. Setters clamp out-of-range values and log the supplied and effective values; captain defaults are normalized against `MaxCaptainConcurrency` regardless of JSON property order. Negative vessel defaults clamp to 1; zero stays unlimited. The existing `MaxConcurrentMissions` now clamps negative values to 1 and values above 10000 to 10000 instead of rejecting the settings file.
 
-**Architect plans.** Built-in Architect prompts now request `armada-plan` contract version 4 (`parent`, `ownedPaths`, `readsPaths`, `branchStrategy`); versions 2 and 3 are still accepted, and `dependsOn` is read as `parent` with a warning. Untouched built-in persona briefs and prompt templates upgrade automatically; edited ones are kept. See [PIPELINES.md](PIPELINES.md#contract-version-4-hierarchy-and-owned-paths).
+**Architect plans.** Built-in Architect prompts now request `armada-plan` contract version 4 (`parent`, `ownedPaths`, `readsPaths`, `branchStrategy`); versions 2 and 3 are still accepted. (`dependsOn` was read as `parent` with a warning through 1.5.0 and has since been removed.) Untouched built-in persona briefs and prompt templates upgrade automatically; edited ones are kept. See [PIPELINES.md](PIPELINES.md#contract-version-4-hierarchy-and-owned-paths).
 
 **Planning and refinement** persistence remains SQLite-only, as in v1.2.0; the other providers keep their existing unsupported-session behavior.
 

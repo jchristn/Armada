@@ -145,19 +145,9 @@ dispatch({
 
 **After the Architect completes (with mission definitions):**
 
-The Architect should output an `armada-plan` block (see [PIPELINES.md](PIPELINES.md#9-architect-special-handling));
-the legacy `[ARMADA:MISSION]` marker format is still accepted as a fallback:
-```
-[ARMADA:MISSION] Add CacheService with TTL support
-Implement CacheService in src/Services/CacheService.cs with Get, Set, Remove methods.
-Add ICacheService interface. Use ConcurrentDictionary with timer-based expiry.
-Files: src/Services/CacheService.cs, src/Services/Interfaces/ICacheService.cs
-
-[ARMADA:MISSION] Add caching middleware to GET endpoints
-Add CacheMiddleware that checks the cache before executing the handler.
-Wire into the request pipeline for all GET routes.
-Files: src/Middleware/CacheMiddleware.cs, src/Startup.cs
-```
+The Architect must submit its plan or output an `armada-plan` block (see
+[PIPELINES.md](PIPELINES.md#9-architect-special-handling)); the legacy `[ARMADA:MISSION]` markers were removed and are
+not read.
 
 The current plan contract is v4. To test the hierarchy, have the Architect make the middleware a child of the
 service, with disjoint owned paths:
@@ -403,7 +393,7 @@ enumerate({
 - If `AllowedPersonas` is set on all captains, verify at least one can fill the required persona
 
 **Architect didn't produce multiple missions:**
-- The Architect must output an `armada-plan` block (or legacy `[ARMADA:MISSION]` markers) in its response
+- The Architect must submit its plan or output an `armada-plan` block in its response
 - If no valid mission definitions are found, the Architect mission is marked `Failed` with failure kind `InvalidOutput`
 - Check the Architect mission's agent output for the plan block or markers
 

@@ -588,7 +588,6 @@ dashboard Settings page under Reliability and Routing. They apply live. The two 
 | `MergeQueueRequeueLimit` | 3 | 0 to 10 | Times a push refused because the target branch moved is retried from a fresh fetch, and times a lost landing handoff is enqueued again. 0 fails at once, as 1.4.0 did |
 | `MergeQueueBatchSize` | 1 | 1 to 20 | Entries of one vessel and target branch merged, verified and pushed together. 1 is off; a failing batch is split in half until the bad entry is found |
 | `MergeQueueLeaseSeconds` | 900 | 5 to 14400 | Lifetime of the merge queue's processing lease, renewed before every entry |
-| `AcceptLegacyMissionMarkers` | true | | Accepts an Architect plan written as `[ARMADA:MISSION]` markers, with a warning each time. Deprecated; removed in 2.0 |
 | `OutputRepairNormalizerCaptainId` | null | | Captain that runs the format-only repair turn. Null uses the captain that wrote the output |
 | `RoutingData.RankByOutcomes` | false | | Ranks the captains of one tier by their model's recorded results for the persona. Until a model has `MinimumSamples` results, the 1.4.0 order applies. Off by default because it slows dispatch: in the 100-captain admission benchmark p50 went from 1.47 s to 1.90 s and p95 from 1.76 s to 3.07 s |
 | `RoutingData.SuggestTiers` | false | | Raises a `TierSuggestion` alert in Needs You when outcome data suggests a different tier for a model profile. Never applied without an administrator |

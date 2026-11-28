@@ -77,16 +77,8 @@ namespace Armada.Core.Services
             }
             if (node.DependsOn.HasValue)
             {
-                if (!node.Parent.HasValue)
-                {
-                    Add(result.Warnings, PlanFindingCodeEnum.DependsOnReadAsParent, position, prefix + "dependsOn " + node.DependsOn.Value + " was read as parent " + node.DependsOn.Value + "; use parent");
-                    return node.DependsOn;
-                }
-                if (node.Parent.Value != node.DependsOn.Value)
-                {
-                    Add(result.Errors, PlanFindingCodeEnum.ParentDependsOnConflict, position, prefix + "parent and dependsOn disagree; use parent only");
-                    return null;
-                }
+                Add(result.Errors, PlanFindingCodeEnum.DependsOnRemoved, position, prefix + "dependsOn is no longer supported; write parent " + node.DependsOn.Value + " instead");
+                return null;
             }
             return node.Parent;
         }

@@ -13,12 +13,11 @@ namespace Armada.Core.Services
     /// <c>armada-plan</c>:
     /// <code>
     /// ```armada-plan
-    /// {"missions":[{"title":"...","description":"...","dependsOn":null,"waitForOtherMissions":false}]}
+    /// {"missions":[{"title":"...","description":"...","parent":null,"waitForOtherMissions":false}]}
     /// ```
     /// </code>
     /// The block is deserialized into <see cref="ArchitectPlan"/>. Versioned contracts are validated before fan-out.
-    /// When no such block is present, the caller falls back to the legacy <c>[ARMADA:MISSION]</c>
-    /// marker format (documented as a fallback).
+    /// Output with no such block has no plan (the legacy <c>[ARMADA:MISSION]</c> markers were removed, D-027).
     /// </summary>
     public static class ArchitectPlanParser
     {
@@ -48,7 +47,7 @@ namespace Armada.Core.Services
         /// Try to read an Architect plan from output. The final plan block must be valid (an Architect that revises
         /// its plan emits the final one last). Missions without a title, with a placeholder title such as "&lt;title&gt;", and repeated titles are
         /// dropped; a
-        /// <c>dependsOn</c> that does not name an earlier kept mission is cleared.
+        /// <c>parent</c> that names a dropped mission is rejected; a <c>dependsOn</c> is rejected (removed, D-026).
         /// </summary>
         /// <param name="output">Architect output.</param>
         /// <param name="plan">The plan, when found.</param>
@@ -215,12 +214,11 @@ namespace Armada.Core.Services
 
         private static List<PlanNode> ToNodes(ArchitectPlan plan)
         {
-            // Contract v2 and unversioned plans name the parent with dependsOn; v3 and later read it as parent with a warning.
-            bool dependsOnIsParent = plan.ContractVersion == null || plan.ContractVersion < 3;
+            // dependsOn was removed (D-026): it is passed through so the validator rejects it, naming parent.
             return plan.Missions.Select(m => m == null ? new PlanNode() : new PlanNode
             {
-                Parent = dependsOnIsParent ? m.Parent ?? m.DependsOn : m.Parent,
-                DependsOn = dependsOnIsParent && !m.Parent.HasValue ? null : m.DependsOn,
+                Parent = m.Parent,
+                DependsOn = m.DependsOn,
                 BranchStrategy = m.BranchStrategy,
                 OwnedPaths = (m.OwnedPaths ?? new List<string>()).Select(OwnedPathMatcher.Normalize).Where(p => p.Length > 0).ToList(),
                 WaitsForAll = m.WaitForOtherMissions

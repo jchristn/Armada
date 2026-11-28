@@ -43,8 +43,8 @@ namespace Armada.Core.Models
         public string? Description { get; set; } = null;
 
         /// <summary>
-        /// Contracts up to v3: 1-based index of an earlier mission in the plan whose full Worker chain must finish before
-        /// this mission starts, or null when the mission can start immediately. Read as <see cref="Parent"/>.
+        /// Removed (D-026): use <see cref="Parent"/>. Kept only so a plan that still sets it is rejected with an error
+        /// naming parent instead of being silently ignored.
         /// </summary>
         [JsonPropertyName("dependsOn")]
         public int? DependsOn { get; set; } = null;
@@ -52,7 +52,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Contract v4: 1-based index of an earlier mission in the plan that this mission builds on. It becomes the
         /// mission's parent: it starts after the parent's last stage finishes and branches from the parent's result.
-        /// A v3 or v4 <see cref="DependsOn"/> is read as a parent with a warning.
+        /// Null when the mission can start immediately.
         /// </summary>
         [JsonPropertyName("parent")]
         public int? Parent { get; set; } = null;

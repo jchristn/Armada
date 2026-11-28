@@ -241,8 +241,8 @@ different stories about why a mission is waiting.
    `DependencyHandoffPending`), its parent mission must be finished (`ParentNotFinished`), and an integration stage
    waits for the voyage's Workers (`WaitingForVoyageWorkers`).
 4. **Vessel safety.** Broad-scope missions and branch locks on the vessel (`VesselBroadScopeMissionActive`,
-   `BroadScopeWaitingForVessel`, `BranchInUse`), then the vessel and voyage limits (`VesselConcurrencyLimit`,
-   `VesselVoyageLimit`, `VoyageMissionLimit`).
+   `BroadScopeWaitingForVessel`, `BranchInUse`), then the vessel and voyage limits (`VesselVoyageLimit`,
+   `VoyageMissionLimit`).
 5. **Global capacity.** `GlobalMissionLimit` when the server's mission limit is full.
 6. **Usage selection**, when it is on, with its own reason codes under `NoEligibleCaptain`.
 7. **The captain gate.** Routing as this page describes (priorities, tier, the context fit filter, the Judge strength

@@ -559,6 +559,25 @@ namespace Test.Shared.Suites.Services
                 ArmadaMetrics.HandoffsRedriven.Add(2);
             }));
 
+            cases.Add(CaseAsync("removed_accept_legacy_mission_markers_still_loads", "A settings.json that still has the removed AcceptLegacyMissionMarkers (D-027) loads, and the value is ignored", TestTags.Positive, async () =>
+            {
+                string tempDir = Path.Combine(Path.GetTempPath(), "armada_settings_legacy_" + Guid.NewGuid().ToString("N"));
+                string tempFile = Path.Combine(Path.GetTempPath(), "armada_test_settings_legacy_" + Guid.NewGuid().ToString("N") + ".json");
+                try
+                {
+                    string json = "{\"acceptLegacyMissionMarkers\":true,\"AcceptLegacyMissionMarkers\":false,\"maxCaptains\":7,\"dataDirectory\":\"" + tempDir.Replace("\\", "\\\\") + "\"}";
+                    await File.WriteAllTextAsync(tempFile, json).ConfigureAwait(false);
+                    ArmadaSettings loaded = await ArmadaSettings.LoadAsync(tempFile).ConfigureAwait(false);
+                    AssertEqual(7, loaded.MaxCaptains, "the rest of the file still applies");
+                    AssertNull(typeof(ArmadaSettings).GetProperty("AcceptLegacyMissionMarkers"), "the setting no longer exists");
+                }
+                finally
+                {
+                    if (File.Exists(tempFile)) File.Delete(tempFile);
+                    if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.Settings",
                 displayName: "Settings",

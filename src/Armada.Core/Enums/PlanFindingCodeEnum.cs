@@ -16,10 +16,8 @@ namespace Armada.Core.Enums
         ParentSelf,
         /// <summary>A parent is not an earlier mission in the plan.</summary>
         ParentNotEarlier,
-        /// <summary>A mission gives both parent and dependsOn, and they differ.</summary>
-        ParentDependsOnConflict,
-        /// <summary>A dependsOn was read as the parent (warning).</summary>
-        DependsOnReadAsParent,
+        /// <summary>A mission uses dependsOn, which was removed (D-026); the plan must use parent.</summary>
+        DependsOnRemoved,
         /// <summary>A parent chain is deeper than Concurrency.MaxHierarchyDepth.</summary>
         DepthExceeded,
         /// <summary>A branch strategy is neither continue nor fork.</summary>

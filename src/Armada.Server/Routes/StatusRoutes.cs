@@ -681,9 +681,6 @@ namespace Armada.Server.Routes
                 if (body.BlockDependentsOfFailedStages.HasValue)
                     _settings.BlockDependentsOfFailedStages = body.BlockDependentsOfFailedStages.Value;
 
-                if (body.AcceptLegacyMissionMarkers.HasValue)
-                    _settings.AcceptLegacyMissionMarkers = body.AcceptLegacyMissionMarkers.Value;
-
                 if (body.OutputRepairNormalizerCaptainId != null)
                     _settings.OutputRepairNormalizerCaptainId = String.IsNullOrWhiteSpace(body.OutputRepairNormalizerCaptainId) ? null : body.OutputRepairNormalizerCaptainId.Trim();
 
@@ -963,7 +960,6 @@ namespace Armada.Server.Routes
                 RebuildSlotRetentionCount = _settings.RebuildSlotRetentionCount,
                 RequireHarborForLaunch = _settings.RequireHarborForLaunch,
                 BlockDependentsOfFailedStages = _settings.BlockDependentsOfFailedStages,
-                AcceptLegacyMissionMarkers = _settings.AcceptLegacyMissionMarkers,
                 OutputRepairNormalizerCaptainId = _settings.OutputRepairNormalizerCaptainId ?? "",
                 TimeoutScaleReferenceTokensPerSecond = _settings.TimeoutScaleReferenceTokensPerSecond,
                 PromptVariantCompactMaxContextTokens = _settings.PromptVariantCompactMaxContextTokens,

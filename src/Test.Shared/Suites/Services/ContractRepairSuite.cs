@@ -29,7 +29,7 @@ namespace Test.Shared.Suites.Services
 
         private const string SuiteId = "Services.ContractRepair";
 
-        private const string ValidPlanJson = "{\"missions\":[{\"title\":\"A\",\"description\":\"do a\"},{\"title\":\"B\",\"description\":\"do b\",\"dependsOn\":1}]}";
+        private const string ValidPlanJson = "{\"missions\":[{\"title\":\"A\",\"description\":\"do a\"},{\"title\":\"B\",\"description\":\"do b\",\"parent\":1}]}";
 
         #endregion
 

@@ -4,6 +4,22 @@ All notable changes to Armada are documented in this file.
 
 ---
 
+## Unreleased
+
+### Removed
+
+- **`[ARMADA:MISSION]` plan markers and the `AcceptLegacyMissionMarkers` setting (D-027).** An Architect plan is read
+  only from `armada_submit_plan` or one `armada-plan` block. Output that still uses markers has no plan: it gets the
+  output repair turn, and the failure reason names the markers. The setting is gone from the settings API, the
+  dashboard, the TUI and the mobile app; a `settings.json` that still contains it loads and the value is ignored.
+  Custom Architect templates that print markers must emit an `armada-plan` block.
+- **`dependsOn` in `armada-plan` missions (D-026).** A plan of any contract version that sets `dependsOn` is rejected
+  with an error asking for `parent` (it was read as `parent` with a warning before). Replace `dependsOn` with `parent`
+  in custom templates and stored example plans.
+- **The `VesselConcurrencyLimit` wait reason (D-025).** It was never produced after 1.3.0 and is no longer a value of
+  `MissionAssignmentBlockerReasonEnum` or the dashboard's reason labels. Stored event payloads that name it are still
+  returned unchanged.
+
 ## v1.5.0 (2026-11-27)
 
 Armada 1.5.0 makes pipelines that mix open models (Qwen3.8 and others served by Ollama, vLLM, or a proxy such as

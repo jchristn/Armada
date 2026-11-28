@@ -98,12 +98,6 @@ namespace Armada.Client.Models
         public bool? BlockDependentsOfFailedStages { get; set; } = null;
 
         /// <summary>
-        /// When true, an Architect plan written as legacy [ARMADA:MISSION] markers is still accepted (deprecated, removed
-        /// in 2.0). Null when the server does not report it (or, in an update, leaves it unchanged).
-        /// </summary>
-        public bool? AcceptLegacyMissionMarkers { get; set; } = null;
-
-        /// <summary>
         /// Captain that runs the format-only repair turn; empty means the stage's own captain. Null when the server does not
         /// report it (or, in an update, leaves it unchanged); an empty string in an update clears it.
         /// </summary>

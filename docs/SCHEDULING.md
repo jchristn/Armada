@@ -104,7 +104,6 @@ Every `Pending` mission carries a server-computed **assignment blocker** (`Assig
 | `VesselVoyageLimit` | All vessel voyage slots are occupied. An admitted voyage retains its slot through review and landing; each standalone mission counts as a voyage. |
 | `VoyageMissionLimit` | The voyage has reached its running mission limit. Assigned and InProgress consume slots; post-agent states do not. |
 | `GlobalMissionLimit` | The deployment-wide running mission cap has been reached. |
-| `VesselConcurrencyLimit` | Legacy stored reason from older releases. |
 | `NoCaptains` | No captains exist. |
 | `NoIdleCaptain` | Every captain is in a state that takes no new work (planning, refining, analyzing, quarantined, stalled, or stopping). |
 | `NoEligibleCaptain` | Idle captains exist, but none may take this mission's persona or required tier. |

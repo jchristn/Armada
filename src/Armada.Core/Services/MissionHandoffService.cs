@@ -259,11 +259,10 @@ namespace Armada.Core.Services
                 bool hadArchitectMarkers = !String.IsNullOrEmpty(completedMission.AgentOutput) &&
                     completedMission.AgentOutput.Contains("[ARMADA:MISSION]", StringComparison.Ordinal);
 
-                string failureReason = hadArchitectMarkers && !_Settings.AcceptLegacyMissionMarkers
-                    ? "Architect used [ARMADA:MISSION] markers, which this Admiral no longer accepts (AcceptLegacyMissionMarkers is false); emit one ```" + ArchitectPlanParser.FenceInfo + " plan block instead"
-                    : hadArchitectMarkers
-                    ? "Architect produced no valid [ARMADA:MISSION] definitions in output"
-                    : "Architect produced no ```" + ArchitectPlanParser.FenceInfo + " plan block and no [ARMADA:MISSION] markers in output";
+                // [ARMADA:MISSION] markers were removed (D-027); a plan written that way is named so the repair turn fixes it.
+                string failureReason = hadArchitectMarkers
+                    ? "Architect used [ARMADA:MISSION] markers, which Armada no longer reads; submit the plan with armada_submit_plan or one ```" + ArchitectPlanParser.FenceInfo + " plan block instead"
+                    : "Architect produced no ```" + ArchitectPlanParser.FenceInfo + " plan block in output";
 
                 // An absent plan is a format failure, not a judgment about the work: run the Architect again with the
                 // exact contract before failing the voyage. Narration is never inferred into missions.
@@ -280,7 +279,7 @@ namespace Armada.Core.Services
                 completedMission.CompletedUtc = DateTime.UtcNow;
                 if (!await _Service.Transitions.TryTransitionAsync(completedMission, new[] { markersStatusBefore }, MissionStatusEnum.Failed, null, token).ConfigureAwait(false)) return false;
                 await _Context.MissionFailureCapture.RecordFailureAsync(completedMission, markersStatusBefore, BlackBoxStepEnum.PlanParse, null, context =>
-                    context.Note = hadArchitectMarkers ? "The output had [ARMADA:MISSION] markers but none was valid." : "The output had no plan block and no mission markers.", token).ConfigureAwait(false);
+                    context.Note = hadArchitectMarkers ? "The output used the removed [ARMADA:MISSION] markers instead of a plan block." : "The output had no plan block.", token).ConfigureAwait(false);
                 return false;
             }
 

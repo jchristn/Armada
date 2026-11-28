@@ -187,25 +187,6 @@ namespace Armada.Core.Services
             return null;
         }
 
-        /// <summary>
-        /// Legacy fallback for architect output in the [ARMADA:MISSION] marker format, which has no structured
-        /// sequencing field: a description that asks to run after the other implementation missions is converted once,
-        /// when the architect output is parsed, into <see cref="Mission.WaitForVoyageWorkers"/>. Never applied to
-        /// missions created any other way, and never consulted at dispatch time.
-        /// </summary>
-        internal static bool LegacyDescriptionRequestsDeferral(string? description)
-        {
-            if (String.IsNullOrEmpty(description)) return false;
-
-            string lowered = description.ToLowerInvariant();
-            return lowered.Contains("after both implementation missions complete") ||
-                lowered.Contains("sequential after both implementation missions") ||
-                lowered.Contains("after the implementation missions land") ||
-                lowered.Contains("after the implementation details are settled") ||
-                lowered.Contains("after implementation details are settled") ||
-                lowered.Contains("after the implementation details are finalized");
-        }
-
         #endregion
 
         #region Private-Methods

@@ -109,8 +109,8 @@ The default persona. If no persona is specified on a mission, it uses Worker.
 Plans work and decomposes goals into right-sized missions.
 
 - **Purpose:** Analyze a codebase, understand scope and dependencies, break a high-level
-  goal into concrete missions. Outputs structured mission definitions using
-  `[ARMADA:MISSION]` markers.
+  goal into concrete missions. Submits a structured plan (`armada_submit_plan`, or an
+  `armada-plan` block).
 - **Prompt template:** `persona.architect`
 - **When to use:** Large feature requests where you want AI-driven task decomposition.
   Typically the first stage in a multi-stage pipeline.
@@ -291,7 +291,7 @@ per entry.
   `ParentMissionId`: the child starts once the parent's last stage finishes and branches from its result (the
   first child continues the parent's branch, later children fork from its head; `branchStrategy` `continue` or
   `fork` overrides that). Entries without a parent are siblings and run in parallel. A parent chain deeper than
-  `Concurrency.MaxHierarchyDepth` is rejected. A `dependsOn` in a v3 or v4 plan is read as `parent` with a warning.
+  `Concurrency.MaxHierarchyDepth` is rejected. A plan that sets the removed `dependsOn` is rejected; use `parent`.
 - `ownedPaths` are the files or directories (trailing `/`) the mission may change; `readsPaths` are context it
   must not change. Both are stored on every stage (`OwnedPathsJson`, `ReadsPathsJson`) and named in the slice
   description and the captain's merge-conflict rules. Two entries that can run at the same time (neither an
@@ -305,12 +305,8 @@ files the attempt changed with its owned paths and with the paths of missions ru
 is recorded on the stage outcome as `OwnershipViolation` (or added to its cause note) and shown to the Judge. In
 v1.3.0 this is a warning and never fails the mission.
 
-Fallback: when the output has no valid `armada-plan` block, the older `[ARMADA:MISSION]`
-marker format is still read while `AcceptLegacyMissionMarkers` is on (the default; deprecated as D-027, removed in 2.0,
-and each use logs a warning) (title on the marker line, description below, an optional
-standalone `Parent: N` or `Depends on: Mission N` line naming the parent, and an optional `Owns: a, b` line). For that format only, deferral wording such as
-"after both implementation missions complete" is converted once, at parse time, into
-`WaitForVoyageWorkers`; a mission created any other way is never deferred by its wording.
+The older `[ARMADA:MISSION]` marker format was removed (D-027 in [DEPRECATION.md](../DEPRECATION.md#removed)): output
+that uses it has no plan and gets the output repair turn.
 
 ### Captain Status Signals
 

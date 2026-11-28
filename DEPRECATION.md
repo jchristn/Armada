@@ -26,17 +26,14 @@ SDK (`Armada.Client`, for example `client.GetMissionAsync(id)`) were removed in 
 owner decision, when the client was split into sub-clients (`client.Missions.GetAsync(id)`); every old method and its
 new call is in [docs/SDK_MIGRATION_1.5.md](docs/SDK_MIGRATION_1.5.md). A model endpoint's `ApiVersion` is still
 accepted and stored but ignored, because Azure OpenAI now uses the v1 route. The legacy `[ARMADA:MISSION]` plan
-markers are D-027 below.
+markers were deprecated in 1.5.0 as D-027 and are now removed (see [Removed](#removed)).
 
 ## Active deprecations
 
-The whole-list APIs that were deprecated here were retired; see [Removed](#removed). Two v1.3.0 concurrency items remain readable for stored data and older plans.
+None. Every item deprecated here has been removed; see [Removed](#removed).
 
 | ID | Surface | Item | Replacement | Deprecated in | Removed in | First-party clients |
 |---|---|---|---|---|---|---|
-| D-025 | Model | `VesselConcurrencyLimit` | `VesselVoyageLimit` and `VoyageMissionLimit` (the reason is kept only so stored events and waits still read) | 1.3.0 | 2.0 | Migrated (no client produces it) |
-| D-027 | Contract | `[ARMADA:MISSION]` markers | One `armada-plan` block, contract version 4 (markers are read only while `AcceptLegacyMissionMarkers` is on, the default, and each use logs a warning) | 1.5.0 | 2.0 | Migrated (built-in Architect prompts emit `armada-plan`) |
-| D-026 | Contract | `dependsOn` | `parent` in `armada-plan` contract version 4 (`dependsOn` is read as `parent` with a warning) | 1.3.0 | 2.0 | Migrated (built-in Architect prompts emit `parent`) |
 
 ## Bounded, not retired
 
@@ -67,10 +64,12 @@ limit). The lists below are bounded by construction rather than by paging:
 
 ## Removed
 
-Each of these returned an entire collection in one response. They are no longer registered: a request for a removed
-REST route is answered with HTTP 410 Gone and a message naming the replacement, and a removed MCP tool is not listed by
-`tools/list`. Each replacement returns one page (`pageNumber`, `pageSize` 1 to 1000) with `TotalRecords`. The list is
-`src/Armada.Core/ApiSurface/RetiredSurface.cs`; `Docs.Deprecation` keeps this table and that file in step.
+D-001 to D-024 each returned an entire collection in one response. They are no longer registered: a request for a
+removed REST route is answered with HTTP 410 Gone and a message naming the replacement, and a removed MCP tool is not
+listed by `tools/list`. Each replacement returns one page (`pageNumber`, `pageSize` 1 to 1000) with `TotalRecords`. The
+list is `src/Armada.Core/ApiSurface/RetiredSurface.cs`; `Docs.Deprecation` keeps this table and that file in step.
+D-025 to D-027 are a model value and two plan-contract items, not routes or tools, so they are not in that file; they
+were removed after 1.5.0, ahead of 2.0, by owner decision (the same kind of exception as the v1.3.0 concurrency removal).
 
 | ID | Surface | Item | Replacement | Removed in |
 |---|---|---|---|---|
@@ -98,6 +97,9 @@ REST route is answered with HTTP 410 Gone and a message naming the replacement, 
 | D-022 | Behavior | `NotCancelled` (one entry per mission that could not be cancelled) in `DELETE /api/v1/voyages/{id}`, MCP `cancel_voyage`, WebSocket `cancel_voyage` | `VoyageCancelResult`: `CancelledMissions`, `NotCancelledMissions`, `FirstNotCancelledReason`; the remaining missions are read with the missions enumeration (`voyageId`, `status`) | v1.3.0 |
 | D-023 | Behavior | `Reviews`, `Comments`, `Checks` in `GET /api/v1/missions/{id}/github/pull-request` (one unpaged GitHub page each) | `ReviewCount`, `CommentCount`, `CheckCount` with `POST /api/v1/missions/{id}/github/pull-request/reviews/enumerate`, `.../comments/enumerate`, `.../checks/enumerate` (GitHub-paged, page size 1 to 100) | v1.3.0 |
 | D-024 | Behavior | `VoyageProgress.VesselIds` (every distinct vessel of a voyage) | `VesselId` (the vessel of the earliest mission) and `VesselCount` | v1.3.0 |
+| D-025 | Model | `VesselConcurrencyLimit` (a pre-1.3 wait reason, kept until now only so stored data still read) | `VesselVoyageLimit` and `VoyageMissionLimit`; the reason is never produced, and stored event payloads that name it are returned unchanged as text | Unreleased |
+| D-026 | Contract | `dependsOn` in an `armada-plan` mission | `parent`; a plan of any contract version that sets `dependsOn` is rejected with an error naming `parent` | Unreleased |
+| D-027 | Contract | `[ARMADA:MISSION]` plan markers and the `AcceptLegacyMissionMarkers` setting | The plan submitted with `armada_submit_plan`, or one `armada-plan` block; marker output gets the output repair turn like a missing plan, and the setting is ignored if still present in `settings.json` | Unreleased |
 
 Paged `POST .../enumerate` forms added alongside existing paged `GET` lists (the `GET` forms stay, because they already
 page): `/api/v1/tenants/enumerate`, `/api/v1/users/enumerate`, `/api/v1/credentials/enumerate`,

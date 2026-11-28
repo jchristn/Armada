@@ -20,7 +20,7 @@ namespace Armada.Core.Models
         /// <summary>1-based position of the parent.</summary>
         public int? Parent { get; set; } = null;
 
-        /// <summary>1-based dependsOn position, read as the parent when no parent is given.</summary>
+        /// <summary>A dependsOn the plan still set (removed, D-026); the validator rejects it.</summary>
         public int? DependsOn { get; set; } = null;
 
         /// <summary>A text parent reference the caller could not map to a mission.</summary>

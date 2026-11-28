@@ -51,11 +51,6 @@ namespace Armada.Core.Enums
         BroadScopeWaitingForVessel,
 
         /// <summary>
-        /// Historical pre-v1.3 boolean vessel limit. New decisions use numeric voyage and mission limits.
-        /// </summary>
-        VesselConcurrencyLimit,
-
-        /// <summary>
         /// No captains exist.
         /// </summary>
         NoCaptains,

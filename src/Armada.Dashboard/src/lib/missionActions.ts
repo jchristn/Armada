@@ -148,7 +148,6 @@ export const ASSIGNMENT_BLOCKER_TITLES: Record<MissionAssignmentBlockerReason, s
   RuntimeMissionLimit: 'Runtime mission limit',
   EndpointMissionLimit: 'Endpoint mission limit',
   EndpointUnavailable: 'Endpoint unavailable',
-  VesselConcurrencyLimit: 'Vessel runs one mission at a time',
   NoCaptains: 'No captains',
   NoIdleCaptain: 'Waiting for a captain',
   NoEligibleCaptain: 'No captain can take this mission',

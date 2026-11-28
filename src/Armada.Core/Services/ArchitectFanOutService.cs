@@ -26,12 +26,6 @@ namespace Armada.Core.Services
         private readonly LoggingModule _Logging;
         private readonly ArmadaSettings _Settings;
 
-        private static readonly System.Text.RegularExpressions.Regex _MissionMarkerSplitRegex = new System.Text.RegularExpressions.Regex(
-            @"(?m)^\[ARMADA:MISSION\][ \t]*", System.Text.RegularExpressions.RegexOptions.Compiled);
-
-        private static readonly System.Text.RegularExpressions.Regex _MarkerMissionNumberRegex = new System.Text.RegularExpressions.Regex(
-            @"^(?:mission\s+)?(?<index>\d+)\b", System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
         #endregion
 
         #region Constructors-and-Factories
@@ -161,11 +155,8 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Parse mission definitions from an architect's output. The structured armada-plan JSON block
-        /// (<see cref="ArchitectPlanParser"/>) is preferred: its dependsOn and waitForOtherMissions fields drive
-        /// sequencing. Only when the output has no valid plan block does this fall back to the legacy formats:
-        /// [ARMADA:MISSION] markers (with a "Depends on:" line) and then numbered summary lines, read from the agent
-        /// output, the diff snapshot, or the description.
+        /// Build the context a Worker slice gets about the Architect's whole plan: the overall objective and every
+        /// planned mission, with its own part marked.
         /// </summary>
         internal async Task<string> BuildArchitectSliceContextAsync(Mission architectMission, List<ParsedArchitectMission> parsed, int index, CancellationToken token)
         {
@@ -198,7 +189,6 @@ namespace Armada.Core.Services
         internal List<ParsedArchitectMission> ParseArchitectOutput(Mission architectMission, ArchitectPlan? parsedPlan = null)
         {
             List<ParsedArchitectMission> results = new List<ParsedArchitectMission>();
-            HashSet<string> seenTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             ArchitectPlan? plan = parsedPlan;
             if (plan == null && !ArchitectPlanParser.TryParse(StageSubmissionText.EffectiveOutput(architectMission), out plan, out _, _Settings.Concurrency.MaxHierarchyDepth)) plan = null;
@@ -211,7 +201,7 @@ namespace Armada.Core.Services
                     ParsedArchitectMission parsed = new ParsedArchitectMission();
                     parsed.Title = planned.Title ?? String.Empty;
                     parsed.Description = ArchitectPlanParser.DescribeMission(plan, planned);
-                    parsed.DependsOnIndex = planned.Parent ?? planned.DependsOn;
+                    parsed.DependsOnIndex = planned.Parent;
                     parsed.WaitForOtherMissions = planned.WaitForOtherMissions;
                     parsed.WorkerEnvelope = planned.WorkerEnvelope;
                     parsed.OwnedPaths = (planned.OwnedPaths ?? new List<string>()).Select(OwnedPathMatcher.Normalize).Where(p => p.Length > 0).Distinct(StringComparer.Ordinal).ToList();
@@ -223,33 +213,9 @@ namespace Armada.Core.Services
                 return results;
             }
 
-            // Only what the Architect produced counts: its output, then a plan it committed (the diff). Explicit
-            // [ARMADA:MISSION] markers remain supported for customized templates while AcceptLegacyMissionMarkers is on
-            // (deprecated, D-027, removed in 2.0). Numbered narration ("1. Read the README") is never inferred into
-            // missions: a plan without a structured block gets a repair turn instead.
-            if (!_Settings.AcceptLegacyMissionMarkers) return results;
-
-            string?[] candidateSources =
-            {
-                StageSubmissionText.EffectiveOutput(architectMission),
-                architectMission.DiffSnapshot
-            };
-
-            for (int i = 0; i < candidateSources.Length; i++)
-            {
-                string? candidateSource = candidateSources[i];
-                if (String.IsNullOrWhiteSpace(candidateSource)) continue;
-
-                string source = candidateSource.Replace("\r\n", "\n");
-                ParseArchitectMissionMarkers(source, results, seenTitles);
-                if (results.Count > 0) break;
-            }
-
-            if (results.Count > 0)
-                _Logging.Warn(_Header + "architect mission " + architectMission.Id + " used deprecated [ARMADA:MISSION] markers (D-027, removed in 2.0); emit an "
-                    + ArchitectPlanParser.FenceInfo + " block instead, or set AcceptLegacyMissionMarkers to false to require one");
-
-            ResolveMarkerDependencies(results);
+            // Only a structured plan block counts (the submit tool or an armada-plan fence). Legacy [ARMADA:MISSION]
+            // markers were removed (D-027), and numbered narration is never inferred into missions: a plan without a
+            // structured block gets a repair turn instead.
             return results;
         }
 
@@ -358,7 +324,7 @@ namespace Armada.Core.Services
                     ? await File.ReadAllTextAsync(logFilePath, token).ConfigureAwait(false)
                     : String.Empty;
 
-                if (existing.Contains("[ARMADA:MISSION]"))
+                if (existing.Contains("[Armada] Parsed architect mission definitions:"))
                 {
                     return;
                 }
@@ -369,7 +335,7 @@ namespace Armada.Core.Services
                     await writer.WriteLineAsync("[Armada] Parsed architect mission definitions:").ConfigureAwait(false);
                     foreach (ParsedArchitectMission mission in parsed)
                     {
-                        await writer.WriteLineAsync("[ARMADA:MISSION] " + mission.Title).ConfigureAwait(false);
+                        await writer.WriteLineAsync("[Armada] Planned mission: " + mission.Title).ConfigureAwait(false);
                         if (!String.IsNullOrEmpty(mission.DependsOnReference))
                         {
                             await writer.WriteLineAsync("Depends on: " + mission.DependsOnReference).ConfigureAwait(false);
@@ -572,101 +538,6 @@ namespace Armada.Core.Services
                 member.OwnedPathsJson = owned;
                 member.ReadsPathsJson = reads;
                 work.Changed(member);
-            }
-        }
-
-        // Marker format: a "Depends on:" line names an earlier mission by number ("Mission 1") or by title. It is resolved
-        // to a plan position here, once, and a reference that names no mission is left for the validator to reject.
-        private static void ResolveMarkerDependencies(List<ParsedArchitectMission> parsed)
-        {
-            for (int i = 0; i < parsed.Count; i++)
-            {
-                if (parsed[i].DependsOnIndex.HasValue || String.IsNullOrWhiteSpace(parsed[i].DependsOnReference)) continue;
-                string reference = ArchitectPlanText.NormalizeArchitectDependencyReference(parsed[i].DependsOnReference!);
-                System.Text.RegularExpressions.Match numeric = _MarkerMissionNumberRegex.Match(reference);
-                if (numeric.Success && Int32.TryParse(numeric.Groups["index"].Value, out int number)) parsed[i].DependsOnIndex = number;
-                else
-                {
-                    int byTitle = parsed.FindIndex(p => String.Equals(p.Title, reference, StringComparison.OrdinalIgnoreCase));
-                    if (byTitle >= 0) parsed[i].DependsOnIndex = byTitle + 1;
-                }
-            }
-        }
-
-        private void ParseArchitectMissionMarkers(
-            string source,
-            List<ParsedArchitectMission> results,
-            HashSet<string> seenTitles)
-        {
-            if (String.IsNullOrWhiteSpace(source)) return;
-
-            string[] segments = _MissionMarkerSplitRegex.Split(source);
-
-            for (int i = 1; i < segments.Length; i++)
-            {
-                string segment = segments[i].Trim();
-                if (String.IsNullOrEmpty(segment)) continue;
-
-                int closingTagIndex = segment.IndexOf("[/ARMADA:MISSION]", StringComparison.Ordinal);
-                if (closingTagIndex >= 0)
-                    segment = segment.Substring(0, closingTagIndex).Trim();
-
-                if (String.IsNullOrEmpty(segment)) continue;
-
-                int newlineIndex = segment.IndexOf('\n');
-                string title;
-                string description;
-
-                if (newlineIndex >= 0)
-                {
-                    title = segment.Substring(0, newlineIndex).Trim();
-                    description = segment.Substring(newlineIndex + 1).Trim();
-                }
-                else
-                {
-                    title = segment.Trim();
-                    description = "";
-                }
-
-                TryAddParsedArchitectMission(results, seenTitles, title, description);
-            }
-        }
-
-        private void TryAddParsedArchitectMission(
-            List<ParsedArchitectMission> results,
-            HashSet<string> seenTitles,
-            string? title,
-            string? description)
-        {
-            if (String.IsNullOrWhiteSpace(title)) return;
-
-            string normalizedTitle = title.Trim();
-            string normalizedDescription = ArchitectPlanText.NormalizeArchitectDescription(description);
-            ArchitectDependencyExtractionResult dependencyExtraction = ArchitectPlanText.ExtractArchitectDependencyReference(normalizedDescription);
-            normalizedDescription = ArchitectPlanText.ExtractOwnedPaths(dependencyExtraction.Description, out List<string> ownedPaths);
-            string? dependencyReference = dependencyExtraction.DependsOnReference;
-            if (String.IsNullOrWhiteSpace(normalizedDescription))
-            {
-                // Title-only architect blocks are still actionable; preserve the title as
-                // the downstream mission description so worker/test/judge prompts are not empty.
-                normalizedDescription = normalizedTitle;
-            }
-
-            if (ArchitectPlanText.IsArchitectPlaceholderTitle(normalizedTitle))
-                return;
-
-            if (ArchitectPlanText.IsArchitectPlaceholderDescription(normalizedDescription))
-                return;
-
-            if (seenTitles.Add(normalizedTitle))
-            {
-                ParsedArchitectMission parsed = new ParsedArchitectMission();
-                parsed.Title = normalizedTitle;
-                parsed.Description = normalizedDescription;
-                parsed.DependsOnReference = dependencyReference;
-                parsed.OwnedPaths = ownedPaths;
-                parsed.WaitForOtherMissions = IntegrationBarrierService.LegacyDescriptionRequestsDeferral(normalizedDescription);
-                results.Add(parsed);
             }
         }
 

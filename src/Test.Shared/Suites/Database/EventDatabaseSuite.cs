@@ -2,10 +2,12 @@ namespace Test.Shared.Suites.Database
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Database;
     using Armada.Core.Database.Sqlite;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -45,6 +47,23 @@ namespace Test.Shared.Suites.Database
 
                     AssertNotNull(result);
                     AssertEqual("mission.created", result.EventType);
+                }
+            }));
+
+            cases.Add(CaseAsync("legacy_vessel_concurrency_limit_payload_still_reads", "A stored event whose payload names the removed VesselConcurrencyLimit reason (D-025) still reads back unchanged", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    string payload = "{\"reason\":\"VesselConcurrencyLimit\",\"summary\":\"Vessel runs one mission at a time\"}";
+                    ArmadaEvent evt = new ArmadaEvent("mission.waiting", "Mission waiting");
+                    evt.Payload = payload;
+                    ArmadaEvent created = await db.Events.CreateAsync(evt);
+                    List<ArmadaEvent> read = await db.Events.EnumerateByTypeAsync("mission.waiting");
+                    ArmadaEvent? back = read.FirstOrDefault(e => e.Id == created.Id);
+                    AssertNotNull(back, "the legacy event still reads");
+                    AssertEqual(payload, back!.Payload);
+                    AssertFalse(Enum.GetNames(typeof(MissionAssignmentBlockerReasonEnum)).Contains("VesselConcurrencyLimit"), "the reason is no longer produced");
                 }
             }));
 

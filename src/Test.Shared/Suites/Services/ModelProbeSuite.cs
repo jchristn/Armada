@@ -856,7 +856,7 @@ namespace Test.Shared.Suites.Services
                 Title = i == 0 ? "Add the flag" : "Integration",
                 Description = "Add --version to the tool.",
                 Kind = i == 0 ? "implementation" : "integration",
-                DependsOn = i == 0 ? null : 1,
+                Parent = i == 0 ? null : 1,
                 WaitForOtherMissions = i == 1,
                 ValidationCommands = new List<string> { "dotnet test" },
                 AcceptanceCriteria = new List<ArchitectAcceptanceCriterion> { new ArchitectAcceptanceCriterion

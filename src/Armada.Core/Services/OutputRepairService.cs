@@ -242,7 +242,6 @@ namespace Armada.Core.Services
         internal async Task<bool> TryRepairArchitectPlanAsync(Mission mission, CancellationToken token)
         {
             string? output = StageSubmissionText.EffectiveOutput(mission);
-            if (!String.IsNullOrEmpty(output) && output.Contains("[ARMADA:MISSION]", StringComparison.Ordinal)) return false;
             if (!ContractRepair.TryRecoverArchitectPlan(output, out string? planJson) || planJson == null) return false;
 
             mission.AgentOutput = ContractRepair.AppendRepair(mission.AgentOutput, ContractRepairKindEnum.PlanBlockNonCanonical,

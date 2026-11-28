@@ -27,8 +27,8 @@ namespace Armada.Core.Models
         public List<string> Decisions { get; set; } = new List<string>();
 
         /// <summary>
-        /// The planned missions, in order. Indexes used by <see cref="ArchitectPlanMission.Parent"/> and
-        /// <see cref="ArchitectPlanMission.DependsOn"/> are 1-based positions in this list.
+        /// The planned missions, in order. Values of <see cref="ArchitectPlanMission.Parent"/> are
+        /// 1-based positions in this list.
         /// </summary>
         [JsonPropertyName("missions")]
         [CollectionBound(CollectionLimits.MaxRequestItems)]

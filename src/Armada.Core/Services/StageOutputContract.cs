@@ -63,8 +63,8 @@ namespace Armada.Core.Services
             .ToList();
 
         /// <summary>
-        /// Plan fields the Architect does not write, left out of the example and the field table: <c>dependsOn</c> (the
-        /// pre-v4 name of <c>parent</c>, still read) and <c>workerEnvelope</c> (set by operators).
+        /// Plan fields the Architect does not write, left out of the example and the field table: <c>dependsOn</c> (removed
+        /// in favor of <c>parent</c>, D-026; still in the model only so a plan that sets it is rejected) and <c>workerEnvelope</c> (set by operators).
         /// </summary>
         public static IReadOnlyList<string> PlanFieldsNotPrompted { get; } = new List<string> { "missions[].dependsOn", "missions[].workerEnvelope" };
 

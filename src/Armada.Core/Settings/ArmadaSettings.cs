@@ -383,14 +383,6 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
-        /// Whether an Architect plan written as legacy <c>[ARMADA:MISSION]</c> markers is still accepted when the output
-        /// has no <c>armada-plan</c> block. Deprecated (D-027): each use logs a warning, and the marker format is removed
-        /// in 2.0. When false, marker output is treated like a missing plan and gets the output repair turn. Defaults to
-        /// true.
-        /// </summary>
-        public bool AcceptLegacyMissionMarkers { get; set; } = true;
-
-        /// <summary>
         /// Captain that runs the format-only repair turn (RS-6.4): a tool-less call that restates a stage's own output in
         /// its contract's format when the work is done but the report broke the contract. Null (the default) uses the
         /// captain that wrote the output. An unknown captain id falls back to that captain.

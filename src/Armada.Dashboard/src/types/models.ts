@@ -440,7 +440,6 @@ export type MissionAssignmentBlockerReason =
   | 'WaitingForVoyageWorkers'
   | 'VesselBroadScopeMissionActive'
   | 'BroadScopeWaitingForVessel'
-  | 'VesselConcurrencyLimit'
   | 'VesselVoyageLimit'
   | 'VoyageMissionLimit'
   | 'GlobalMissionLimit'

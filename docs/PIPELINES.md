@@ -487,13 +487,13 @@ trimmed.
 
 ### Validated slice contracts
 
-Built-in Architect prompts request `contractVersion: 4` in the `armada-plan` JSON (version 4 adds the hierarchy fields described under [Contract version 4](#contract-version-4-hierarchy-and-owned-paths); versions 2 and 3 are still accepted). The top level contains `requirements` (stable objective IDs), `decisions` (resolved design choices), and `missions`. Each mission includes `title`, `description`, `kind` (`implementation`, `investigation`, or `integration`), `dependsOn`, `waitForOtherMissions`, `validationCommands`, and `acceptanceCriteria`.
+Built-in Architect prompts request `contractVersion: 4` in the `armada-plan` JSON (version 4 adds the hierarchy fields described under [Contract version 4](#contract-version-4-hierarchy-and-owned-paths); versions 2 and 3 are still accepted). The top level contains `requirements` (stable objective IDs), `decisions` (resolved design choices), and `missions`. Each mission includes `title`, `description`, `kind` (`implementation`, `investigation`, or `integration`), `parent`, `waitForOtherMissions`, `validationCommands`, and `acceptanceCriteria`.
 
 Each criterion contains `id` (unique plan-wide), `requirementIds`, `decisionIndexes`, `scenario`, `expected`, `verification`, and `negativeCases`; use `negativeCasesNotApplicableReason` when no negative case applies. Every objective ID must be covered. The last mission must be `integration` with `waitForOtherMissions: true`. Invalid dependencies, duplicate IDs/titles, missing evidence fields or coverage, and missing integration barriers reject the plan before Worker fan-out. Mission details show the contract failure and remediation; dependents are cancelled. Criteria and commands are rendered into the persisted slice for all downstream stages. Optional mission-level `decisionIndexes` select the relevant top-level decisions by unique 1-based index; `[]` copies none, while omission preserves older plans by copying all decisions. Built-in prompts request scoped indexes. Out-of-range or duplicate indexes reject the plan. A full-plan mission/API reference remains in every slice, so omitted context is retrievable without copying the entire plan.
 
 Architects should split compound design decisions into separately verifiable rules, so one partial check cannot stand in for several requirements. In version 3, each criterion explicitly lists the one-based plan decisions it verifies in `decisionIndexes` (`[]` for a general check). These links must be unique, valid and within the slice's decision scope. Every top-level decision must have at least one named acceptance check somewhere in the plan; an orphan is rejected with its decision number and remediation. Persisted slice descriptions number decisions as D1, D2, etc. and show the links beside each criterion for every downstream role. Version 2 remains supported without these new requirements. Untouched previous built-in persona briefs upgrade automatically; operator-edited briefs are preserved.
 
-This gate validates structure and declared traceability, not semantic correctness, completeness of the objective inventory, or whether an agent actually ran its tests. Independent review remains required. Legacy unversioned plans and marker formats remain supported for customized templates. A malformed or rejected fenced plan does not fall back to loose prose or an older valid block; correct it before restarting the Architect.
+This gate validates structure and declared traceability, not semantic correctness, completeness of the objective inventory, or whether an agent actually ran its tests. Independent review remains required. Legacy unversioned plans remain supported for customized templates; the `[ARMADA:MISSION]` marker format was removed. A malformed or rejected fenced plan does not fall back to loose prose or an older valid block; correct it before restarting the Architect.
 
 FullPipeline rework repeats Worker → Usability Engineer → Test Engineer → Linter → Judge, retaining the actual original intervening stage sequence and routing/review settings. Recorder follows the replacement Judge. Judge routing excludes the Worker and intervening contributing captains on that slice, rather than checking only its immediate predecessor.
 
@@ -508,7 +508,7 @@ Each mission in a version 4 plan may also carry:
 - `readsPaths`: context the mission must read but not change.
 - `branchStrategy`: `continue` (build on the parent's branch) or `fork` (branch from the parent's head). It needs a parent. When omitted, the first child continues the parent's branch and later children fork.
 
-Two missions that can run at the same time (neither is an ancestor of the other) must not own the same path: a version 4 plan with such an overlap is rejected with the two missions and the shared path, and the remedy is to make one the parent of the other, merge them, or split ownership. Version 3 plans only warn. `dependsOn` is still read: in a version 4 plan it is taken as `parent` with a warning, and a plan whose `parent` and `dependsOn` disagree is rejected. Fan-out stores `parent` as `ParentMissionId` (see [Mission hierarchy](#mission-hierarchy)), not as a dependency link, and writes each slice's owned paths into its brief and the `{OwnedPaths}` and `{ConcurrentSiblingPaths}` placeholders.
+Two missions that can run at the same time (neither is an ancestor of the other) must not own the same path: a version 4 plan with such an overlap is rejected with the two missions and the shared path, and the remedy is to make one the parent of the other, merge them, or split ownership. Version 3 plans only warn. `dependsOn` was removed (D-026): a plan of any version that sets it is rejected with an error asking for `parent`.
 
 After a Worker finishes, the files it changed outside its owned paths are recorded as an `OwnershipViolation` warning on the mission and in the scorecard; v1.3.0 does not fail the mission for it.
 
@@ -519,13 +519,13 @@ Customized templates can still emit an unversioned fenced `armada-plan` JSON blo
 ````
 ```armada-plan
 {"missions":[
-  {"title":"Add CacheService with TTL support","description":"Implement CacheService ...","dependsOn":null,"waitForOtherMissions":false},
-  {"title":"Add caching middleware to GET endpoints","description":"Add CacheMiddleware ...","dependsOn":1,"waitForOtherMissions":false}
+  {"title":"Add CacheService with TTL support","description":"Implement CacheService ...","parent":null,"waitForOtherMissions":false},
+  {"title":"Add caching middleware to GET endpoints","description":"Add CacheMiddleware ...","parent":1,"waitForOtherMissions":false}
 ]}
 ```
 ````
 
-`dependsOn` is the 1-based number of an earlier mission in the plan whose whole Worker chain must finish before this one starts (null when it can start immediately), and `waitForOtherMissions` defers the mission until the voyage's other workers settle. When the output has several plan blocks, the final block must be valid; missions without a title, with a placeholder title such as `<title>`, or with a repeated title are dropped.
+`parent` is the 1-based number of an earlier mission in the plan whose whole Worker chain must finish before this one starts (null when it can start immediately), and `waitForOtherMissions` defers the mission until the voyage's other workers settle. When the output has several plan blocks, the final block must be valid; missions without a title, with a placeholder title such as `<title>`, or with a repeated title are dropped.
 
 **The final integration slice** (the mission with `waitForOtherMissions: true`) follows these rules against the voyage's other slices. A slice is a Worker that is not a rework, plus every stage and rework hanging off it.
 
@@ -534,21 +534,14 @@ Customized templates can still emit an unversioned fenced `armada-plan` JSON blo
 - **It does not run when a slice failed.** A mission in another slice that ended Failed or LandingFailed cancels the integration and its stages (`DependencyFailed`, naming that mission), or marks them Blocked when `BlockDependentsOfFailedStages` is on. Restarting the failed mission brings the integration back; restarting the integration itself works once the slice is resolved.
 - **It leaves out a slice an operator cancelled.** That slice's commits are not merged, and the integration Worker is told the slice is out of scope. A stage cancelled because something it depended on failed is not a decision to drop it.
 
-When there is no plan block, Armada falls back to the legacy `[ARMADA:MISSION]` markers (optionally closed with `[/ARMADA:MISSION]`, with a `Depends on:` line for sequencing). Numbered summary lines are never turned into missions. The marker format is deprecated (D-027 in [DEPRECATION.md](../DEPRECATION.md)) and removed in 2.0: each use logs a warning, and setting `AcceptLegacyMissionMarkers` to `false` turns it off, so marker output gets the output repair turn like a missing plan:
-
-```
-[ARMADA:MISSION] Add CacheService with TTL support
-Implement CacheService in src/Services/CacheService.cs with Get, Set, Remove methods.
-Files: src/Services/CacheService.cs, src/Services/Interfaces/ICacheService.cs
-
-[ARMADA:MISSION] Add caching middleware to GET endpoints
-Add CacheMiddleware that checks the cache before executing the handler.
-Files: src/Middleware/CacheMiddleware.cs, src/Startup.cs
-```
+A plan comes only from the submit tool or an `armada-plan` block. The legacy `[ARMADA:MISSION]` markers were removed
+(D-027 in [DEPRECATION.md](../DEPRECATION.md#removed)): output that uses them has no plan, and gets the output repair
+turn like any missing plan. Numbered summary lines are never turned into missions.
 
 ### Parsing
 
-`ParseArchitectOutput` first looks for an `armada-plan` block in the architect mission's `AgentOutput`. Without one, it searches `AgentOutput`, then `DiffSnapshot`, then `Description` for `[ARMADA:MISSION]` markers (then numbered summary lines). Marker blocks split on the marker; the first line is the title and the remaining lines are the description.
+`ParseArchitectOutput` reads the plan the Architect submitted, or the `armada-plan` block in its `AgentOutput`. Nothing
+else is parsed into missions.
 
 **Source:** `src/Armada.Core/Services/ArchitectFanOutService.cs`, method `ParseArchitectOutput`
 
@@ -566,7 +559,7 @@ When an Architect stage completes with parseable mission definitions:
      Linter, Judge, Recorder) as new missions, copying each stage's review gate
    - Chain dependencies: additional Worker depends on Architect,
      cloned stages depend on their Worker
-5. Apply the plan's dependsOn / waitForOtherMissions sequencing
+5. Apply the plan's parent / waitForOtherMissions sequencing
 6. Skip normal handoff (return early); the Workers are picked up by normal assignment
 ```
 
@@ -580,7 +573,7 @@ Result for an Architect that produces 2 mission definitions in a FullPipeline:
   +-- [Worker 2] "Add middleware"    --> [Usability Engineer 2] --> [Test Engineer 2] --> [Linter 2] --> [Judge 2] --> [Recorder 2]
 ```
 
-If the Architect produces no valid mission definitions, the Architect mission is marked `Failed` (failure kind `InvalidOutput`, reason "Architect produced no [ARMADA:MISSION] markers in output" or "...no valid [ARMADA:MISSION] definitions...") rather than handing its raw output to the Worker.
+If the Architect produces no valid mission definitions, the Architect mission is marked `Failed` (failure kind `InvalidOutput`, reason "Architect produced no ```armada-plan plan block in output", or one naming the removed `[ARMADA:MISSION]` markers when the output used them) rather than handing its raw output to the Worker.
 
 **Source:** `src/Armada.Core/Services/ArchitectFanOutService.cs`, called from `MissionHandoffService.TryHandoffToNextStageAsync`
 
