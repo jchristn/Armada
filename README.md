@@ -167,41 +167,6 @@ view shows completion, failures, repairs and escalations per model and persona.
 Start with [docs/OPEN_MODELS.md](docs/OPEN_MODELS.md). The .NET SDK now groups its calls into sub-clients, which is a
 breaking change for SDK users; see [UPGRADING.md](docs/UPGRADING.md#changes-to-act-on-when-coming-to-150).
 
-## v1.3.0: concurrency and built-in fleet actions
-
-v1.3.0 has two marquee features: **parallelization and concurrency**, and **out-of-the-box fleet actions for common repository tasks**.
-
-**Parallelization and concurrency.** Each vessel limits how many voyages run at once (`MaxParallelVoyages`, default 1) and how many missions of a voyage run at once (`MaxParallelMissionsPerVoyage`, default 4). Each captain runs up to `MaxConcurrency` missions in slots, each with its own dock and process: a CLI captain runs one mission, so four parallel missions need four CLI captains, while one ApiEndpoint or Mux captain runs four by default. Architects split work into a hierarchy of small missions: a child starts after its parent finishes and builds on its branch, siblings run in parallel, and each mission declares the files it owns so parallel missions do not collide. Every wait is recorded with its reason, and a Pending mission explains which limit holds it and the smallest change that would admit it. The dashboard, TUI and Mobile show each voyage as a tree, each mission's wait time and children, and each vessel's slots and waiting work. See [Capacity](docs/SCHEDULING.md#capacity), the [mission hierarchy](docs/PIPELINES.md#mission-hierarchy) and the [end-to-end test guide](docs/CONCURRENCY_TESTING.md).
-
-**Usage-based captain selection.** v1.3.0 can choose among qualified captains using captured account allowance, and records why each captain was chosen or why a mission waits. Observe is the default: it records what the configured strategy (First available, Most remaining allowance or Most used allowance) would have chosen without changing routing. Enforce is an explicit opt-in that commits the assignment, captain slot, decision and usage reservations atomically before launch on all four database providers. Dashboard, TUI, Mobile, Helm (`armada mission selection`), REST and MCP show each mission's decision, captain comparison, history and read-only preview, and administrators can grant audited recovery permissions. See the [operator guide](docs/usage-selection/OPERATIONS.md) and the [enforcement and mission inspection guide](docs/usage-selection/ENFORCEMENT_AND_MISSION_INSPECTION.md).
-
-The [built-in fleet action catalog](docs/FLEET_ACTIONS.md#built-in-actions) ships 25 actions (20 new), available in every tenant without creating action templates. Run performance reviews and fixes, code cleanliness reviews and dead-code cleanup, vulnerability audits and security reviews, secrets scans, and license compliance checks across selected repositories. The catalog also covers builds, tests, linting, dependency updates, framework upgrades, and documentation upkeep. Report-only actions collect findings without changing repositories; follow-up runs can target only repositories with findings or failures. New built-ins are added at startup, while tenant edits and deleted built-ins are respected.
-
-v1.3.0 removes `Vessel.AllowConcurrentMissions`, `Captain.CurrentMissionId`, `Captain.CurrentDockId` and Helm `--allow-concurrent` with no deprecation period. Back up before upgrading; see [UPGRADING.md](docs/UPGRADING.md#v120-to-v130).
-
-## What's New in v1.2.0
-
-Two anchor features help you understand a captain's available capacity and a model's fit for the work you assign:
-
-- **Check and monitor captain usage.** Check a captain's account usage on demand with **Capture now**, enable recurring capture, and monitor reported account limits, utilization, and reset windows over time. The dashboard brings usage checks and monitoring into the captain's detail page and **Activity > Captain Usage**, which combines usage charts with the current account limits table.
-- **Evaluate model fit for purpose by persona.** Evaluate a captain or model endpoint before assigning it a role such as Worker, Architect, or Judge. Quick probes check runtime behavior, including output contracts, tool calling, speed, and answer consistency. Full evaluations add task battery packs and selected personas, with per-persona outcomes and a report to help you judge suitability for your workload. Start an evaluation from Captains or a captain's Evaluations page, and follow its results while it runs or afterward.
-
-The release also includes:
-
-- **Mission and voyage black box.** Every failure, of any kind and including landing failures, writes an entry at the moment of failure: where, how and why it failed, the missions, files and directories it collided with, the configuration that would have prevented it, and ranked recovery paths with exact commands. Copy the **FIX THIS** brief into any coding agent, run a recovery path with a dry run and a confirmation, or ask Ask Armada for its opinion. Entries live in the database by default, or on disk, S3 and S3-compatible stores, Azure Blob, Google Cloud Storage, CIFS or NFS, with retention and garbage collection. See [Black box](#black-box-why-did-it-fail-and-what-now) and [docs/BLACKBOX.md](docs/BLACKBOX.md).
-- **pi runtime support.** [pi](https://pi.dev) (the pi coding agent) is a first-class captain runtime: missions, Ask turns, and planning sessions run `pi -p --mode json` with exact token usage and cost, provider-error detection (pi exits 0 on provider errors in JSON mode), and the scoped Armada MCP binding. `armada mcp install` configures pi's `~/.pi/agent/mcp.json`; Approve in Armada works through a shipped pi extension that sends each shell command to the Approvals center and Ask (it fails closed); Refuse removes both of pi's shell tools (`bash` and Windows `powershell`). Add one with:
-
-  ```bash
-  armada captain add pi-1 --runtime pi
-  ```
-
-  See [docs/INSTRUCTIONS_FOR_PI.md](docs/INSTRUCTIONS_FOR_PI.md) (captain setup, permissions) and [docs/PI_AS_ORCHESTRATOR.md](docs/PI_AS_ORCHESTRATOR.md) (pi driving Armada over MCP).
-- **Stage outcome evidence.** Every stage attempt is recorded as a stage outcome with its provenance (runtime version, model digest, escalation record) and a suspected cause, with editable failure-cause rules over REST, MCP, and the clients.
-- **Reader-aware handoffs.** Work is handed to the next stage in a form suited to the model that reads it.
-- **Mobile interfaces** for the new surfaces.
-
-Every change is in [CHANGELOG.md](CHANGELOG.md#v120-2026-10-29).
-
 ## What You Get
 
 **Orchestration**
@@ -862,7 +827,7 @@ Browse the dashboard, Harbor desktop app, and terminal UI. Expand a section to v
 
 - **Import.** **Import repositories** on the Vessels page (or `armada vessel import --root ~/Code --dry-run`) scans directories on the Admiral host, shows every git repository it found with a status (new, already onboarded, worktree, and so on), and creates vessels only for the ones you keep. Imported vessels point at your existing checkout and never set `LocalPath`, so removing a vessel never touches your clone. Scanning is limited to `Import.AllowedRoots`. A captain can also recommend fleet groupings.
 - **Vessel Health** (the Health tab, or `armada health`) grades each vessel: commits ahead of or behind the default branch, uncommitted changes, stale `armada/*` branches, outdated and vulnerable NuGet and npm packages, tests and the latest check run, CI configuration, and recent mission failures. Evaluations run every 6 hours (`RepositoryHealth.IntervalMinutes`) or on demand; a check that cannot run shows as Unknown, not healthy.
-- **Fleet Actions** apply one action across many vessels: a Command action runs a shell command in each working directory and records the output; a Mission action dispatches one voyage per vessel, paced. v1.3.0 ships [25 built-in actions](docs/FLEET_ACTIONS.md#built-in-actions) for common repository tasks, including performance, cleanliness, security, and license compliance.
+- **Fleet Actions** apply one action across many vessels: a Command action runs a shell command in each working directory and records the output; a Mission action dispatches one voyage per vessel, paced. Armada ships [25 built-in actions](docs/FLEET_ACTIONS.md#built-in-actions) for common repository tasks, including performance, cleanliness, security, and license compliance.
 - **View History** (`H` in the TUI, or `armada vessel history <vessel>`) shows a commit heatmap and the commits behind it, with authors, line counts, and files changed.
 
 See [docs/FLEET_ACTIONS.md](docs/FLEET_ACTIONS.md), [docs/VESSEL_HEALTH.md](docs/VESSEL_HEALTH.md), and the Vessel Import section of [docs/REST_API.md](docs/REST_API.md).
