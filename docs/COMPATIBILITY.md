@@ -84,7 +84,7 @@ they do not recognize.
 
 ## Deprecation
 
-A covered item is removed only in a major release, and only after it has been deprecated for at least one minor release. [DEPRECATION.md](../DEPRECATION.md) is the managed list of current deprecations, their replacements, and
+A covered item is removed only in a major release, and only after it has been deprecated for at least one minor release. [DEPRECATION.md](../archive/DEPRECATION.md) is the managed list of current deprecations, their replacements, and
 their removal release; `src/Armada.Core/ApiSurface/DeprecatedSurface.cs` is its code counterpart, and tests keep the two
 in step:
 

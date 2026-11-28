@@ -96,7 +96,7 @@ capability flag, and a Harbor without the flag keeps its 1.4.0 behavior. The Adm
 [HARBOR_PROTOCOL.md](HARBOR_PROTOCOL.md#api-captain-capability-flags).
 
 The legacy `[ARMADA:MISSION]` plan format was deprecated in 1.5.0 and has since been removed (D-027 in
-[DEPRECATION.md](../DEPRECATION.md#removed)); custom Architect templates must emit an `armada-plan` block. The new settings are listed with their ranges in
+[DEPRECATION.md](../archive/DEPRECATION.md#removed)); custom Architect templates must emit an `armada-plan` block. The new settings are listed with their ranges in
 [OPERATIONS.md](OPERATIONS.md#reliability-settings-added-in-150).
 
 Outcome ranking (`RoutingData.RankByOutcomes`) is new in 1.5.0 and off, so captains are ordered as in 1.4.0. Turning

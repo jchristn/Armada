@@ -94,7 +94,7 @@ namespace Test.Shared.Suites.Docs
 
             cases.Add(new TestCaseDescriptor(SuiteId, "removed_matches_retired_surface", "The Removed section of DEPRECATION.md and RetiredSurface list the same routes and tools with the same replacements", (CancellationToken ct) =>
             {
-                string text = File.ReadAllText(Path.Combine(DashboardSource.RepoRoot(), "DEPRECATION.md"));
+                string text = File.ReadAllText(Path.Combine(DashboardSource.RepoRoot(), "archive", "DEPRECATION.md"));
                 int start = text.IndexOf("## Removed", StringComparison.Ordinal);
                 int end = text.IndexOf("\n## ", start + 1, StringComparison.Ordinal);
                 AssertTrue(start >= 0 && end > start, "DEPRECATION.md has a Removed section");
@@ -147,7 +147,7 @@ namespace Test.Shared.Suites.Docs
 
         private static List<DeprecationRow> ReadRows()
         {
-            string text = File.ReadAllText(Path.Combine(DashboardSource.RepoRoot(), "DEPRECATION.md"));
+            string text = File.ReadAllText(Path.Combine(DashboardSource.RepoRoot(), "archive", "DEPRECATION.md"));
             int start = text.IndexOf("## Active deprecations", StringComparison.Ordinal);
             int end = text.IndexOf("\n## ", start + 1, StringComparison.Ordinal);
             AssertTrue(start >= 0 && end > start, "DEPRECATION.md has an Active deprecations section");

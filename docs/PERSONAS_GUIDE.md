@@ -305,7 +305,7 @@ files the attempt changed with its owned paths and with the paths of missions ru
 is recorded on the stage outcome as `OwnershipViolation` (or added to its cause note) and shown to the Judge. In
 v1.3.0 this is a warning and never fails the mission.
 
-The older `[ARMADA:MISSION]` marker format was removed (D-027 in [DEPRECATION.md](../DEPRECATION.md#removed)): output
+The older `[ARMADA:MISSION]` marker format was removed (D-027 in [DEPRECATION.md](../archive/DEPRECATION.md#removed)): output
 that uses it has no plan and gets the output repair turn.
 
 ### Captain Status Signals

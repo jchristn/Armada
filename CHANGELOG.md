@@ -660,7 +660,7 @@ v1.3.0 has two marquee features: **parallelization and concurrency**, and **out-
 
 - Remove `Captain.CurrentMissionId`, `Captain.CurrentDockId`, `Vessel.AllowConcurrentMissions` and Helm `--allow-concurrent`, as explicitly approved for v1.3.0. Use `ActiveMissionIds` and mission-owned dock/process fields, and the numeric vessel limits. Old vessel inputs and the CLI flag return migration guidance. Captain process IDs are reserved for exclusive sessions. Keep agent Testing hints informational so live execution never disappears from slot accounting; migrate existing live Testing jobs safely. Halt voyage siblings through their individual owned processes, preserving unrelated work on the same captain.
 - Migrations 119–121 preserve active execution/session ownership and separate rescue provenance from hierarchy. MySQL resumes partially applied final migrations. Restoring the pre-upgrade backup is required before downgrading. See [upgrade guidance](docs/UPGRADING.md#v120-to-v130).
-- Deprecate the `VesselConcurrencyLimit` blocker reason (kept only so stored events read) and architect plan `dependsOn` (read as `parent`); see [DEPRECATION.md](DEPRECATION.md#active-deprecations). Both are removed in 2.0.
+- Deprecate the `VesselConcurrencyLimit` blocker reason (kept only so stored events read) and architect plan `dependsOn` (read as `parent`); see [DEPRECATION.md](archive/DEPRECATION.md#active-deprecations). Both are removed in 2.0.
 - Helm rejects unknown options and stray arguments (strict parsing) instead of ignoring them; such commands now exit non-zero before contacting the Admiral.
 
 ### Fleet actions: built-in catalog, follow-up runs, and report-only actions
@@ -1455,7 +1455,7 @@ Part of the bounded enumeration contract ([docs/ENUMERATION.md](docs/ENUMERATION
 
 ### Paged APIs replace whole-list APIs
 
-- **Armada exposes no API that returns a whole stored collection in one response.** Every list is read through a paged route or tool (`pageNumber`, `pageSize` 1 to 1000 or a lower route cap, `TotalRecords`), and Armada's own clients (dashboard, mobile, TUI, CLI, both .NET clients) use the paged forms. [DEPRECATION.md](DEPRECATION.md) is the managed list (Removed, IDs D-001 to D-018, and the bounded exceptions); tests keep it in step with `RetiredSurface.cs` and fail if a first-party client calls a removed route.
+- **Armada exposes no API that returns a whole stored collection in one response.** Every list is read through a paged route or tool (`pageNumber`, `pageSize` 1 to 1000 or a lower route cap, `TotalRecords`), and Armada's own clients (dashboard, mobile, TUI, CLI, both .NET clients) use the paged forms. [DEPRECATION.md](archive/DEPRECATION.md) is the managed list (Removed, IDs D-001 to D-018, and the bounded exceptions); tests keep it in step with `RetiredSurface.cs` and fail if a first-party client calls a removed route.
 
 #### Removed (breaking)
 

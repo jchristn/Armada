@@ -541,7 +541,7 @@ Query string parameters **override** body values on POST enumerate endpoints, al
 
 No route returns a whole stored collection in one response. The whole-list routes were retired (they answer `410 Gone`
 naming the replacement; see [Breaking changes: whole-list routes retired](#breaking-changes-whole-list-routes-retired)
-and [DEPRECATION.md](../DEPRECATION.md)). A few bounded routes are not paged and return a plain array or a
+and [DEPRECATION.md](../archive/DEPRECATION.md)). A few bounded routes are not paged and return a plain array or a
 purpose-built wrapper. They are listed here so clients do not expect `EnumerationResult<T>`:
 
 | Route | Shape |
@@ -556,7 +556,7 @@ purpose-built wrapper. They are listed here so clients do not expect `Enumeratio
 
 Every route that returned an entire stored collection in one response was removed. A request for one is answered with
 `410 Gone` and a message naming the replacement; each replacement returns one page (`PageNumber`, `PageSize` 1 to 1000,
-`TotalRecords`). [DEPRECATION.md](../DEPRECATION.md#removed) is the authoritative list (IDs D-001 to D-018).
+`TotalRecords`). [DEPRECATION.md](../archive/DEPRECATION.md#removed) is the authoritative list (IDs D-001 to D-018).
 
 | Removed | Replacement |
 |---|---|
@@ -2046,7 +2046,7 @@ One page of a vessel's branches as a `BranchEnumerationResult`: the page plus `V
 
 #### GET /api/v1/vessels/{id}/branches (removed)
 
-> **Removed** (see [DEPRECATION.md](../DEPRECATION.md), D-010): answers `410 Gone` with a message naming the
+> **Removed** (see [DEPRECATION.md](../archive/DEPRECATION.md), D-010): answers `410 Gone` with a message naming the
 > replacement. Use `POST /api/v1/vessels/{id}/branches/enumerate`; each page object is a branch with a current flag and
 > ahead/behind counts relative to the default branch.
 
@@ -6661,7 +6661,7 @@ curl -X POST http://localhost:7890/api/v1/signals \
 
 #### GET /api/v1/signals/recent (removed)
 
-> **Removed** (see [DEPRECATION.md](../DEPRECATION.md), D-016): answers `410 Gone` with a message naming the
+> **Removed** (see [DEPRECATION.md](../archive/DEPRECATION.md), D-016): answers `410 Gone` with a message naming the
 > replacement. Use [`POST /api/v1/signals/enumerate`](#post-apiv1signalsenumerate) (newest first, one page).
 
 ---
@@ -6700,7 +6700,7 @@ Mark a signal as read.
 
 #### GET /api/v1/signals/recipient/{captainId} (removed)
 
-> **Removed** (see [DEPRECATION.md](../DEPRECATION.md), D-011): answers `410 Gone` with a message naming the
+> **Removed** (see [DEPRECATION.md](../archive/DEPRECATION.md), D-011): answers `410 Gone` with a message naming the
 > replacement. Use [`POST /api/v1/signals/enumerate`](#post-apiv1signalsenumerate) with `ToCaptainId` (and
 > `UnreadOnly`), or `GET /api/v1/signals?toCaptainId=...&unreadOnly=true`.
 
@@ -7261,7 +7261,7 @@ One page of the Harbors visible to the caller, counted and cut in the database (
 
 #### GET /api/v1/harbors (removed)
 
-> **Removed** (see [DEPRECATION.md](../DEPRECATION.md), D-001): answers `410 Gone` with a message naming the
+> **Removed** (see [DEPRECATION.md](../archive/DEPRECATION.md), D-001): answers `410 Gone` with a message naming the
 > replacement. Use `POST /api/v1/harbors/enumerate`.
 
 #### POST /api/v1/harbors
@@ -7476,7 +7476,7 @@ Jobs are internal background tasks retained for workflow progress and status pol
 
 List one page of background jobs, newest first, scoped to the caller (global admins see every tenant, tenant admins
 their tenant, other users their own jobs). There is no unpaged form: without parameters the response is the first page
-of 100 (see [DEPRECATION.md](../DEPRECATION.md), D-014; before, the parameterless form returned every job). The
+of 100 (see [DEPRECATION.md](../archive/DEPRECATION.md), D-014; before, the parameterless form returned every job). The
 dashboard header polls `?status=Queued,Running`.
 
 **Permission:** Authenticated
@@ -7831,7 +7831,7 @@ One page of the needs-you inbox items (`TotalRecords` is the exact count). Each 
 
 #### GET /api/v1/inbox (removed)
 
-> **Removed** (see [DEPRECATION.md](../DEPRECATION.md), D-006): answers `410 Gone` with a message naming the
+> **Removed** (see [DEPRECATION.md](../archive/DEPRECATION.md), D-006): answers `410 Gone` with a message naming the
 > replacement. Use `POST /api/v1/inbox/enumerate`.
 
 #### InboxItem fields
@@ -8691,7 +8691,7 @@ curl -X POST -H "Authorization: Bearer default" -H "Content-Type: application/js
 
 #### GET /api/v1/model-endpoints (removed)
 
-> **Removed** (see [DEPRECATION.md](../DEPRECATION.md), D-002): answers `410 Gone` with a message naming the
+> **Removed** (see [DEPRECATION.md](../archive/DEPRECATION.md), D-002): answers `410 Gone` with a message naming the
 > replacement. Use `POST /api/v1/model-endpoints/enumerate`.
 
 ---
@@ -9265,7 +9265,7 @@ One page of the planning sessions visible to the caller, most recently updated f
 
 #### GET /api/v1/planning-sessions (removed)
 
-> **Removed** (see [DEPRECATION.md](../DEPRECATION.md), D-003): answers `410 Gone` with a message naming the
+> **Removed** (see [DEPRECATION.md](../archive/DEPRECATION.md), D-003): answers `410 Gone` with a message naming the
 > replacement. Use `POST /api/v1/planning-sessions/enumerate`.
 
 #### POST /api/v1/planning-sessions
@@ -10175,7 +10175,7 @@ One page of the GitHub pull requests linked to one release's missions (`404` whe
 
 #### GET /api/v1/releases/{id}/github/pull-requests (removed)
 
-> **Removed** (see [DEPRECATION.md](../DEPRECATION.md), D-009): answers `410 Gone` with a message naming the
+> **Removed** (see [DEPRECATION.md](../archive/DEPRECATION.md), D-009): answers `410 Gone` with a message naming the
 > replacement. Use `POST /api/v1/releases/{id}/github/pull-requests/enumerate`. Each page object is a normalized
 > `GitHubPullRequestDetail` derived from the `PrUrl` values on the release's missions; duplicate repository/PR
 > combinations are de-duplicated, and Armada does not persist pull requests as entities.

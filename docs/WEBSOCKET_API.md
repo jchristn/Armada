@@ -2709,7 +2709,7 @@ List one page of CLI permission requests, newest first. The command never return
 }
 ```
 
-> **Breaking change** (see [DEPRECATION.md](../DEPRECATION.md), D-018): `data` used to be a bare array of up to 100
+> **Breaking change** (see [DEPRECATION.md](../archive/DEPRECATION.md), D-018): `data` used to be a bare array of up to 100
 > requests; it is now one page with `totalRecords`.
 
 ---

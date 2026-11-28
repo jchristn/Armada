@@ -535,7 +535,7 @@ Customized templates can still emit an unversioned fenced `armada-plan` JSON blo
 - **It leaves out a slice an operator cancelled.** That slice's commits are not merged, and the integration Worker is told the slice is out of scope. A stage cancelled because something it depended on failed is not a decision to drop it.
 
 A plan comes only from the submit tool or an `armada-plan` block. The legacy `[ARMADA:MISSION]` markers were removed
-(D-027 in [DEPRECATION.md](../DEPRECATION.md#removed)): output that uses them has no plan, and gets the output repair
+(D-027 in [DEPRECATION.md](../archive/DEPRECATION.md#removed)): output that uses them has no plan, and gets the output repair
 turn like any missing plan. Numbered summary lines are never turned into missions.
 
 ### Parsing

@@ -3,7 +3,7 @@
 This is the managed list of everything Armada has deprecated: what it is, what replaces it, when it was deprecated,
 when it is removed, and whether Armada's own clients have moved off it. The policy behind it (what a deprecation must
 do, and that a covered item is removed only in a major release) is in
-[docs/COMPATIBILITY.md](docs/COMPATIBILITY.md#deprecation).
+[docs/COMPATIBILITY.md](../docs/COMPATIBILITY.md#deprecation).
 
 The `Client.RouteSurface` and `Docs.Deprecation` test suites keep this file honest:
 
@@ -17,14 +17,14 @@ The `Client.RouteSurface` and `Docs.Deprecation` test suites keep this file hone
 
 ## v1.3.0 concurrency removal exception
 
-The owner-approved [concurrency plan](archive/CONCURRENCY_IMPROVEMENTS.md) removes `Captain.CurrentMissionId`, `Captain.CurrentDockId`, `Vessel.AllowConcurrentMissions` and Helm `--allow-concurrent` in v1.3.0, with no aliases. This is the explicit exception to the usual major-release removal policy in [compatibility](docs/COMPATIBILITY.md#v130-concurrency-exception). Use `ActiveMissionIds` and each mission’s dock/process, plus the two numeric vessel limits. Old vessel inputs and the old CLI flag fail with migration guidance. First-party Dashboard, Mobile, TUI, Helm and SDK models use the new fields. These are field/option removals, not retired routes in the route registry below.
+The owner-approved [concurrency plan](CONCURRENCY_IMPROVEMENTS.md) removes `Captain.CurrentMissionId`, `Captain.CurrentDockId`, `Vessel.AllowConcurrentMissions` and Helm `--allow-concurrent` in v1.3.0, with no aliases. This is the explicit exception to the usual major-release removal policy in [compatibility](../docs/COMPATIBILITY.md#v130-concurrency-exception). Use `ActiveMissionIds` and each mission’s dock/process, plus the two numeric vessel limits. Old vessel inputs and the old CLI flag fail with migration guidance. First-party Dashboard, Mobile, TUI, Helm and SDK models use the new fields. These are field/option removals, not retired routes in the route registry below.
 
 ## v1.5.0 changes outside the route registry
 
 Two 1.5.0 changes are not REST routes or MCP tools, so they are not in the tables below. The flat methods of the .NET
 SDK (`Armada.Client`, for example `client.GetMissionAsync(id)`) were removed in 1.5.0 without a deprecation period, by
 owner decision, when the client was split into sub-clients (`client.Missions.GetAsync(id)`); every old method and its
-new call is in [docs/SDK_MIGRATION_1.5.md](docs/SDK_MIGRATION_1.5.md). A model endpoint's `ApiVersion` is still
+new call is in [docs/SDK_MIGRATION_1.5.md](../docs/SDK_MIGRATION_1.5.md). A model endpoint's `ApiVersion` is still
 accepted and stored but ignored, because Azure OpenAI now uses the v1 route. The legacy `[ARMADA:MISSION]` plan
 markers were deprecated in 1.5.0 as D-027 and are now removed (see [Removed](#removed)).
 
@@ -37,7 +37,7 @@ None. Every item deprecated here has been removed; see [Removed](#removed).
 
 ## Bounded, not retired
 
-Armada exposes no API that returns, embeds, or echoes an unbounded collection ([docs/ENUMERATION.md](docs/ENUMERATION.md)).
+Armada exposes no API that returns, embeds, or echoes an unbounded collection ([docs/ENUMERATION.md](../docs/ENUMERATION.md)).
 Every stored collection is read through a paged route or tool (`pageNumber`, `pageSize` 1 to 1000 or a lower documented
 cap, exact `TotalRecords`), paged in the data source, and every paged `GET` list has a `POST .../enumerate` form. Growing
 children of one entity (voyage missions, fleet vessels, status voyages, planning and refinement transcripts, Ask
