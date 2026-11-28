@@ -28,7 +28,7 @@ namespace Armada.Helm.Commands
                 request.PageSize = settings.PageSize ?? 25;
                 if (!String.IsNullOrWhiteSpace(settings.Rule)) request.RuleId = settings.Rule.Trim();
                 if (!String.IsNullOrWhiteSpace(settings.Vessel)) request.VesselId = settings.Vessel.Trim();
-                EnumerationResult<BlackBoxRecoveryStat>? page = await client.GetBlackBoxRecoveryStatsAsync(request, cancellationToken).ConfigureAwait(false);
+                EnumerationResult<BlackBoxRecoveryStat>? page = await client.BlackBoxInsights.GetRecoveryStatsAsync(request, cancellationToken).ConfigureAwait(false);
                 if (settings.Json)
                 {
                     WritePureJson(page);

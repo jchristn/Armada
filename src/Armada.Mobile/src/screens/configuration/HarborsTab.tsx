@@ -71,6 +71,7 @@ function HarborDetail({ id, inSheet, canManage, onEdit, onToggle, onDelete }: Ha
         <Field label={t('Enabled')} value={h.enabled ? t('Yes') : t('No')} />
         <Field label={t('Capacity')} value={h.maxConcurrentJobs} />
         <Field label={t('Platform')} value={[h.osPlatform, h.architecture].filter(Boolean).join(' / ') || '-'} />
+        {h.updateRecommended ? <Field label={t('Update')} value={`${t('Harbor update recommended')} (${(h.missingCapabilities ?? []).join(', ')})`} /> : null}
         <Field label={t('Protocol')} value={h.protocolVersion || '-'} />
         <Field label={t('Last Seen')} value={h.lastSeenUtc ? formatDateTime(h.lastSeenUtc) : t('Never')} />
         <Field label={t('Capabilities')} value={capabilityText(t, h)} />
@@ -176,7 +177,7 @@ export function HarborsTab() {
         <ResourceRow
           testID={`harbor-row-${h.id}`}
           title={h.enabled ? h.name : `${h.name} (${t('disabled')})`}
-          subtitle={`${t('Capacity')}: ${h.maxConcurrentJobs} \u2022 ${capabilityText(t, h)}`}
+          subtitle={`${t('Capacity')}: ${h.maxConcurrentJobs} \u2022 ${capabilityText(t, h)}${h.updateRecommended ? ` \u2022 ${t('Harbor update recommended')}` : ''}`}
           badge={{ label: t(h.connectionStatus), tone: connectionTone(h) }}
           meta={h.lastSeenUtc ? formatRelativeTime(h.lastSeenUtc) : t('Never')}
           selected={selection.selected === h.id}

@@ -1,0 +1,40 @@
+# Signed in (state kept from 01): the RS-12.16 reliability screens on a phone. The Captains hub's Model Profiles tab
+# (the seeded Admiral has no probed models, so the list is empty or holds the profiles its captains created) and,
+# when a profile exists, its read-only detail with the recovery policy and timeouts in effect. Mission attempts and
+# submitted findings appear on mission detail only after a captain ran the mission, which the seeded data has not.
+appId: ${APP_ID}
+name: 09-reliability
+---
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "tab-ask"
+    timeout: 30000
+- runFlow:
+    file: common/open-link.yaml
+    env:
+      LINK: "armada://captains?tab=profiles"
+- extendedWaitUntil:
+    visible:
+      id: "model-profiles-list"
+    timeout: 15000
+- takeScreenshot: model-profiles
+- runFlow:
+    when:
+      visible:
+        id: "model-profile-row-.*"
+    commands:
+      - tapOn:
+          id: "model-profile-row-.*"
+          index: 0
+      - extendedWaitUntil:
+          visible:
+            id: "model-profile-detail"
+          timeout: 15000
+      - scrollUntilVisible:
+          element:
+            id: "model-profile-recovery"
+          direction: DOWN
+          visibilityPercentage: 100
+      - takeScreenshot: model-profile-detail

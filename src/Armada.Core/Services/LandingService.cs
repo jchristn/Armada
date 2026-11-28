@@ -40,6 +40,11 @@ namespace Armada.Core.Services
 
         #endregion
 
+        /// <summary>
+        /// Mission status transitions (RS-3.5); the server replaces this with the instance shared across services.
+        /// </summary>
+        public MissionTransitions Transitions { get; set; }
+
         #region Private-Members
 
         private string _Header = "[LandingService] ";
@@ -67,6 +72,7 @@ namespace Armada.Core.Services
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _Database = database ?? throw new ArgumentNullException(nameof(database));
+            Transitions = new MissionTransitions(database, logging);
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Git = git ?? throw new ArgumentNullException(nameof(git));
         }
@@ -92,10 +98,11 @@ namespace Armada.Core.Services
             DateTime retryVersion = mission.LastUpdateUtc;
             MissionStatusEnum retryStatus = mission.Status;
             MissionStatusEnum retryStatusBefore = mission.Status;
-            async Task<bool> SaveRetryAsync()
+            async Task<bool> SaveRetryAsync(MissionStatusEnum? to = null)
             {
-                mission.LastUpdateUtc = DateTime.UtcNow;
-                bool saved = await _Database.Missions.TryUpdateIfUnchangedAsync(mission, retryVersion, new[] { retryStatus }, token).ConfigureAwait(false);
+                MissionTransitionRequest retry = new MissionTransitionRequest { To = to ?? retryStatus, ExpectedLastUpdateUtc = retryVersion };
+                retry.AllowedFrom.Add(retryStatus);
+                bool saved = await Transitions.TryTransitionAsync(mission, retry, token).ConfigureAwait(false);
                 if (saved) { retryVersion = mission.LastUpdateUtc; retryStatus = mission.Status; }
                 return saved;
             }
@@ -192,10 +199,9 @@ namespace Armada.Core.Services
                 if (!branchExists)
                 {
                     _Logging.Warn(_Header + "branch " + missionBranch + " no longer exists -- cannot retry landing for mission " + missionId);
-                    mission.Status = MissionStatusEnum.LandingFailed;
                     mission.FailureKind = MissionFailureKindEnum.Infra;
                     mission.FailureReason = "Source branch '" + missionBranch + "' is missing in " + repoPath + ". Recover the preserved commit or branch before retrying landing.";
-                    if (await SaveRetryAsync().ConfigureAwait(false))
+                    if (await SaveRetryAsync(MissionStatusEnum.LandingFailed).ConfigureAwait(false))
                     {
                         await BlackBox.RecordMissionFailureAsync(mission, retryStatusBefore, BlackBoxStepEnum.RetryLanding, context =>
                         {
@@ -223,14 +229,12 @@ namespace Armada.Core.Services
                 {
                     string where = DockHostResolver.IsHarborDock(dock) ? " on Harbor " + dock.HarborId : "";
                     _Logging.Warn(_Header + "dock " + dock.Id + " worktree " + dock.WorktreePath + where + " is missing -- cannot retry landing for mission " + missionId);
-                    mission.Status = MissionStatusEnum.LandingFailed;
                     mission.FailureKind = MissionFailureKindEnum.Infra;
                     mission.FailureReason = "Dock missing: the worktree " + dock.WorktreePath + where + " for dock " + dock.Id
                         + " no longer exists, so landing cannot be retried from it. Branch '" + missionBranch
                         + "' is still in the repository; merge it manually or restart the mission."
                         + (restored != null && !String.IsNullOrEmpty(restored.Reason) ? " Recreating the worktree failed: " + restored.Reason + "." : "");
-                    mission.LastUpdateUtc = DateTime.UtcNow;
-                    if (!await SaveRetryAsync().ConfigureAwait(false)) return false;
+                    if (!await SaveRetryAsync(MissionStatusEnum.LandingFailed).ConfigureAwait(false)) return false;
                     await BlackBox.RecordMissionFailureAsync(mission, retryStatusBefore, BlackBoxStepEnum.DockMissing, context =>
                     {
                         context.Vessel = vessel;
@@ -241,9 +245,7 @@ namespace Armada.Core.Services
                 }
 
                 // Transition back to WorkProduced for landing attempt
-                mission.Status = MissionStatusEnum.WorkProduced;
-                mission.LastUpdateUtc = DateTime.UtcNow;
-                if (!await SaveRetryAsync().ConfigureAwait(false)) return false;
+                if (!await SaveRetryAsync(MissionStatusEnum.WorkProduced).ConfigureAwait(false)) return false;
 
                 // If no dock, create a minimal one for the landing handler
                 if (dock == null)
@@ -269,10 +271,8 @@ namespace Armada.Core.Services
                 else
                 {
                     _Logging.Warn(_Header + "no landing handler configured -- cannot retry landing for mission " + missionId);
-                    mission.Status = MissionStatusEnum.LandingFailed;
                     mission.FailureKind = MissionFailureKindEnum.Infra;
-                    mission.LastUpdateUtc = DateTime.UtcNow;
-                    if (!await SaveRetryAsync().ConfigureAwait(false)) return false;
+                    if (!await SaveRetryAsync(MissionStatusEnum.LandingFailed).ConfigureAwait(false)) return false;
                     await BlackBox.RecordMissionFailureAsync(mission, retryStatusBefore, BlackBoxStepEnum.RetryLanding, context =>
                     {
                         context.Vessel = vessel;
@@ -290,7 +290,7 @@ namespace Armada.Core.Services
                 // conflicted carries its files (read before the merge was aborted); otherwise the list is read from the
                 // worktree where the merge ran, never from the owning repository, which is not where landing merges.
                 string failureReason = "Landing retry failed: " + ex.Message;
-                MissionFailureKindEnum failureKind = LandingFailureClassifier.Classify(ex);
+                MissionFailureKindEnum failureKind = FailureKindMapper.FromLandingException(ex);
                 IReadOnlyList<string> conflicts = ConflictedFilesFrom(ex);
                 if (conflicts.Count == 0)
                     conflicts = await ReadMergeWorktreeConflictsAsync(git, dock, vessel).ConfigureAwait(false);
@@ -305,11 +305,9 @@ namespace Armada.Core.Services
                 {
                     if (mission != null)
                     {
-                        mission.Status = MissionStatusEnum.LandingFailed;
                         mission.FailureReason = failureReason;
                         mission.FailureKind = failureKind;
-                        mission.LastUpdateUtc = DateTime.UtcNow;
-                        if (!await SaveRetryAsync().ConfigureAwait(false)) return false;
+                        if (!await SaveRetryAsync(MissionStatusEnum.LandingFailed).ConfigureAwait(false)) return false;
                         IReadOnlyList<string> recordedConflicts = conflicts;
                         await BlackBox.RecordMissionFailureAsync(mission, retryStatusBefore, BlackBoxSiteFacts.LandingStepOf(ex, BlackBoxStepEnum.RetryLanding), context =>
                         {

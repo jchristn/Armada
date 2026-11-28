@@ -195,7 +195,7 @@ namespace Armada.Helm.Commands
             }
             outer.AddRow(new Markup(summaryRow));
 
-            // Missions table — show active + recently completed/failed (last 30 min)
+            // Missions table: show active + recently completed/failed (last 30 min)
             DateTime now = DateTime.UtcNow;
             List<Mission> displayMissions = new List<Mission>();
 
@@ -288,7 +288,7 @@ namespace Armada.Helm.Commands
             // Event log
             BuildEventLog(outer, events);
 
-            // ACTION REQUIRED section (stalled captains only — completed/failed now in table)
+            // ACTION REQUIRED section (stalled captains only: completed/failed now in table)
             BuildActionRequired(outer, captains, missions, vesselLookup, voyageLookup, captainLookup, missionLookup);
 
             return outer;

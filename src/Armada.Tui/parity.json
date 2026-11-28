@@ -391,6 +391,22 @@
     },
     {
       "kind": "route",
+      "key": "/model-profiles",
+      "status": "implemented",
+      "tui": "Router",
+      "workstream": "W1.12",
+      "notes": "redirect to /captains?tab=profiles"
+    },
+    {
+      "kind": "route",
+      "key": "/model-profiles/:id",
+      "status": "implemented",
+      "tui": "ModelProfileScreen",
+      "workstream": "RS-12.9",
+      "notes": "model profile detail: context, tools, tier and suggestion, recovery and timeouts with admin edit"
+    },
+    {
+      "kind": "route",
       "key": "/notifications",
       "status": "implemented",
       "tui": "Router",
@@ -815,6 +831,14 @@
     },
     {
       "kind": "tab",
+      "key": "CaptainsHub:battery-runs",
+      "status": "implemented",
+      "tui": "BatteryRunsScreen",
+      "workstream": "RS-12.9",
+      "notes": "Battery Runs with cancel"
+    },
+    {
+      "kind": "tab",
       "key": "CaptainsHub:captains",
       "status": "implemented",
       "tui": "CaptainsScreen",
@@ -828,6 +852,22 @@
       "tui": "DocksScreen",
       "workstream": "W4.8",
       "notes": "Docks"
+    },
+    {
+      "kind": "tab",
+      "key": "CaptainsHub:profiles",
+      "status": "implemented",
+      "tui": "ModelProfilesScreen",
+      "workstream": "RS-12.9",
+      "notes": "Model Profiles"
+    },
+    {
+      "kind": "tab",
+      "key": "CaptainsHub:reliability",
+      "status": "implemented",
+      "tui": "ReliabilityScreen",
+      "workstream": "RS-12.9",
+      "notes": "Reliability summary per model and persona and the latest gate report"
     },
     {
       "kind": "tab",
@@ -1137,7 +1177,7 @@
       "kind": "api",
       "key": "addBlackBoxNote",
       "status": "implemented",
-      "tui": "ArmadaClient.AddBlackBoxNoteAsync",
+      "tui": "ArmadaClient.BlackBox.AddNoteAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -1145,7 +1185,7 @@
       "kind": "api",
       "key": "applyBlackBoxRecommendation",
       "status": "implemented",
-      "tui": "ArmadaClient.ApplyBlackBoxRecommendationAsync",
+      "tui": "ArmadaClient.BlackBox.ApplyRecommendationAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -1153,7 +1193,7 @@
       "kind": "api",
       "key": "applyFleetRecommendations",
       "status": "implemented",
-      "tui": "ArmadaClient.ApplyFleetRecommendationsAsync",
+      "tui": "ArmadaClient.VesselImport.ApplyFleetRecommendationsAsync",
       "workstream": "W0.2",
       "notes": "Vessel Import"
     },
@@ -1161,7 +1201,7 @@
       "kind": "api",
       "key": "applyModelAlertAction",
       "status": "implemented",
-      "tui": "ArmadaClient.ApplyModelAlertActionAsync",
+      "tui": "ArmadaClient.ModelAlerts.ApplyActionAsync",
       "workstream": "W0.2",
       "notes": "Model Probes (model alert suggested actions on the Needs You inbox)"
     },
@@ -1169,7 +1209,7 @@
       "kind": "api",
       "key": "applyObjectiveRefinementSummary",
       "status": "implemented",
-      "tui": "ArmadaClient.ApplyObjectiveRefinementSummaryAsync",
+      "tui": "ArmadaClient.Objectives.ApplyRefinementSummaryAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -1177,7 +1217,7 @@
       "kind": "api",
       "key": "approveAskProposal",
       "status": "implemented",
-      "tui": "ArmadaClient.ApproveAskProposalAsync",
+      "tui": "ArmadaClient.Ask.ApproveProposalAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -1185,7 +1225,7 @@
       "kind": "api",
       "key": "approveDeployment",
       "status": "implemented",
-      "tui": "ArmadaClient.ApproveDeploymentAsync",
+      "tui": "ArmadaClient.Deployments.ApproveAsync",
       "workstream": "W0.2",
       "notes": "Deployments"
     },
@@ -1193,7 +1233,7 @@
       "kind": "api",
       "key": "approveMissionReview",
       "status": "implemented",
-      "tui": "ArmadaClient.ApproveMissionReviewAsync",
+      "tui": "ArmadaClient.Missions.ApproveReviewAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -1201,7 +1241,7 @@
       "kind": "api",
       "key": "authenticate",
       "status": "implemented",
-      "tui": "ArmadaClient.AuthenticateAsync",
+      "tui": "ArmadaClient.Auth.AuthenticateAsync",
       "workstream": "W0.2",
       "notes": "Auth"
     },
@@ -1209,7 +1249,7 @@
       "kind": "api",
       "key": "authorizeCaptainSelectionRecovery",
       "status": "implemented",
-      "tui": "ArmadaClient.AuthorizeCaptainSelectionRecoveryAsync",
+      "tui": "ArmadaClient.CaptainSelection.AuthorizeRecoveryAsync",
       "workstream": "U4",
       "notes": "Mission Captain Selection tab (MissionSelectionPanel): summary, comparison, history, preview and administrator recovery"
     },
@@ -1217,7 +1257,7 @@
       "kind": "api",
       "key": "backfillBlackBox",
       "status": "implemented",
-      "tui": "ArmadaClient.BackfillBlackBoxAsync",
+      "tui": "ArmadaClient.BlackBox.BackfillAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -1225,7 +1265,7 @@
       "kind": "api",
       "key": "browseAllVesselImport",
       "status": "implemented",
-      "tui": "ArmadaClient.BrowseAllVesselImportAsync",
+      "tui": "ArmadaClient.VesselImport.BrowseAllAsync",
       "workstream": "W0.2",
       "notes": "Vessel Import"
     },
@@ -1233,7 +1273,7 @@
       "kind": "api",
       "key": "browseVesselImport",
       "status": "implemented",
-      "tui": "ArmadaClient.BrowseVesselImportAsync",
+      "tui": "ArmadaClient.VesselImport.BrowseAsync",
       "workstream": "W0.2",
       "notes": "Vessel Import"
     },
@@ -1241,7 +1281,7 @@
       "kind": "api",
       "key": "buildVesselContext",
       "status": "implemented",
-      "tui": "ArmadaClient.BuildVesselContextAsync",
+      "tui": "ArmadaClient.Vessels.BuildContextAsync",
       "workstream": "W0.2",
       "notes": "Vessels"
     },
@@ -1249,15 +1289,23 @@
       "kind": "api",
       "key": "cancelAskTurn",
       "status": "implemented",
-      "tui": "ArmadaClient.CancelAskTurnAsync",
+      "tui": "ArmadaClient.Ask.CancelTurnAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
+      "key": "cancelBatteryRun",
+      "status": "implemented",
+      "tui": "ArmadaClient.Battery.CancelRunAsync",
+      "workstream": "W0.2",
+      "notes": "Reliability (1.5.0)"
+    },
+    {
+      "kind": "api",
       "key": "cancelFleetActionRun",
       "status": "implemented",
-      "tui": "ArmadaClient.CancelFleetActionRunAsync",
+      "tui": "ArmadaClient.FleetActions.CancelRunAsync",
       "workstream": "W0.2",
       "notes": "Fleet Actions"
     },
@@ -1265,7 +1313,7 @@
       "kind": "api",
       "key": "cancelJob",
       "status": "implemented",
-      "tui": "ArmadaClient.CancelJobAsync",
+      "tui": "ArmadaClient.Jobs.CancelAsync",
       "workstream": "W0.2",
       "notes": "Background jobs | used by JobsScreen"
     },
@@ -1273,7 +1321,7 @@
       "kind": "api",
       "key": "cancelMergeEntry",
       "status": "implemented",
-      "tui": "ArmadaClient.CancelMergeEntryAsync",
+      "tui": "ArmadaClient.MergeQueue.CancelAsync",
       "workstream": "W0.2",
       "notes": "Merge Queue"
     },
@@ -1281,7 +1329,7 @@
       "kind": "api",
       "key": "cancelModelProbeRun",
       "status": "implemented",
-      "tui": "ArmadaClient.CancelModelProbeRunAsync",
+      "tui": "ArmadaClient.ModelProbes.CancelRunAsync",
       "workstream": "W0.2",
       "notes": "Model Probes"
     },
@@ -1289,7 +1337,7 @@
       "kind": "api",
       "key": "cancelVoyage",
       "status": "implemented",
-      "tui": "ArmadaClient.CancelVoyageAsync",
+      "tui": "ArmadaClient.Voyages.CancelAsync",
       "workstream": "W0.2",
       "notes": "Voyages"
     },
@@ -1305,7 +1353,7 @@
       "kind": "api",
       "key": "categorizeVesselImport",
       "status": "implemented",
-      "tui": "ArmadaClient.CategorizeVesselImportAsync",
+      "tui": "ArmadaClient.VesselImport.CategorizeAsync",
       "workstream": "W0.2",
       "notes": "Vessel Import"
     },
@@ -1313,7 +1361,7 @@
       "kind": "api",
       "key": "changePassword",
       "status": "implemented",
-      "tui": "ArmadaClient.ChangePasswordAsync",
+      "tui": "ArmadaClient.Auth.ChangePasswordAsync",
       "workstream": "W0.2",
       "notes": "Auth"
     },
@@ -1321,7 +1369,7 @@
       "kind": "api",
       "key": "chatWithCaptain",
       "status": "implemented",
-      "tui": "ArmadaClient.ChatWithCaptainAsync",
+      "tui": "ArmadaClient.Ask.ChatWithCaptainAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada"
     },
@@ -1329,7 +1377,7 @@
       "kind": "api",
       "key": "classifyStageOutcome",
       "status": "implemented",
-      "tui": "ArmadaClient.ClassifyStageOutcomeAsync",
+      "tui": "ArmadaClient.StageOutcomes.ClassifyAsync",
       "workstream": "W0.2",
       "notes": "Stage outcomes and failure-cause rules"
     },
@@ -1337,7 +1385,7 @@
       "kind": "api",
       "key": "clearProxySessionInstance",
       "status": "implemented",
-      "tui": "ArmadaClient.ClearProxySessionInstanceAsync",
+      "tui": "ArmadaClient.Auth.ClearProxySessionInstanceAsync",
       "workstream": "W0.2",
       "notes": "Auth"
     },
@@ -1345,7 +1393,7 @@
       "kind": "api",
       "key": "createAskThread",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateAskThreadAsync",
+      "tui": "ArmadaClient.Ask.CreateThreadAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -1353,7 +1401,7 @@
       "kind": "api",
       "key": "createBacklogItem",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateBacklogItemAsync",
+      "tui": "ArmadaClient.Objectives.CreateBacklogItemAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -1361,7 +1409,7 @@
       "kind": "api",
       "key": "createBacklogRefinementSession",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateBacklogRefinementSessionAsync",
+      "tui": "ArmadaClient.Objectives.CreateBacklogRefinementSessionAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -1369,7 +1417,7 @@
       "kind": "api",
       "key": "createBatteryPack",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateBatteryPackAsync",
+      "tui": "ArmadaClient.Battery.CreatePackAsync",
       "workstream": "W0.2",
       "notes": "Battery packs"
     },
@@ -1377,7 +1425,7 @@
       "kind": "api",
       "key": "createCaptain",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateCaptainAsync",
+      "tui": "ArmadaClient.Captains.CreateAsync",
       "workstream": "W0.2",
       "notes": "Captains | used by SetupWizardScreen"
     },
@@ -1385,7 +1433,7 @@
       "kind": "api",
       "key": "createCliPermissionRule",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateCliPermissionRuleAsync",
+      "tui": "ArmadaClient.CliPermissions.CreateRuleAsync",
       "workstream": "W0.2",
       "notes": "CLI tool permissions"
     },
@@ -1393,7 +1441,7 @@
       "kind": "api",
       "key": "createCredential",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateCredentialAsync",
+      "tui": "ArmadaClient.Credentials.CreateAsync",
       "workstream": "W0.2",
       "notes": "Credentials (admin) | used by CredentialsScreen"
     },
@@ -1401,7 +1449,7 @@
       "kind": "api",
       "key": "createDeployment",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateDeploymentAsync",
+      "tui": "ArmadaClient.Deployments.CreateAsync",
       "workstream": "W0.2",
       "notes": "Deployments"
     },
@@ -1409,7 +1457,7 @@
       "kind": "api",
       "key": "createEnvironment",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateEnvironmentAsync",
+      "tui": "ArmadaClient.Environments.CreateAsync",
       "workstream": "W0.2",
       "notes": "Environments"
     },
@@ -1417,7 +1465,7 @@
       "kind": "api",
       "key": "createFailureCauseRule",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateFailureCauseRuleAsync",
+      "tui": "ArmadaClient.StageOutcomes.CreateFailureCauseRuleAsync",
       "workstream": "W0.2",
       "notes": "Stage outcomes and failure-cause rules"
     },
@@ -1425,7 +1473,7 @@
       "kind": "api",
       "key": "createFleet",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateFleetAsync",
+      "tui": "ArmadaClient.Fleets.CreateAsync",
       "workstream": "W0.2",
       "notes": "Fleets | used by SetupWizardScreen"
     },
@@ -1433,7 +1481,7 @@
       "kind": "api",
       "key": "createFleetAction",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateFleetActionAsync",
+      "tui": "ArmadaClient.FleetActions.CreateAsync",
       "workstream": "W0.2",
       "notes": "Fleet Actions; mission mode and applicability commands"
     },
@@ -1441,7 +1489,7 @@
       "kind": "api",
       "key": "createHarbor",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateHarborAsync",
+      "tui": "ArmadaClient.Harbors.CreateAsync",
       "workstream": "W0.2",
       "notes": "Harbors (host runners)"
     },
@@ -1449,7 +1497,7 @@
       "kind": "api",
       "key": "createIncident",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateIncidentAsync",
+      "tui": "ArmadaClient.Incidents.CreateAsync",
       "workstream": "W0.2",
       "notes": "Incidents"
     },
@@ -1457,7 +1505,7 @@
       "kind": "api",
       "key": "createMemory",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateMemoryAsync",
+      "tui": "ArmadaClient.Memories.CreateAsync",
       "workstream": "W0.2",
       "notes": "Memories"
     },
@@ -1465,7 +1513,7 @@
       "kind": "api",
       "key": "createMission",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateMissionAsync",
+      "tui": "ArmadaClient.Missions.CreateAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -1473,7 +1521,7 @@
       "kind": "api",
       "key": "createModelEndpoint",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateModelEndpointAsync",
+      "tui": "ArmadaClient.ModelEndpoints.CreateAsync",
       "workstream": "W0.2",
       "notes": "Model endpoints (embedding/inference)"
     },
@@ -1481,7 +1529,7 @@
       "kind": "api",
       "key": "createObjective",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateObjectiveAsync",
+      "tui": "ArmadaClient.Objectives.CreateAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -1489,7 +1537,7 @@
       "kind": "api",
       "key": "createObjectiveRefinementSession",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateObjectiveRefinementSessionAsync",
+      "tui": "ArmadaClient.Objectives.CreateRefinementSessionAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -1497,7 +1545,7 @@
       "kind": "api",
       "key": "createPersona",
       "status": "implemented",
-      "tui": "ArmadaClient.CreatePersonaAsync",
+      "tui": "ArmadaClient.Personas.CreateAsync",
       "workstream": "W0.2",
       "notes": "Personas"
     },
@@ -1505,7 +1553,7 @@
       "kind": "api",
       "key": "createPipeline",
       "status": "implemented",
-      "tui": "ArmadaClient.CreatePipelineAsync",
+      "tui": "ArmadaClient.Pipelines.CreateAsync",
       "workstream": "W0.2",
       "notes": "Pipelines"
     },
@@ -1513,7 +1561,7 @@
       "kind": "api",
       "key": "createPlanningSession",
       "status": "implemented",
-      "tui": "ArmadaClient.CreatePlanningSessionAsync",
+      "tui": "ArmadaClient.PlanningSessions.CreateAsync",
       "workstream": "W0.2",
       "notes": "Planning Sessions"
     },
@@ -1521,7 +1569,7 @@
       "kind": "api",
       "key": "createPlaybook",
       "status": "implemented",
-      "tui": "ArmadaClient.CreatePlaybookAsync",
+      "tui": "ArmadaClient.Playbooks.CreateAsync",
       "workstream": "W0.2",
       "notes": "Playbooks"
     },
@@ -1529,7 +1577,7 @@
       "kind": "api",
       "key": "createProjectProfile",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateProjectProfileAsync",
+      "tui": "ArmadaClient.ProjectProfiles.CreateAsync",
       "workstream": "W0.2",
       "notes": "Project profiles"
     },
@@ -1537,7 +1585,7 @@
       "kind": "api",
       "key": "createPromptTemplate",
       "status": "implemented",
-      "tui": "ArmadaClient.CreatePromptTemplateAsync",
+      "tui": "ArmadaClient.PromptTemplates.CreateAsync",
       "workstream": "W0.2",
       "notes": "Prompt Templates"
     },
@@ -1545,7 +1593,7 @@
       "kind": "api",
       "key": "createRelease",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateReleaseAsync",
+      "tui": "ArmadaClient.Releases.CreateAsync",
       "workstream": "W0.2",
       "notes": "Releases"
     },
@@ -1553,7 +1601,7 @@
       "kind": "api",
       "key": "createRunbook",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateRunbookAsync",
+      "tui": "ArmadaClient.Runbooks.CreateAsync",
       "workstream": "W0.2",
       "notes": "Runbooks"
     },
@@ -1561,7 +1609,7 @@
       "kind": "api",
       "key": "createSkill",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateSkillAsync",
+      "tui": "ArmadaClient.Skills.CreateAsync",
       "workstream": "W0.2",
       "notes": "Skills directory"
     },
@@ -1569,7 +1617,7 @@
       "kind": "api",
       "key": "createTenant",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateTenantAsync",
+      "tui": "ArmadaClient.Tenants.CreateAsync",
       "workstream": "W0.2",
       "notes": "Tenants (admin) | used by TenantsScreen"
     },
@@ -1577,7 +1625,7 @@
       "kind": "api",
       "key": "createUser",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateUserAsync",
+      "tui": "ArmadaClient.Users.CreateAsync",
       "workstream": "W0.2",
       "notes": "Users (admin) | used by UsersScreen"
     },
@@ -1585,7 +1633,7 @@
       "kind": "api",
       "key": "createVessel",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateVesselAsync",
+      "tui": "ArmadaClient.Vessels.CreateAsync",
       "workstream": "W0.2",
       "notes": "Vessels | used by SetupWizardScreen | VesselUpsertRequest carries the write-only gitHubTokenOverride"
     },
@@ -1593,7 +1641,7 @@
       "kind": "api",
       "key": "createVoyage",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateVoyageAsync",
+      "tui": "ArmadaClient.Voyages.CreateAsync",
       "workstream": "W0.2",
       "notes": "Voyages"
     },
@@ -1601,7 +1649,7 @@
       "kind": "api",
       "key": "createWorkflowProfile",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateWorkflowProfileAsync",
+      "tui": "ArmadaClient.WorkflowProfiles.CreateAsync",
       "workstream": "W0.2",
       "notes": "Workflow Profiles"
     },
@@ -1609,7 +1657,7 @@
       "kind": "api",
       "key": "createWorkspaceDirectory",
       "status": "implemented",
-      "tui": "ArmadaClient.CreateWorkspaceDirectoryAsync",
+      "tui": "ArmadaClient.Workspace.CreateDirectoryAsync",
       "workstream": "W0.2",
       "notes": "Workspace"
     },
@@ -1617,7 +1665,7 @@
       "kind": "api",
       "key": "decideCliPermissionRequest",
       "status": "implemented",
-      "tui": "ArmadaClient.DecideCliPermissionRequestAsync",
+      "tui": "ArmadaClient.CliPermissions.DecideRequestAsync",
       "workstream": "W0.2",
       "notes": "CLI tool permissions"
     },
@@ -1625,7 +1673,7 @@
       "kind": "api",
       "key": "deleteAskThread",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteAskThreadAsync",
+      "tui": "ArmadaClient.Ask.DeleteThreadAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -1633,7 +1681,7 @@
       "kind": "api",
       "key": "deleteAskThreads",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteAskThreadsAsync",
+      "tui": "ArmadaClient.Ask.DeleteThreadsAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -1641,7 +1689,7 @@
       "kind": "api",
       "key": "deleteBacklogItem",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteBacklogItemAsync",
+      "tui": "ArmadaClient.Objectives.DeleteBacklogItemAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -1649,7 +1697,7 @@
       "kind": "api",
       "key": "deleteBatteryPack",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteBatteryPackAsync",
+      "tui": "ArmadaClient.Battery.DeletePackAsync",
       "workstream": "W0.2",
       "notes": "Battery packs"
     },
@@ -1657,7 +1705,7 @@
       "kind": "api",
       "key": "deleteBatteryPackFile",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteBatteryPackFileAsync",
+      "tui": "ArmadaClient.Battery.DeletePackFileAsync",
       "workstream": "W0.2",
       "notes": "Battery packs"
     },
@@ -1665,7 +1713,7 @@
       "kind": "api",
       "key": "deleteBlackBox",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteBlackBoxAsync",
+      "tui": "ArmadaClient.BlackBox.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -1673,7 +1721,7 @@
       "kind": "api",
       "key": "deleteBlackBoxEntries",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteBlackBoxEntriesAsync",
+      "tui": "ArmadaClient.BlackBox.DeleteEntriesAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -1681,7 +1729,7 @@
       "kind": "api",
       "key": "deleteCaptain",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteCaptainAsync",
+      "tui": "ArmadaClient.Captains.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Captains"
     },
@@ -1689,7 +1737,7 @@
       "kind": "api",
       "key": "deleteCheckRun",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteCheckRunAsync",
+      "tui": "ArmadaClient.CheckRuns.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Check Runs"
     },
@@ -1697,7 +1745,7 @@
       "kind": "api",
       "key": "deleteCliPermissionRule",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteCliPermissionRuleAsync",
+      "tui": "ArmadaClient.CliPermissions.DeleteRuleAsync",
       "workstream": "W0.2",
       "notes": "CLI tool permissions"
     },
@@ -1705,7 +1753,7 @@
       "kind": "api",
       "key": "deleteCredential",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteCredentialAsync",
+      "tui": "ArmadaClient.Credentials.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Credentials (admin) | used by CredentialsScreen"
     },
@@ -1713,7 +1761,7 @@
       "kind": "api",
       "key": "deleteDeployment",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteDeploymentAsync",
+      "tui": "ArmadaClient.Deployments.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Deployments"
     },
@@ -1721,7 +1769,7 @@
       "kind": "api",
       "key": "deleteDock",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteDockAsync",
+      "tui": "ArmadaClient.Docks.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Docks"
     },
@@ -1729,7 +1777,7 @@
       "kind": "api",
       "key": "deleteEnvironment",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteEnvironmentAsync",
+      "tui": "ArmadaClient.Environments.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Environments"
     },
@@ -1737,7 +1785,7 @@
       "kind": "api",
       "key": "deleteEventsBatch",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteEventsBatchAsync",
+      "tui": "ArmadaClient.Events.DeleteBatchAsync",
       "workstream": "W0.2",
       "notes": "Events | used by EventsScreen"
     },
@@ -1745,7 +1793,7 @@
       "kind": "api",
       "key": "deleteFailureCauseRule",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteFailureCauseRuleAsync",
+      "tui": "ArmadaClient.StageOutcomes.DeleteFailureCauseRuleAsync",
       "workstream": "W0.2",
       "notes": "Stage outcomes and failure-cause rules"
     },
@@ -1753,7 +1801,7 @@
       "kind": "api",
       "key": "deleteFleet",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteFleetAsync",
+      "tui": "ArmadaClient.Fleets.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Fleets"
     },
@@ -1761,7 +1809,7 @@
       "kind": "api",
       "key": "deleteFleetAction",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteFleetActionAsync",
+      "tui": "ArmadaClient.FleetActions.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Fleet Actions"
     },
@@ -1769,7 +1817,7 @@
       "kind": "api",
       "key": "deleteFleetsBatch",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteFleetsBatchAsync",
+      "tui": "ArmadaClient.Fleets.DeleteBatchAsync",
       "workstream": "W0.2",
       "notes": "Fleets"
     },
@@ -1777,7 +1825,7 @@
       "kind": "api",
       "key": "deleteHarbor",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteHarborAsync",
+      "tui": "ArmadaClient.Harbors.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Harbors (host runners)"
     },
@@ -1785,7 +1833,7 @@
       "kind": "api",
       "key": "deleteIncident",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteIncidentAsync",
+      "tui": "ArmadaClient.Incidents.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Incidents"
     },
@@ -1793,7 +1841,7 @@
       "kind": "api",
       "key": "deleteMemory",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteMemoryAsync",
+      "tui": "ArmadaClient.Memories.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Memories"
     },
@@ -1801,7 +1849,7 @@
       "kind": "api",
       "key": "deleteMergeEntry",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteMergeEntryAsync",
+      "tui": "ArmadaClient.MergeQueue.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Merge Queue"
     },
@@ -1809,7 +1857,7 @@
       "kind": "api",
       "key": "deleteMission",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteMissionAsync",
+      "tui": "ArmadaClient.Missions.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -1817,7 +1865,7 @@
       "kind": "api",
       "key": "deleteModelEndpoint",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteModelEndpointAsync",
+      "tui": "ArmadaClient.ModelEndpoints.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Model endpoints (embedding/inference)"
     },
@@ -1825,7 +1873,7 @@
       "kind": "api",
       "key": "deleteObjective",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteObjectiveAsync",
+      "tui": "ArmadaClient.Objectives.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -1833,7 +1881,7 @@
       "kind": "api",
       "key": "deleteObjectiveRefinementSession",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteObjectiveRefinementSessionAsync",
+      "tui": "ArmadaClient.Objectives.DeleteRefinementSessionAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -1841,7 +1889,7 @@
       "kind": "api",
       "key": "deletePersona",
       "status": "implemented",
-      "tui": "ArmadaClient.DeletePersonaAsync",
+      "tui": "ArmadaClient.Personas.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Personas"
     },
@@ -1849,7 +1897,7 @@
       "kind": "api",
       "key": "deletePipeline",
       "status": "implemented",
-      "tui": "ArmadaClient.DeletePipelineAsync",
+      "tui": "ArmadaClient.Pipelines.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Pipelines"
     },
@@ -1857,7 +1905,7 @@
       "kind": "api",
       "key": "deletePlanningSession",
       "status": "implemented",
-      "tui": "ArmadaClient.DeletePlanningSessionAsync",
+      "tui": "ArmadaClient.PlanningSessions.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Planning Sessions"
     },
@@ -1865,7 +1913,7 @@
       "kind": "api",
       "key": "deletePlaybook",
       "status": "implemented",
-      "tui": "ArmadaClient.DeletePlaybookAsync",
+      "tui": "ArmadaClient.Playbooks.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Playbooks"
     },
@@ -1873,7 +1921,7 @@
       "kind": "api",
       "key": "deleteProjectProfile",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteProjectProfileAsync",
+      "tui": "ArmadaClient.ProjectProfiles.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Project profiles"
     },
@@ -1881,7 +1929,7 @@
       "kind": "api",
       "key": "deleteRelease",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteReleaseAsync",
+      "tui": "ArmadaClient.Releases.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Releases"
     },
@@ -1889,7 +1937,7 @@
       "kind": "api",
       "key": "deleteRequestHistoryByFilter",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteRequestHistoryByFilterAsync",
+      "tui": "ArmadaClient.RequestHistory.DeleteByFilterAsync",
       "workstream": "W0.2",
       "notes": "Request History | used by RequestHistoryScreen"
     },
@@ -1897,7 +1945,7 @@
       "kind": "api",
       "key": "deleteRequestHistoryEntries",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteRequestHistoryEntriesAsync",
+      "tui": "ArmadaClient.RequestHistory.DeleteEntriesAsync",
       "workstream": "W0.2",
       "notes": "Request History | used by RequestHistoryScreen"
     },
@@ -1905,7 +1953,7 @@
       "kind": "api",
       "key": "deleteRequestHistoryEntry",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteRequestHistoryEntryAsync",
+      "tui": "ArmadaClient.RequestHistory.DeleteEntryAsync",
       "workstream": "W0.2",
       "notes": "Request History | used by ActivityScreen, RequestHistoryScreen"
     },
@@ -1913,7 +1961,7 @@
       "kind": "api",
       "key": "deleteRunbook",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteRunbookAsync",
+      "tui": "ArmadaClient.Runbooks.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Runbooks"
     },
@@ -1921,7 +1969,7 @@
       "kind": "api",
       "key": "deleteRunbookExecution",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteRunbookExecutionAsync",
+      "tui": "ArmadaClient.Runbooks.DeleteExecutionAsync",
       "workstream": "W0.2",
       "notes": "Runbooks"
     },
@@ -1929,7 +1977,7 @@
       "kind": "api",
       "key": "deleteSignalsBatch",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteSignalsBatchAsync",
+      "tui": "ArmadaClient.Signals.DeleteBatchAsync",
       "workstream": "W0.2",
       "notes": "Signals | used by SignalsScreen"
     },
@@ -1937,7 +1985,7 @@
       "kind": "api",
       "key": "deleteSkill",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteSkillAsync",
+      "tui": "ArmadaClient.Skills.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Skills directory"
     },
@@ -1945,7 +1993,7 @@
       "kind": "api",
       "key": "deleteTenant",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteTenantAsync",
+      "tui": "ArmadaClient.Tenants.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Tenants (admin) | used by TenantsScreen"
     },
@@ -1953,7 +2001,7 @@
       "kind": "api",
       "key": "deleteUser",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteUserAsync",
+      "tui": "ArmadaClient.Users.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Users (admin) | used by UsersScreen"
     },
@@ -1961,7 +2009,7 @@
       "kind": "api",
       "key": "deleteVessel",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteVesselAsync",
+      "tui": "ArmadaClient.Vessels.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Vessels"
     },
@@ -1969,7 +2017,7 @@
       "kind": "api",
       "key": "deleteVesselHealthOverride",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteVesselHealthOverrideAsync",
+      "tui": "ArmadaClient.VesselHealth.DeleteOverrideAsync",
       "workstream": "W0.2",
       "notes": "Vessel Health"
     },
@@ -1977,7 +2025,7 @@
       "kind": "api",
       "key": "deleteWorkflowProfile",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteWorkflowProfileAsync",
+      "tui": "ArmadaClient.WorkflowProfiles.DeleteAsync",
       "workstream": "W0.2",
       "notes": "Workflow Profiles"
     },
@@ -1985,7 +2033,7 @@
       "kind": "api",
       "key": "deleteWorkflowProfilesBatch",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteWorkflowProfilesBatchAsync",
+      "tui": "ArmadaClient.WorkflowProfiles.DeleteBatchAsync",
       "workstream": "W0.2",
       "notes": "Workflow Profiles"
     },
@@ -1993,7 +2041,7 @@
       "kind": "api",
       "key": "deleteWorkspaceEntry",
       "status": "implemented",
-      "tui": "ArmadaClient.DeleteWorkspaceEntryAsync",
+      "tui": "ArmadaClient.Workspace.DeleteEntryAsync",
       "workstream": "W0.2",
       "notes": "Workspace"
     },
@@ -2001,7 +2049,7 @@
       "kind": "api",
       "key": "denyDeployment",
       "status": "implemented",
-      "tui": "ArmadaClient.DenyDeploymentAsync",
+      "tui": "ArmadaClient.Deployments.DenyAsync",
       "workstream": "W0.2",
       "notes": "Deployments"
     },
@@ -2009,7 +2057,7 @@
       "kind": "api",
       "key": "denyMissionReview",
       "status": "implemented",
-      "tui": "ArmadaClient.DenyMissionReviewAsync",
+      "tui": "ArmadaClient.Missions.DenyReviewAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2017,7 +2065,7 @@
       "kind": "api",
       "key": "diffBlackBoxEntries",
       "status": "implemented",
-      "tui": "ArmadaClient.DiffBlackBoxEntriesAsync",
+      "tui": "ArmadaClient.BlackBoxInsights.DiffEntriesAsync",
       "workstream": "BB",
       "notes": "Black box entry screen Diff tab (D picks another attempt or entry)"
     },
@@ -2025,7 +2073,7 @@
       "kind": "api",
       "key": "disableHarbor",
       "status": "implemented",
-      "tui": "ArmadaClient.DisableHarborAsync",
+      "tui": "ArmadaClient.Harbors.DisableAsync",
       "workstream": "W0.2",
       "notes": "Harbors (host runners)"
     },
@@ -2033,7 +2081,7 @@
       "kind": "api",
       "key": "discoverVesselImport",
       "status": "implemented",
-      "tui": "ArmadaClient.DiscoverVesselImportAsync",
+      "tui": "ArmadaClient.VesselImport.DiscoverAsync",
       "workstream": "W0.2",
       "notes": "Vessel Import"
     },
@@ -2041,7 +2089,7 @@
       "kind": "api",
       "key": "dispatchMission",
       "status": "implemented",
-      "tui": "ArmadaClient.DispatchMissionAsync",
+      "tui": "ArmadaClient.Missions.DispatchAsync",
       "workstream": "W0.2",
       "notes": "Missions | used by SetupWizardScreen"
     },
@@ -2049,7 +2097,7 @@
       "kind": "api",
       "key": "dispatchPlanningSession",
       "status": "implemented",
-      "tui": "ArmadaClient.DispatchPlanningSessionAsync",
+      "tui": "ArmadaClient.PlanningSessions.DispatchAsync",
       "workstream": "W0.2",
       "notes": "Planning Sessions"
     },
@@ -2057,7 +2105,7 @@
       "kind": "api",
       "key": "downloadBackup",
       "status": "implemented",
-      "tui": "ArmadaClient.DownloadBackupAsync",
+      "tui": "ArmadaClient.Server.DownloadBackupAsync",
       "workstream": "W0.2",
       "notes": "Backup / Restore | used by ServerSettingsScreen"
     },
@@ -2065,7 +2113,7 @@
       "kind": "api",
       "key": "downloadBlackBox",
       "status": "implemented",
-      "tui": "ArmadaClient.DownloadBlackBoxAsync",
+      "tui": "ArmadaClient.BlackBox.DownloadAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2073,7 +2121,7 @@
       "kind": "api",
       "key": "draftFailureCauseRule",
       "status": "implemented",
-      "tui": "ArmadaClient.DraftFailureCauseRuleAsync",
+      "tui": "ArmadaClient.StageOutcomes.DraftFailureCauseRuleAsync",
       "workstream": "W0.2",
       "notes": "Stage outcomes and failure-cause rules"
     },
@@ -2081,7 +2129,7 @@
       "kind": "api",
       "key": "duplicateModelEndpoint",
       "status": "implemented",
-      "tui": "ArmadaClient.DuplicateModelEndpointAsync",
+      "tui": "ArmadaClient.ModelEndpoints.DuplicateAsync",
       "workstream": "W0.2",
       "notes": "Model endpoints (embedding/inference)"
     },
@@ -2089,7 +2137,7 @@
       "kind": "api",
       "key": "enableHarbor",
       "status": "implemented",
-      "tui": "ArmadaClient.EnableHarborAsync",
+      "tui": "ArmadaClient.Harbors.EnableAsync",
       "workstream": "W0.2",
       "notes": "Harbors (host runners)"
     },
@@ -2097,7 +2145,7 @@
       "kind": "api",
       "key": "enqueueMerge",
       "status": "implemented",
-      "tui": "ArmadaClient.EnqueueMergeAsync",
+      "tui": "ArmadaClient.MergeQueue.EnqueueAsync",
       "workstream": "W0.2",
       "notes": "Merge Queue"
     },
@@ -2105,7 +2153,7 @@
       "kind": "api",
       "key": "enumerateAskMessages",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateAskMessagesAsync",
+      "tui": "ArmadaClient.Ask.EnumerateMessagesAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2113,7 +2161,7 @@
       "kind": "api",
       "key": "enumerateAskProposals",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateAskProposalsAsync",
+      "tui": "ArmadaClient.Ask.EnumerateProposalsAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2121,7 +2169,7 @@
       "kind": "api",
       "key": "enumerateAskThreads",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateAskThreadsAsync",
+      "tui": "ArmadaClient.Ask.EnumerateThreadsAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2129,7 +2177,7 @@
       "kind": "api",
       "key": "enumerateAskToolCalls",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateAskToolCallsAsync",
+      "tui": "ArmadaClient.Ask.EnumerateToolCallsAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2137,7 +2185,7 @@
       "kind": "api",
       "key": "enumerateAskTurnToolCalls",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateAskTurnToolCallsAsync",
+      "tui": "ArmadaClient.Ask.EnumerateTurnToolCallsAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2145,7 +2193,7 @@
       "kind": "api",
       "key": "enumerateAskWork",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateAskWorkAsync",
+      "tui": "ArmadaClient.Ask.EnumerateWorkAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2153,7 +2201,7 @@
       "kind": "api",
       "key": "enumerateAskWorkMissions",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateAskWorkMissionsAsync",
+      "tui": "ArmadaClient.Ask.EnumerateWorkMissionsAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2161,7 +2209,7 @@
       "kind": "api",
       "key": "enumerateAskWorkTargets",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateAskWorkTargetsAsync",
+      "tui": "ArmadaClient.Ask.EnumerateWorkTargetsAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2169,7 +2217,7 @@
       "kind": "api",
       "key": "enumerateBacklog",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateBacklogAsync",
+      "tui": "ArmadaClient.Objectives.EnumerateBacklogAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -2177,7 +2225,7 @@
       "kind": "api",
       "key": "enumerateBlackBox",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateBlackBoxAsync",
+      "tui": "ArmadaClient.BlackBox.EnumerateAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2185,7 +2233,7 @@
       "kind": "api",
       "key": "enumerateBlackBoxFingerprints",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateBlackBoxFingerprintsAsync",
+      "tui": "ArmadaClient.BlackBox.EnumerateFingerprintsAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2193,7 +2241,7 @@
       "kind": "api",
       "key": "enumerateBlackBoxHotspots",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateBlackBoxHotspotsAsync",
+      "tui": "ArmadaClient.BlackBox.EnumerateHotspotsAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2201,7 +2249,7 @@
       "kind": "api",
       "key": "enumerateBlackBoxNotes",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateBlackBoxNotesAsync",
+      "tui": "ArmadaClient.BlackBox.EnumerateNotesAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2209,7 +2257,7 @@
       "kind": "api",
       "key": "enumerateBlackBoxObjects",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateBlackBoxObjectsAsync",
+      "tui": "ArmadaClient.BlackBox.EnumerateObjectsAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2217,7 +2265,7 @@
       "kind": "api",
       "key": "enumerateBlackBoxResilienceGaps",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateBlackBoxResilienceGapsAsync",
+      "tui": "ArmadaClient.BlackBox.EnumerateResilienceGapsAsync",
       "workstream": "BB",
       "notes": "Missions (Armada resilience gaps)"
     },
@@ -2225,7 +2273,7 @@
       "kind": "api",
       "key": "enumerateCliPermissionRules",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateCliPermissionRulesAsync",
+      "tui": "ArmadaClient.CliPermissions.EnumerateRulesAsync",
       "workstream": "W0.2",
       "notes": "CLI permissions | one page with the exact total"
     },
@@ -2233,7 +2281,7 @@
       "kind": "api",
       "key": "enumerateDeployments",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateDeploymentsAsync",
+      "tui": "ArmadaClient.Deployments.EnumerateAsync",
       "workstream": "W0.2",
       "notes": "Deployments"
     },
@@ -2241,7 +2289,7 @@
       "kind": "api",
       "key": "enumerateEnvironments",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateEnvironmentsAsync",
+      "tui": "ArmadaClient.Environments.EnumerateAsync",
       "workstream": "W0.2",
       "notes": "Environments"
     },
@@ -2249,7 +2297,7 @@
       "kind": "api",
       "key": "enumerateFleetActionRunTargets",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateFleetActionRunTargetsAsync",
+      "tui": "ArmadaClient.FleetActions.EnumerateRunTargetsAsync",
       "workstream": "W0.2",
       "notes": "Fleet Actions"
     },
@@ -2257,7 +2305,7 @@
       "kind": "api",
       "key": "enumerateFleetActionRuns",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateFleetActionRunsAsync",
+      "tui": "ArmadaClient.FleetActions.EnumerateRunsAsync",
       "workstream": "W0.2",
       "notes": "Fleet Actions"
     },
@@ -2265,7 +2313,7 @@
       "kind": "api",
       "key": "enumerateFleetActions",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateFleetActionsAsync",
+      "tui": "ArmadaClient.FleetActions.EnumerateAsync",
       "workstream": "W0.2",
       "notes": "Fleet Actions"
     },
@@ -2273,7 +2321,7 @@
       "kind": "api",
       "key": "enumerateHarbors",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateHarborsAsync",
+      "tui": "ArmadaClient.Harbors.EnumerateAsync",
       "workstream": "W0.2",
       "notes": "Harbors | one page with the exact total"
     },
@@ -2281,7 +2329,7 @@
       "kind": "api",
       "key": "enumerateHistoryTimeline",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateHistoryTimelineAsync",
+      "tui": "ArmadaClient.History.EnumerateTimelineAsync",
       "workstream": "W0.2",
       "notes": "History | used by ActivityScreen"
     },
@@ -2289,7 +2337,7 @@
       "kind": "api",
       "key": "enumerateIncidents",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateIncidentsAsync",
+      "tui": "ArmadaClient.Incidents.EnumerateAsync",
       "workstream": "W0.2",
       "notes": "Incidents"
     },
@@ -2297,7 +2345,7 @@
       "kind": "api",
       "key": "enumerateMemories",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateMemoriesAsync",
+      "tui": "ArmadaClient.Memories.EnumerateAsync",
       "workstream": "W0.2",
       "notes": "Memories"
     },
@@ -2305,7 +2353,7 @@
       "kind": "api",
       "key": "enumerateMissionBlackBoxEntries",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateMissionBlackBoxEntriesAsync",
+      "tui": "ArmadaClient.BlackBox.EnumerateMissionEntriesAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2313,7 +2361,7 @@
       "kind": "api",
       "key": "enumerateMissionPullRequestChecks",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateMissionPullRequestChecksAsync",
+      "tui": "ArmadaClient.Missions.EnumeratePullRequestChecksAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2321,7 +2369,7 @@
       "kind": "api",
       "key": "enumerateMissionPullRequestComments",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateMissionPullRequestCommentsAsync",
+      "tui": "ArmadaClient.Missions.EnumeratePullRequestCommentsAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2329,7 +2377,7 @@
       "kind": "api",
       "key": "enumerateMissionPullRequestReviews",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateMissionPullRequestReviewsAsync",
+      "tui": "ArmadaClient.Missions.EnumeratePullRequestReviewsAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2337,7 +2385,7 @@
       "kind": "api",
       "key": "enumerateModelEndpoints",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateModelEndpointsAsync",
+      "tui": "ArmadaClient.ModelEndpoints.EnumerateAsync",
       "workstream": "W0.2",
       "notes": "Model endpoints | one page with the exact total"
     },
@@ -2345,7 +2393,7 @@
       "kind": "api",
       "key": "enumerateMuxEndpoints",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateMuxEndpointsAsync",
+      "tui": "ArmadaClient.MuxEndpoints.EnumerateAsync",
       "workstream": "W0.2",
       "notes": "Runtimes | one page of saved Mux endpoints"
     },
@@ -2353,7 +2401,7 @@
       "kind": "api",
       "key": "enumerateObjectives",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateObjectivesAsync",
+      "tui": "ArmadaClient.Objectives.EnumerateAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -2361,7 +2409,7 @@
       "kind": "api",
       "key": "enumerateReleases",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateReleasesAsync",
+      "tui": "ArmadaClient.Releases.EnumerateAsync",
       "workstream": "W0.2",
       "notes": "Releases"
     },
@@ -2369,7 +2417,7 @@
       "kind": "api",
       "key": "enumerateRunbookExecutions",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateRunbookExecutionsAsync",
+      "tui": "ArmadaClient.Runbooks.EnumerateExecutionsAsync",
       "workstream": "W0.2",
       "notes": "Runbooks"
     },
@@ -2377,7 +2425,7 @@
       "kind": "api",
       "key": "enumerateRunbooks",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateRunbooksAsync",
+      "tui": "ArmadaClient.Runbooks.EnumerateAsync",
       "workstream": "W0.2",
       "notes": "Runbooks"
     },
@@ -2385,7 +2433,7 @@
       "kind": "api",
       "key": "enumerateVesselHealth",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateVesselHealthAsync",
+      "tui": "ArmadaClient.VesselHealth.EnumerateAsync",
       "workstream": "W0.2",
       "notes": "Vessel Health"
     },
@@ -2393,7 +2441,7 @@
       "kind": "api",
       "key": "enumerateVesselImportBatches",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateVesselImportBatchesAsync",
+      "tui": "ArmadaClient.VesselImport.EnumerateBatchesAsync",
       "workstream": "W0.2",
       "notes": "Vessel Import"
     },
@@ -2401,7 +2449,7 @@
       "kind": "api",
       "key": "enumerateVoyageProgress",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateVoyageProgressAsync",
+      "tui": "ArmadaClient.Voyages.EnumerateProgressAsync",
       "workstream": "W0.2",
       "notes": "Voyages"
     },
@@ -2409,7 +2457,7 @@
       "kind": "api",
       "key": "enumerateWorkflowProfiles",
       "status": "implemented",
-      "tui": "ArmadaClient.EnumerateWorkflowProfilesAsync",
+      "tui": "ArmadaClient.WorkflowProfiles.EnumerateAsync",
       "workstream": "W0.2",
       "notes": "Workflow Profiles"
     },
@@ -2417,7 +2465,7 @@
       "kind": "api",
       "key": "evaluateCaptain",
       "status": "implemented",
-      "tui": "ArmadaClient.EvaluateCaptainAsync",
+      "tui": "ArmadaClient.ModelProbes.EvaluateCaptainAsync",
       "workstream": "W0.2",
       "notes": "Model Probes"
     },
@@ -2425,7 +2473,7 @@
       "kind": "api",
       "key": "evaluateModelEndpoint",
       "status": "implemented",
-      "tui": "ArmadaClient.EvaluateModelEndpointAsync",
+      "tui": "ArmadaClient.ModelProbes.EvaluateModelEndpointAsync",
       "workstream": "W0.2",
       "notes": "Model Probes"
     },
@@ -2433,7 +2481,7 @@
       "kind": "api",
       "key": "evaluateVesselHealth",
       "status": "implemented",
-      "tui": "ArmadaClient.EvaluateVesselHealthAsync",
+      "tui": "ArmadaClient.VesselHealth.EvaluateAsync",
       "workstream": "W0.2",
       "notes": "Vessel Health | a 409 (already running) is returned like a success, as on the dashboard"
     },
@@ -2441,7 +2489,7 @@
       "kind": "api",
       "key": "execWorkspaceCommand",
       "status": "implemented",
-      "tui": "ArmadaClient.ExecWorkspaceCommandAsync",
+      "tui": "ArmadaClient.Workspace.ExecCommandAsync",
       "workstream": "W0.2",
       "notes": "Workspace terminal"
     },
@@ -2449,7 +2497,7 @@
       "kind": "api",
       "key": "exportBlackBoxFixture",
       "status": "implemented",
-      "tui": "ArmadaClient.ExportBlackBoxFixtureAsync",
+      "tui": "ArmadaClient.BlackBox.ExportFixtureAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2457,7 +2505,7 @@
       "kind": "api",
       "key": "getAskQuickActions",
       "status": "implemented",
-      "tui": "ArmadaClient.GetAskQuickActionsAsync",
+      "tui": "ArmadaClient.Ask.GetQuickActionsAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2465,7 +2513,7 @@
       "kind": "api",
       "key": "getAskThread",
       "status": "implemented",
-      "tui": "ArmadaClient.GetAskThreadAsync",
+      "tui": "ArmadaClient.Ask.GetThreadAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2473,7 +2521,7 @@
       "kind": "api",
       "key": "getAskWorkSnapshot",
       "status": "implemented",
-      "tui": "ArmadaClient.GetAskWorkSnapshotAsync",
+      "tui": "ArmadaClient.Ask.GetWorkSnapshotAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2481,7 +2529,7 @@
       "kind": "api",
       "key": "getBacklogItem",
       "status": "implemented",
-      "tui": "ArmadaClient.GetBacklogItemAsync",
+      "tui": "ArmadaClient.Objectives.GetBacklogItemAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -2489,7 +2537,7 @@
       "kind": "api",
       "key": "getBatteryPack",
       "status": "implemented",
-      "tui": "ArmadaClient.GetBatteryPackAsync",
+      "tui": "ArmadaClient.Battery.GetPackAsync",
       "workstream": "W0.2",
       "notes": "Battery packs"
     },
@@ -2497,7 +2545,7 @@
       "kind": "api",
       "key": "getBlackBox",
       "status": "implemented",
-      "tui": "ArmadaClient.GetBlackBoxAsync",
+      "tui": "ArmadaClient.BlackBox.GetAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2505,7 +2553,7 @@
       "kind": "api",
       "key": "getBlackBoxBrief",
       "status": "implemented",
-      "tui": "ArmadaClient.GetBlackBoxBriefAsync",
+      "tui": "ArmadaClient.BlackBox.GetBriefAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2513,7 +2561,7 @@
       "kind": "api",
       "key": "getBlackBoxBundle",
       "status": "implemented",
-      "tui": "ArmadaClient.GetBlackBoxBundleAsync",
+      "tui": "ArmadaClient.BlackBox.GetBundleAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2521,7 +2569,7 @@
       "kind": "api",
       "key": "getBlackBoxFingerprintTrend",
       "status": "implemented",
-      "tui": "ArmadaClient.GetBlackBoxFingerprintTrendAsync",
+      "tui": "ArmadaClient.BlackBox.GetFingerprintTrendAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2529,7 +2577,7 @@
       "kind": "api",
       "key": "getBlackBoxRecoveryStats",
       "status": "implemented",
-      "tui": "ArmadaClient.GetBlackBoxRecoveryStatsAsync",
+      "tui": "ArmadaClient.BlackBoxInsights.GetRecoveryStatsAsync",
       "workstream": "BB",
       "notes": "Black Box list R (recovery stats view)"
     },
@@ -2537,7 +2585,7 @@
       "kind": "api",
       "key": "getBlackBoxRetention",
       "status": "implemented",
-      "tui": "ArmadaClient.GetBlackBoxRetentionAsync",
+      "tui": "ArmadaClient.BlackBox.GetRetentionAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2545,7 +2593,7 @@
       "kind": "api",
       "key": "getBlackBoxSection",
       "status": "implemented",
-      "tui": "ArmadaClient.GetBlackBoxSectionAsync",
+      "tui": "ArmadaClient.BlackBox.GetSectionAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2553,7 +2601,7 @@
       "kind": "api",
       "key": "getBlackBoxStorage",
       "status": "implemented",
-      "tui": "ArmadaClient.GetBlackBoxStorageAsync",
+      "tui": "ArmadaClient.BlackBox.GetStorageAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2561,7 +2609,7 @@
       "kind": "api",
       "key": "getBlackBoxStorageMigration",
       "status": "implemented",
-      "tui": "ArmadaClient.GetBlackBoxStorageMigrationAsync",
+      "tui": "ArmadaClient.BlackBox.GetStorageMigrationAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2569,7 +2617,7 @@
       "kind": "api",
       "key": "getBlackBoxTimeline",
       "status": "implemented",
-      "tui": "ArmadaClient.GetBlackBoxTimelineAsync",
+      "tui": "ArmadaClient.BlackBoxInsights.GetTimelineAsync",
       "workstream": "BB",
       "notes": "Black box entry screen Timeline tab (server paged)"
     },
@@ -2577,7 +2625,7 @@
       "kind": "api",
       "key": "getCaptain",
       "status": "implemented",
-      "tui": "ArmadaClient.GetCaptainAsync",
+      "tui": "ArmadaClient.Captains.GetAsync",
       "workstream": "W0.2",
       "notes": "Captains"
     },
@@ -2585,7 +2633,7 @@
       "kind": "api",
       "key": "getCaptainLog",
       "status": "implemented",
-      "tui": "ArmadaClient.GetCaptainLogAsync",
+      "tui": "ArmadaClient.Captains.GetLogAsync",
       "workstream": "W0.2",
       "notes": "Captains"
     },
@@ -2593,7 +2641,7 @@
       "kind": "api",
       "key": "getCaptainSelection",
       "status": "implemented",
-      "tui": "ArmadaClient.GetCaptainSelectionAsync",
+      "tui": "ArmadaClient.CaptainSelection.GetAsync",
       "workstream": "U4",
       "notes": "Mission Captain Selection tab (MissionSelectionPanel): summary, comparison, history, preview and administrator recovery"
     },
@@ -2601,7 +2649,7 @@
       "kind": "api",
       "key": "getCaptainSelectionCandidates",
       "status": "implemented",
-      "tui": "ArmadaClient.GetCaptainSelectionCandidatesAsync",
+      "tui": "ArmadaClient.CaptainSelection.GetCandidatesAsync",
       "workstream": "U4",
       "notes": "Mission Captain Selection tab (MissionSelectionPanel): summary, comparison, history, preview and administrator recovery"
     },
@@ -2609,7 +2657,7 @@
       "kind": "api",
       "key": "getCaptainSelectionDecision",
       "status": "implemented",
-      "tui": "ArmadaClient.GetCaptainSelectionDecisionAsync",
+      "tui": "ArmadaClient.CaptainSelection.GetDecisionAsync",
       "workstream": "U4",
       "notes": "Mission Captain Selection tab (MissionSelectionPanel): summary, comparison, history, preview and administrator recovery"
     },
@@ -2617,7 +2665,7 @@
       "kind": "api",
       "key": "getCaptainSelectionHistory",
       "status": "implemented",
-      "tui": "ArmadaClient.GetCaptainSelectionHistoryAsync",
+      "tui": "ArmadaClient.CaptainSelection.GetHistoryAsync",
       "workstream": "U4",
       "notes": "Mission Captain Selection tab (MissionSelectionPanel): summary, comparison, history, preview and administrator recovery"
     },
@@ -2625,7 +2673,7 @@
       "kind": "api",
       "key": "getCaptainTools",
       "status": "implemented",
-      "tui": "ArmadaClient.GetCaptainToolsAsync",
+      "tui": "ArmadaClient.Captains.GetToolsAsync",
       "workstream": "W0.2",
       "notes": "Captains"
     },
@@ -2633,7 +2681,7 @@
       "kind": "api",
       "key": "getCheckRun",
       "status": "implemented",
-      "tui": "ArmadaClient.GetCheckRunAsync",
+      "tui": "ArmadaClient.CheckRuns.GetAsync",
       "workstream": "W0.2",
       "notes": "Check Runs"
     },
@@ -2641,7 +2689,7 @@
       "kind": "api",
       "key": "getCliPermissionRequest",
       "status": "implemented",
-      "tui": "ArmadaClient.GetCliPermissionRequestAsync",
+      "tui": "ArmadaClient.CliPermissions.GetRequestAsync",
       "workstream": "W0.2",
       "notes": "CLI tool permissions"
     },
@@ -2649,7 +2697,7 @@
       "kind": "api",
       "key": "getCliPermissionRule",
       "status": "implemented",
-      "tui": "ArmadaClient.GetCliPermissionRuleAsync",
+      "tui": "ArmadaClient.CliPermissions.GetRuleAsync",
       "workstream": "W0.2",
       "notes": "CLI tool permissions"
     },
@@ -2657,7 +2705,7 @@
       "kind": "api",
       "key": "getConcurrencyMetrics",
       "status": "implemented",
-      "tui": "ArmadaClient.GetConcurrencyMetricsAsync",
+      "tui": "ArmadaClient.Concurrency.GetMetricsAsync",
       "workstream": "W0.2",
       "notes": "Concurrency wait aggregates"
     },
@@ -2665,7 +2713,7 @@
       "kind": "api",
       "key": "getDeployment",
       "status": "implemented",
-      "tui": "ArmadaClient.GetDeploymentAsync",
+      "tui": "ArmadaClient.Deployments.GetAsync",
       "workstream": "W0.2",
       "notes": "Deployments"
     },
@@ -2673,7 +2721,7 @@
       "kind": "api",
       "key": "getDock",
       "status": "implemented",
-      "tui": "ArmadaClient.GetDockAsync",
+      "tui": "ArmadaClient.Docks.GetAsync",
       "workstream": "W0.2",
       "notes": "Docks"
     },
@@ -2681,7 +2729,7 @@
       "kind": "api",
       "key": "getDoctor",
       "status": "implemented",
-      "tui": "ArmadaClient.GetDoctorAsync",
+      "tui": "ArmadaClient.Status.GetDoctorAsync",
       "workstream": "W0.2",
       "notes": "Status / Health | used by DiagnosticsScreen"
     },
@@ -2689,7 +2737,7 @@
       "kind": "api",
       "key": "getEntity",
       "status": "implemented",
-      "tui": "ArmadaClient.GetEntityAsync",
+      "tui": "ArmadaClient.Entities.GetAsync",
       "workstream": "W0.2",
       "notes": "Generic entity lookup"
     },
@@ -2697,7 +2745,7 @@
       "kind": "api",
       "key": "getEnvironment",
       "status": "implemented",
-      "tui": "ArmadaClient.GetEnvironmentAsync",
+      "tui": "ArmadaClient.Environments.GetAsync",
       "workstream": "W0.2",
       "notes": "Environments"
     },
@@ -2705,7 +2753,7 @@
       "kind": "api",
       "key": "getEvent",
       "status": "implemented",
-      "tui": "ArmadaClient.GetEventAsync",
+      "tui": "ArmadaClient.Events.GetAsync",
       "workstream": "W0.2",
       "notes": "Events | used by EventsScreen"
     },
@@ -2713,7 +2761,7 @@
       "kind": "api",
       "key": "getFailureCauseRule",
       "status": "implemented",
-      "tui": "ArmadaClient.GetFailureCauseRuleAsync",
+      "tui": "ArmadaClient.StageOutcomes.GetFailureCauseRuleAsync",
       "workstream": "W0.2",
       "notes": "Stage outcomes and failure-cause rules"
     },
@@ -2721,7 +2769,7 @@
       "kind": "api",
       "key": "getFleet",
       "status": "implemented",
-      "tui": "ArmadaClient.GetFleetAsync",
+      "tui": "ArmadaClient.Fleets.GetAsync",
       "workstream": "W0.2",
       "notes": "Fleets"
     },
@@ -2729,7 +2777,7 @@
       "kind": "api",
       "key": "getFleetAction",
       "status": "implemented",
-      "tui": "ArmadaClient.GetFleetActionAsync",
+      "tui": "ArmadaClient.FleetActions.GetAsync",
       "workstream": "W0.2",
       "notes": "Fleet Actions"
     },
@@ -2737,7 +2785,7 @@
       "kind": "api",
       "key": "getFleetActionRun",
       "status": "implemented",
-      "tui": "ArmadaClient.GetFleetActionRunAsync",
+      "tui": "ArmadaClient.FleetActions.GetRunAsync",
       "workstream": "W0.2",
       "notes": "Fleet Actions"
     },
@@ -2745,7 +2793,7 @@
       "kind": "api",
       "key": "getFleetActionRunTarget",
       "status": "implemented",
-      "tui": "ArmadaClient.GetFleetActionRunTargetAsync",
+      "tui": "ArmadaClient.FleetActions.GetRunTargetAsync",
       "workstream": "W0.2",
       "notes": "Fleet Actions; target drawer and run report"
     },
@@ -2753,7 +2801,7 @@
       "kind": "api",
       "key": "getFleetCategorizationDefaultPrompt",
       "status": "implemented",
-      "tui": "ArmadaClient.GetFleetCategorizationDefaultPromptAsync",
+      "tui": "ArmadaClient.VesselImport.GetFleetCategorizationDefaultPromptAsync",
       "workstream": "W0.2",
       "notes": "Vessel Import"
     },
@@ -2761,15 +2809,23 @@
       "kind": "api",
       "key": "getFleetDetail",
       "status": "implemented",
-      "tui": "ArmadaClient.GetFleetDetailAsync",
+      "tui": "ArmadaClient.Fleets.GetDetailAsync",
       "workstream": "W0.2",
       "notes": "Fleets"
     },
     {
       "kind": "api",
+      "key": "getGateReport",
+      "status": "implemented",
+      "tui": "ArmadaClient.Reliability.GetGateReportAsync",
+      "workstream": "W0.2",
+      "notes": "Reliability (1.5.0)"
+    },
+    {
+      "kind": "api",
       "key": "getHarbor",
       "status": "implemented",
-      "tui": "ArmadaClient.GetHarborAsync",
+      "tui": "ArmadaClient.Harbors.GetAsync",
       "workstream": "W0.2",
       "notes": "Harbors (host runners)"
     },
@@ -2777,7 +2833,7 @@
       "kind": "api",
       "key": "getHarborMetrics",
       "status": "implemented",
-      "tui": "ArmadaClient.GetHarborMetricsAsync",
+      "tui": "ArmadaClient.Harbors.GetMetricsAsync",
       "workstream": "W0.2",
       "notes": "Harbors (host runners) | used by HarborsScreen (Activity panel: jobs, slots, link strip, launch speed, tokens; r range, u Token Usage)"
     },
@@ -2785,7 +2841,7 @@
       "kind": "api",
       "key": "getHealth",
       "status": "implemented",
-      "tui": "ArmadaClient.GetHealthAsync",
+      "tui": "ArmadaClient.Status.GetHealthAsync",
       "workstream": "W0.2",
       "notes": "Status / Health | used by ServerSettingsScreen"
     },
@@ -2793,7 +2849,7 @@
       "kind": "api",
       "key": "getInbox",
       "status": "implemented",
-      "tui": "ArmadaClient.GetInboxAsync",
+      "tui": "ArmadaClient.Inbox.GetAsync",
       "workstream": "W0.2",
       "notes": "Needs-you inbox"
     },
@@ -2801,7 +2857,7 @@
       "kind": "api",
       "key": "getIncident",
       "status": "implemented",
-      "tui": "ArmadaClient.GetIncidentAsync",
+      "tui": "ArmadaClient.Incidents.GetAsync",
       "workstream": "W0.2",
       "notes": "Incidents"
     },
@@ -2809,7 +2865,7 @@
       "kind": "api",
       "key": "getJob",
       "status": "implemented",
-      "tui": "ArmadaClient.GetJobAsync",
+      "tui": "ArmadaClient.Jobs.GetAsync",
       "workstream": "W0.2",
       "notes": "Background jobs"
     },
@@ -2817,7 +2873,7 @@
       "kind": "api",
       "key": "getMemory",
       "status": "implemented",
-      "tui": "ArmadaClient.GetMemoryAsync",
+      "tui": "ArmadaClient.Memories.GetAsync",
       "workstream": "W0.2",
       "notes": "Memories"
     },
@@ -2825,7 +2881,7 @@
       "kind": "api",
       "key": "getMergeEntry",
       "status": "implemented",
-      "tui": "ArmadaClient.GetMergeEntryAsync",
+      "tui": "ArmadaClient.MergeQueue.GetAsync",
       "workstream": "W0.2",
       "notes": "Merge Queue"
     },
@@ -2833,15 +2889,23 @@
       "kind": "api",
       "key": "getMission",
       "status": "implemented",
-      "tui": "ArmadaClient.GetMissionAsync",
+      "tui": "ArmadaClient.Missions.GetAsync",
       "workstream": "W0.2",
       "notes": "Missions | used by SetupWizardScreen"
     },
     {
       "kind": "api",
+      "key": "getMissionAttempts",
+      "status": "implemented",
+      "tui": "ArmadaClient.Reliability.GetMissionAttemptsAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
       "key": "getMissionBlackBox",
       "status": "implemented",
-      "tui": "ArmadaClient.GetMissionBlackBoxAsync",
+      "tui": "ArmadaClient.BlackBox.GetForMissionAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2849,7 +2913,7 @@
       "kind": "api",
       "key": "getMissionBlackBoxBrief",
       "status": "implemented",
-      "tui": "ArmadaClient.GetMissionBlackBoxBriefAsync",
+      "tui": "ArmadaClient.BlackBox.GetMissionBriefAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2857,7 +2921,7 @@
       "kind": "api",
       "key": "getMissionDiff",
       "status": "implemented",
-      "tui": "ArmadaClient.GetMissionDiffAsync",
+      "tui": "ArmadaClient.Missions.GetDiffAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2865,7 +2929,7 @@
       "kind": "api",
       "key": "getMissionGitHubPullRequest",
       "status": "implemented",
-      "tui": "ArmadaClient.GetMissionGitHubPullRequestAsync",
+      "tui": "ArmadaClient.Missions.GetGitHubPullRequestAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2873,7 +2937,7 @@
       "kind": "api",
       "key": "getMissionHistory",
       "status": "implemented",
-      "tui": "ArmadaClient.GetMissionHistoryAsync",
+      "tui": "ArmadaClient.Missions.GetHistoryAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2881,7 +2945,7 @@
       "kind": "api",
       "key": "getMissionInstructions",
       "status": "implemented",
-      "tui": "ArmadaClient.GetMissionInstructionsAsync",
+      "tui": "ArmadaClient.Missions.GetInstructionsAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2889,7 +2953,7 @@
       "kind": "api",
       "key": "getMissionLandingPreview",
       "status": "implemented",
-      "tui": "ArmadaClient.GetMissionLandingPreviewAsync",
+      "tui": "ArmadaClient.Missions.GetLandingPreviewAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2897,7 +2961,7 @@
       "kind": "api",
       "key": "getMissionLog",
       "status": "implemented",
-      "tui": "ArmadaClient.GetMissionLogAsync",
+      "tui": "ArmadaClient.Missions.GetLogAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2905,7 +2969,7 @@
       "kind": "api",
       "key": "getMissionWaits",
       "status": "implemented",
-      "tui": "ArmadaClient.GetMissionWaitsAsync",
+      "tui": "ArmadaClient.Concurrency.GetMissionWaitsAsync",
       "workstream": "W0.2",
       "notes": "Missions: wait intervals"
     },
@@ -2913,7 +2977,7 @@
       "kind": "api",
       "key": "getModelEndpoint",
       "status": "implemented",
-      "tui": "ArmadaClient.GetModelEndpointAsync",
+      "tui": "ArmadaClient.ModelEndpoints.GetAsync",
       "workstream": "W0.2",
       "notes": "Model endpoints (embedding/inference)"
     },
@@ -2921,7 +2985,15 @@
       "kind": "api",
       "key": "getModelProbeRun",
       "status": "implemented",
-      "tui": "ArmadaClient.GetModelProbeRunAsync",
+      "tui": "ArmadaClient.ModelProbes.GetRunAsync",
+      "workstream": "W0.2",
+      "notes": "Model Probes"
+    },
+    {
+      "kind": "api",
+      "key": "getModelProfile",
+      "status": "implemented",
+      "tui": "ArmadaClient.ModelProfiles.GetAsync",
       "workstream": "W0.2",
       "notes": "Model Probes"
     },
@@ -2929,7 +3001,7 @@
       "kind": "api",
       "key": "getMuxEndpoint",
       "status": "implemented",
-      "tui": "ArmadaClient.GetMuxEndpointAsync",
+      "tui": "ArmadaClient.MuxEndpoints.GetAsync",
       "workstream": "W0.2",
       "notes": "Vessel Health"
     },
@@ -2937,7 +3009,7 @@
       "kind": "api",
       "key": "getObjective",
       "status": "implemented",
-      "tui": "ArmadaClient.GetObjectiveAsync",
+      "tui": "ArmadaClient.Objectives.GetAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -2945,7 +3017,7 @@
       "kind": "api",
       "key": "getObjectiveRefinementSession",
       "status": "implemented",
-      "tui": "ArmadaClient.GetObjectiveRefinementSessionAsync",
+      "tui": "ArmadaClient.Objectives.GetRefinementSessionAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -2953,7 +3025,7 @@
       "kind": "api",
       "key": "getPersona",
       "status": "implemented",
-      "tui": "ArmadaClient.GetPersonaAsync",
+      "tui": "ArmadaClient.Personas.GetAsync",
       "workstream": "W0.2",
       "notes": "Personas"
     },
@@ -2961,7 +3033,7 @@
       "kind": "api",
       "key": "getPipeline",
       "status": "implemented",
-      "tui": "ArmadaClient.GetPipelineAsync",
+      "tui": "ArmadaClient.Pipelines.GetAsync",
       "workstream": "W0.2",
       "notes": "Pipelines"
     },
@@ -2969,7 +3041,7 @@
       "kind": "api",
       "key": "getPlanningSession",
       "status": "implemented",
-      "tui": "ArmadaClient.GetPlanningSessionAsync",
+      "tui": "ArmadaClient.PlanningSessions.GetAsync",
       "workstream": "W0.2",
       "notes": "Planning Sessions"
     },
@@ -2977,7 +3049,7 @@
       "kind": "api",
       "key": "getPlaybook",
       "status": "implemented",
-      "tui": "ArmadaClient.GetPlaybookAsync",
+      "tui": "ArmadaClient.Playbooks.GetAsync",
       "workstream": "W0.2",
       "notes": "Playbooks"
     },
@@ -2985,7 +3057,7 @@
       "kind": "api",
       "key": "getProjectProfile",
       "status": "implemented",
-      "tui": "ArmadaClient.GetProjectProfileAsync",
+      "tui": "ArmadaClient.ProjectProfiles.GetAsync",
       "workstream": "W0.2",
       "notes": "Project profiles"
     },
@@ -2993,7 +3065,7 @@
       "kind": "api",
       "key": "getPromptTemplate",
       "status": "implemented",
-      "tui": "ArmadaClient.GetPromptTemplateAsync",
+      "tui": "ArmadaClient.PromptTemplates.GetAsync",
       "workstream": "W0.2",
       "notes": "Prompt Templates"
     },
@@ -3001,7 +3073,7 @@
       "kind": "api",
       "key": "getProxySessionContext",
       "status": "implemented",
-      "tui": "ArmadaClient.GetProxySessionContextAsync",
+      "tui": "ArmadaClient.Auth.GetProxySessionContextAsync",
       "workstream": "W0.2",
       "notes": "Auth | used by ServerSettingsScreen"
     },
@@ -3009,7 +3081,7 @@
       "kind": "api",
       "key": "getRebuildStatus",
       "status": "implemented",
-      "tui": "ArmadaClient.GetRebuildStatusAsync",
+      "tui": "ArmadaClient.Server.GetRebuildStatusAsync",
       "workstream": "W0.2",
       "notes": "Server | used by ServerSettingsScreen"
     },
@@ -3017,7 +3089,7 @@
       "kind": "api",
       "key": "getRelease",
       "status": "implemented",
-      "tui": "ArmadaClient.GetReleaseAsync",
+      "tui": "ArmadaClient.Releases.GetAsync",
       "workstream": "W0.2",
       "notes": "Releases"
     },
@@ -3025,15 +3097,23 @@
       "kind": "api",
       "key": "getReleaseGitHubPullRequests",
       "status": "implemented",
-      "tui": "ArmadaClient.GetReleaseGitHubPullRequestsAsync",
+      "tui": "ArmadaClient.Releases.GetGitHubPullRequestsAsync",
       "workstream": "W0.2",
       "notes": "Releases"
     },
     {
       "kind": "api",
+      "key": "getReliabilitySummary",
+      "status": "implemented",
+      "tui": "ArmadaClient.Reliability.GetSummaryAsync",
+      "workstream": "W0.2",
+      "notes": "Reliability (1.5.0)"
+    },
+    {
+      "kind": "api",
       "key": "getRequestHistoryEntry",
       "status": "implemented",
-      "tui": "ArmadaClient.GetRequestHistoryEntryAsync",
+      "tui": "ArmadaClient.RequestHistory.GetEntryAsync",
       "workstream": "W0.2",
       "notes": "Request History | used by ApiExplorerScreen, RequestHistoryScreen"
     },
@@ -3041,7 +3121,7 @@
       "kind": "api",
       "key": "getRequestHistorySummary",
       "status": "implemented",
-      "tui": "ArmadaClient.GetRequestHistorySummaryAsync",
+      "tui": "ArmadaClient.RequestHistory.GetSummaryAsync",
       "workstream": "W0.2",
       "notes": "Request History | used by RequestHistoryScreen"
     },
@@ -3049,7 +3129,7 @@
       "kind": "api",
       "key": "getRunbook",
       "status": "implemented",
-      "tui": "ArmadaClient.GetRunbookAsync",
+      "tui": "ArmadaClient.Runbooks.GetAsync",
       "workstream": "W0.2",
       "notes": "Runbooks"
     },
@@ -3057,7 +3137,7 @@
       "kind": "api",
       "key": "getRunbookExecution",
       "status": "implemented",
-      "tui": "ArmadaClient.GetRunbookExecutionAsync",
+      "tui": "ArmadaClient.Runbooks.GetExecutionAsync",
       "workstream": "W0.2",
       "notes": "Runbooks"
     },
@@ -3065,7 +3145,7 @@
       "kind": "api",
       "key": "getSettings",
       "status": "implemented",
-      "tui": "ArmadaClient.GetSettingsAsync",
+      "tui": "ArmadaClient.Server.GetSettingsAsync",
       "workstream": "W0.2",
       "notes": "Settings | used by ServerSettingsScreen"
     },
@@ -3073,7 +3153,7 @@
       "kind": "api",
       "key": "getSignal",
       "status": "implemented",
-      "tui": "ArmadaClient.GetSignalAsync",
+      "tui": "ArmadaClient.Signals.GetAsync",
       "workstream": "W0.2",
       "notes": "Signals | used by SignalsScreen"
     },
@@ -3081,7 +3161,7 @@
       "kind": "api",
       "key": "getSkill",
       "status": "implemented",
-      "tui": "ArmadaClient.GetSkillAsync",
+      "tui": "ArmadaClient.Skills.GetAsync",
       "workstream": "W0.2",
       "notes": "Skills directory"
     },
@@ -3089,7 +3169,7 @@
       "kind": "api",
       "key": "getStageOutcome",
       "status": "implemented",
-      "tui": "ArmadaClient.GetStageOutcomeAsync",
+      "tui": "ArmadaClient.StageOutcomes.GetAsync",
       "workstream": "W0.2",
       "notes": "Stage outcomes and failure-cause rules"
     },
@@ -3097,7 +3177,7 @@
       "kind": "api",
       "key": "getStatus",
       "status": "implemented",
-      "tui": "ArmadaClient.GetStatusAsync",
+      "tui": "ArmadaClient.Status.GetAsync",
       "workstream": "W0.2",
       "notes": "Status / Health"
     },
@@ -3105,7 +3185,7 @@
       "kind": "api",
       "key": "getStorage",
       "status": "implemented",
-      "tui": "ArmadaClient.GetStorageAsync",
+      "tui": "ArmadaClient.Server.GetStorageAsync",
       "workstream": "W0.2",
       "notes": "Fleet Actions"
     },
@@ -3113,7 +3193,7 @@
       "kind": "api",
       "key": "getTokenUsage",
       "status": "implemented",
-      "tui": "ArmadaClient.GetTokenUsageAsync",
+      "tui": "ArmadaClient.TokenUsage.GetSummaryAsync",
       "workstream": "W0.2",
       "notes": "Missions | used by TokenUsageScreen (harborId filter from the Harbors screen, x clears it)"
     },
@@ -3129,7 +3209,7 @@
       "kind": "api",
       "key": "getUsageMissions",
       "status": "implemented",
-      "tui": "ArmadaClient.GetUsageMissionsAsync",
+      "tui": "ArmadaClient.Usage.GetMissionsAsync",
       "workstream": "W0.2",
       "notes": "Phase 6: account/host Limits view, captain usage and capture configuration; shared read contracts remain available."
     },
@@ -3137,7 +3217,7 @@
       "kind": "api",
       "key": "getUsageSeries",
       "status": "implemented",
-      "tui": "ArmadaClient.GetUsageSeriesAsync",
+      "tui": "ArmadaClient.Usage.GetSeriesAsync",
       "workstream": "W0.2",
       "notes": "Phase 6: account/host Limits view, captain usage and capture configuration; shared read contracts remain available."
     },
@@ -3145,7 +3225,7 @@
       "kind": "api",
       "key": "getUsageSnapshots",
       "status": "implemented",
-      "tui": "ArmadaClient.GetUsageSnapshotsAsync",
+      "tui": "ArmadaClient.Usage.GetSnapshotsAsync",
       "workstream": "W0.2",
       "notes": "Phase 6: account/host Limits view, captain usage and capture configuration; shared read contracts remain available."
     },
@@ -3153,7 +3233,7 @@
       "kind": "api",
       "key": "getVessel",
       "status": "implemented",
-      "tui": "ArmadaClient.GetVesselAsync",
+      "tui": "ArmadaClient.Vessels.GetAsync",
       "workstream": "W0.2",
       "notes": "Vessels"
     },
@@ -3161,7 +3241,7 @@
       "kind": "api",
       "key": "getVesselBlackBoxDoctor",
       "status": "implemented",
-      "tui": "ArmadaClient.GetVesselBlackBoxDoctorAsync",
+      "tui": "ArmadaClient.BlackBoxInsights.GetVesselDoctorAsync",
       "workstream": "BB",
       "notes": "Vessel screen Black Box Doctor tab (A applies through the dry run and confirm flow)"
     },
@@ -3169,7 +3249,7 @@
       "kind": "api",
       "key": "getVesselBranchCount",
       "status": "implemented",
-      "tui": "ArmadaClient.GetVesselBranchCountAsync",
+      "tui": "ArmadaClient.Vessels.GetBranchCountAsync",
       "workstream": "W0.2",
       "notes": "Vessels"
     },
@@ -3177,7 +3257,7 @@
       "kind": "api",
       "key": "getVesselBranches",
       "status": "implemented",
-      "tui": "ArmadaClient.GetVesselBranchesAsync",
+      "tui": "ArmadaClient.Vessels.GetBranchesAsync",
       "workstream": "W0.2",
       "notes": "Vessels | used by ServerSettingsScreen"
     },
@@ -3185,7 +3265,7 @@
       "kind": "api",
       "key": "getVesselCleanupInventory",
       "status": "implemented",
-      "tui": "ArmadaClient.GetVesselCleanupInventoryAsync",
+      "tui": "ArmadaClient.Vessels.GetCleanupInventoryAsync",
       "workstream": "W0.2",
       "notes": "Vessels | used by VesselCleanupDialog"
     },
@@ -3193,7 +3273,7 @@
       "kind": "api",
       "key": "getVesselCommitActivity",
       "status": "implemented",
-      "tui": "ArmadaClient.GetVesselCommitActivityAsync",
+      "tui": "ArmadaClient.Vessels.GetCommitActivityAsync",
       "workstream": "W4.4",
       "notes": "Vessels | used by VesselHistoryScreen"
     },
@@ -3201,7 +3281,7 @@
       "kind": "api",
       "key": "getVesselCommits",
       "status": "implemented",
-      "tui": "ArmadaClient.GetVesselCommitsAsync",
+      "tui": "ArmadaClient.Vessels.GetCommitsAsync",
       "workstream": "W4.4",
       "notes": "Vessels | used by VesselHistoryScreen"
     },
@@ -3209,7 +3289,7 @@
       "kind": "api",
       "key": "getVesselConcurrency",
       "status": "implemented",
-      "tui": "ArmadaClient.GetVesselConcurrencyAsync",
+      "tui": "ArmadaClient.Concurrency.GetVesselAsync",
       "workstream": "W0.2",
       "notes": "Vessels: concurrency"
     },
@@ -3217,7 +3297,7 @@
       "kind": "api",
       "key": "getVesselGitStatus",
       "status": "implemented",
-      "tui": "ArmadaClient.GetVesselGitStatusAsync",
+      "tui": "ArmadaClient.Vessels.GetGitStatusAsync",
       "workstream": "W0.2",
       "notes": "Vessels"
     },
@@ -3225,7 +3305,7 @@
       "kind": "api",
       "key": "getVesselHealth",
       "status": "implemented",
-      "tui": "ArmadaClient.GetVesselHealthAsync",
+      "tui": "ArmadaClient.VesselHealth.GetAsync",
       "workstream": "W0.2",
       "notes": "Vessel Health"
     },
@@ -3233,7 +3313,7 @@
       "kind": "api",
       "key": "getVesselHealthSummary",
       "status": "implemented",
-      "tui": "ArmadaClient.GetVesselHealthSummaryAsync",
+      "tui": "ArmadaClient.VesselHealth.GetSummaryAsync",
       "workstream": "W0.2",
       "notes": "Vessel Health"
     },
@@ -3241,7 +3321,7 @@
       "kind": "api",
       "key": "getVesselImportBatch",
       "status": "implemented",
-      "tui": "ArmadaClient.GetVesselImportBatchAsync",
+      "tui": "ArmadaClient.VesselImport.GetBatchAsync",
       "workstream": "W0.2",
       "notes": "Vessel Import"
     },
@@ -3249,7 +3329,7 @@
       "kind": "api",
       "key": "getVesselLandingPreview",
       "status": "implemented",
-      "tui": "ArmadaClient.GetVesselLandingPreviewAsync",
+      "tui": "ArmadaClient.Vessels.GetLandingPreviewAsync",
       "workstream": "W0.2",
       "notes": "Vessels"
     },
@@ -3257,7 +3337,7 @@
       "kind": "api",
       "key": "getVesselReadiness",
       "status": "implemented",
-      "tui": "ArmadaClient.GetVesselReadinessAsync",
+      "tui": "ArmadaClient.Vessels.GetReadinessAsync",
       "workstream": "W0.2",
       "notes": "Vessels | used by SetupWizardScreen"
     },
@@ -3265,7 +3345,7 @@
       "kind": "api",
       "key": "getVoyage",
       "status": "implemented",
-      "tui": "ArmadaClient.GetVoyageAsync",
+      "tui": "ArmadaClient.Voyages.GetAsync",
       "workstream": "W0.2",
       "notes": "Voyages"
     },
@@ -3273,7 +3353,7 @@
       "kind": "api",
       "key": "getVoyageBlackBox",
       "status": "implemented",
-      "tui": "ArmadaClient.GetVoyageBlackBoxAsync",
+      "tui": "ArmadaClient.BlackBox.GetForVoyageAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -3281,7 +3361,7 @@
       "kind": "api",
       "key": "getVoyageBlackBoxBrief",
       "status": "implemented",
-      "tui": "ArmadaClient.GetVoyageBlackBoxBriefAsync",
+      "tui": "ArmadaClient.BlackBox.GetVoyageBriefAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -3289,7 +3369,7 @@
       "kind": "api",
       "key": "getVoyageBlackBoxCascade",
       "status": "implemented",
-      "tui": "ArmadaClient.GetVoyageBlackBoxCascadeAsync",
+      "tui": "ArmadaClient.BlackBoxInsights.GetVoyageCascadeAsync",
       "workstream": "BB",
       "notes": "Voyage screen Cascade tab"
     },
@@ -3297,7 +3377,7 @@
       "kind": "api",
       "key": "getVoyageStatus",
       "status": "implemented",
-      "tui": "ArmadaClient.GetVoyageStatusAsync",
+      "tui": "ArmadaClient.Voyages.GetStatusAsync",
       "workstream": "W0.2",
       "notes": "Voyages"
     },
@@ -3305,7 +3385,7 @@
       "kind": "api",
       "key": "getVoyageTree",
       "status": "implemented",
-      "tui": "ArmadaClient.GetVoyageTreeAsync",
+      "tui": "ArmadaClient.Concurrency.GetVoyageTreeAsync",
       "workstream": "W0.2",
       "notes": "Voyages: mission tree"
     },
@@ -3313,7 +3393,7 @@
       "kind": "api",
       "key": "getWorkflowProfile",
       "status": "implemented",
-      "tui": "ArmadaClient.GetWorkflowProfileAsync",
+      "tui": "ArmadaClient.WorkflowProfiles.GetAsync",
       "workstream": "W0.2",
       "notes": "Workflow Profiles"
     },
@@ -3321,7 +3401,7 @@
       "kind": "api",
       "key": "getWorkspaceChanges",
       "status": "implemented",
-      "tui": "ArmadaClient.GetWorkspaceChangesAsync",
+      "tui": "ArmadaClient.Workspace.GetChangesAsync",
       "workstream": "W0.2",
       "notes": "Workspace"
     },
@@ -3329,7 +3409,7 @@
       "kind": "api",
       "key": "getWorkspaceDiff",
       "status": "implemented",
-      "tui": "ArmadaClient.GetWorkspaceDiffAsync",
+      "tui": "ArmadaClient.Workspace.GetDiffAsync",
       "workstream": "W0.2",
       "notes": "Workspace diff (review)"
     },
@@ -3337,7 +3417,7 @@
       "kind": "api",
       "key": "getWorkspaceFile",
       "status": "implemented",
-      "tui": "ArmadaClient.GetWorkspaceFileAsync",
+      "tui": "ArmadaClient.Workspace.GetFileAsync",
       "workstream": "W0.2",
       "notes": "Workspace"
     },
@@ -3345,7 +3425,7 @@
       "kind": "api",
       "key": "getWorkspaceStatus",
       "status": "implemented",
-      "tui": "ArmadaClient.GetWorkspaceStatusAsync",
+      "tui": "ArmadaClient.Workspace.GetStatusAsync",
       "workstream": "W0.2",
       "notes": "Workspace"
     },
@@ -3353,7 +3433,7 @@
       "kind": "api",
       "key": "getWorkspaceTree",
       "status": "implemented",
-      "tui": "ArmadaClient.GetWorkspaceTreeAsync",
+      "tui": "ArmadaClient.Workspace.GetTreeAsync",
       "workstream": "W0.2",
       "notes": "Workspace"
     },
@@ -3361,7 +3441,7 @@
       "kind": "api",
       "key": "healthCheckModelEndpoints",
       "status": "implemented",
-      "tui": "ArmadaClient.HealthCheckModelEndpointsAsync",
+      "tui": "ArmadaClient.ModelEndpoints.HealthCheckAsync",
       "workstream": "W0.2",
       "notes": "Model endpoints (embedding/inference)"
     },
@@ -3369,7 +3449,7 @@
       "kind": "api",
       "key": "ignoreModelAlert",
       "status": "implemented",
-      "tui": "ArmadaClient.IgnoreModelAlertAsync",
+      "tui": "ArmadaClient.ModelAlerts.IgnoreAsync",
       "workstream": "W0.2",
       "notes": "Model Probes (ignore a model alert from the Needs You inbox)"
     },
@@ -3377,7 +3457,7 @@
       "kind": "api",
       "key": "importCheckRun",
       "status": "implemented",
-      "tui": "ArmadaClient.ImportCheckRunAsync",
+      "tui": "ArmadaClient.CheckRuns.ImportAsync",
       "workstream": "W0.2",
       "notes": "Check Runs"
     },
@@ -3385,7 +3465,7 @@
       "kind": "api",
       "key": "importObjectiveFromGitHub",
       "status": "implemented",
-      "tui": "ArmadaClient.ImportObjectiveFromGitHubAsync",
+      "tui": "ArmadaClient.Objectives.ImportFromGitHubAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -3393,7 +3473,7 @@
       "kind": "api",
       "key": "importSyntheticTokenUsage",
       "status": "implemented",
-      "tui": "ArmadaClient.ImportSyntheticTokenUsageAsync",
+      "tui": "ArmadaClient.TokenUsage.ImportSyntheticAsync",
       "workstream": "W0.2",
       "notes": "Admin screenshot-history import through ArmadaClient; token calendars read tagged summary data"
     },
@@ -3401,7 +3481,7 @@
       "kind": "api",
       "key": "importVessels",
       "status": "implemented",
-      "tui": "ArmadaClient.ImportVesselsAsync",
+      "tui": "ArmadaClient.VesselImport.ImportAsync",
       "workstream": "W0.2",
       "notes": "Vessel Import"
     },
@@ -3409,7 +3489,7 @@
       "kind": "api",
       "key": "lintMissionBrief",
       "status": "implemented",
-      "tui": "ArmadaClient.LintMissionBriefAsync",
+      "tui": "ArmadaClient.BlackBoxInsights.LintMissionBriefAsync",
       "workstream": "BB",
       "notes": "Alt+P dispatch preview on Dispatch, Create Voyage and Create Mission (no vessel chosen)"
     },
@@ -3417,7 +3497,7 @@
       "kind": "api",
       "key": "listAllMuxEndpoints",
       "status": "implemented",
-      "tui": "ArmadaClient.ListAllMuxEndpointsAsync",
+      "tui": "ArmadaClient.MuxEndpoints.ListAllAsync",
       "workstream": "W0.2",
       "notes": "Runtimes | explicit page iteration for pickers"
     },
@@ -3425,7 +3505,7 @@
       "kind": "api",
       "key": "listAllStorageHosts",
       "status": "implemented",
-      "tui": "ArmadaClient.ListAllStorageHostsAsync",
+      "tui": "ArmadaClient.Server.ListAllStorageHostsAsync",
       "workstream": "W0.2",
       "notes": "Fleet Actions"
     },
@@ -3433,7 +3513,7 @@
       "kind": "api",
       "key": "listAllWorkspaceActiveMissions",
       "status": "implemented",
-      "tui": "ArmadaClient.ListAllWorkspaceActiveMissionsAsync",
+      "tui": "ArmadaClient.Workspace.ListAllActiveMissionsAsync",
       "workstream": "W0.2",
       "notes": "Workspace"
     },
@@ -3441,7 +3521,7 @@
       "kind": "api",
       "key": "listAllWorkspaceChanges",
       "status": "implemented",
-      "tui": "ArmadaClient.ListAllWorkspaceChangesAsync",
+      "tui": "ArmadaClient.Workspace.ListAllChangesAsync",
       "workstream": "W0.2",
       "notes": "Workspace"
     },
@@ -3449,7 +3529,7 @@
       "kind": "api",
       "key": "listBacklog",
       "status": "implemented",
-      "tui": "ArmadaClient.ListBacklogAsync",
+      "tui": "ArmadaClient.Objectives.ListBacklogAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -3457,7 +3537,7 @@
       "kind": "api",
       "key": "listBacklogRefinementSessions",
       "status": "implemented",
-      "tui": "ArmadaClient.ListBacklogRefinementSessionsAsync",
+      "tui": "ArmadaClient.Objectives.ListBacklogRefinementSessionsAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -3465,15 +3545,23 @@
       "kind": "api",
       "key": "listBatteryPacks",
       "status": "implemented",
-      "tui": "ArmadaClient.ListBatteryPacksAsync",
+      "tui": "ArmadaClient.Battery.ListPacksAsync",
       "workstream": "W0.2",
       "notes": "Model Probes"
     },
     {
       "kind": "api",
+      "key": "listBatteryRuns",
+      "status": "implemented",
+      "tui": "ArmadaClient.Battery.ListRunsAsync",
+      "workstream": "W0.2",
+      "notes": "Reliability (1.5.0)"
+    },
+    {
+      "kind": "api",
       "key": "listBlackBox",
       "status": "implemented",
-      "tui": "ArmadaClient.ListBlackBoxAsync",
+      "tui": "ArmadaClient.BlackBox.ListAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -3481,7 +3569,7 @@
       "kind": "api",
       "key": "listBlackBoxNearbySuccesses",
       "status": "implemented",
-      "tui": "ArmadaClient.ListBlackBoxNearbySuccessesAsync",
+      "tui": "ArmadaClient.BlackBoxInsights.ListNearbySuccessesAsync",
       "workstream": "BB",
       "notes": "Black box entry screen Nearby Successes tab (server paged)"
     },
@@ -3489,7 +3577,7 @@
       "kind": "api",
       "key": "listBlackBoxNotes",
       "status": "implemented",
-      "tui": "ArmadaClient.ListBlackBoxNotesAsync",
+      "tui": "ArmadaClient.BlackBox.ListNotesAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -3497,7 +3585,7 @@
       "kind": "api",
       "key": "listBlackBoxObjects",
       "status": "implemented",
-      "tui": "ArmadaClient.ListBlackBoxObjectsAsync",
+      "tui": "ArmadaClient.BlackBox.ListObjectsAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -3505,7 +3593,7 @@
       "kind": "api",
       "key": "listCaptains",
       "status": "implemented",
-      "tui": "ArmadaClient.ListCaptainsAsync",
+      "tui": "ArmadaClient.Captains.ListAsync",
       "workstream": "W0.2",
       "notes": "Captains | used by EventsScreen, SetupWizardScreen, SignalsScreen"
     },
@@ -3513,7 +3601,7 @@
       "kind": "api",
       "key": "listCheckRuns",
       "status": "implemented",
-      "tui": "ArmadaClient.ListCheckRunsAsync",
+      "tui": "ArmadaClient.CheckRuns.ListAsync",
       "workstream": "W0.2",
       "notes": "Check Runs"
     },
@@ -3521,7 +3609,7 @@
       "kind": "api",
       "key": "listCliPermissionRequests",
       "status": "implemented",
-      "tui": "ArmadaClient.ListCliPermissionRequestsAsync",
+      "tui": "ArmadaClient.CliPermissions.ListRequestsAsync",
       "workstream": "W0.2",
       "notes": "CLI tool permissions"
     },
@@ -3529,7 +3617,7 @@
       "kind": "api",
       "key": "listCliPermissionRules",
       "status": "implemented",
-      "tui": "ArmadaClient.ListCliPermissionRulesAsync",
+      "tui": "ArmadaClient.CliPermissions.ListRulesAsync",
       "workstream": "W0.2",
       "notes": "CLI tool permissions"
     },
@@ -3537,7 +3625,7 @@
       "kind": "api",
       "key": "listCredentials",
       "status": "implemented",
-      "tui": "ArmadaClient.ListCredentialsAsync",
+      "tui": "ArmadaClient.Credentials.ListAsync",
       "workstream": "W0.2",
       "notes": "Credentials (admin) | used by CredentialsScreen"
     },
@@ -3545,7 +3633,7 @@
       "kind": "api",
       "key": "listDeployments",
       "status": "implemented",
-      "tui": "ArmadaClient.ListDeploymentsAsync",
+      "tui": "ArmadaClient.Deployments.ListAsync",
       "workstream": "W0.2",
       "notes": "Deployments"
     },
@@ -3553,7 +3641,7 @@
       "kind": "api",
       "key": "listDocks",
       "status": "implemented",
-      "tui": "ArmadaClient.ListDocksAsync",
+      "tui": "ArmadaClient.Docks.ListAsync",
       "workstream": "W0.2",
       "notes": "Docks"
     },
@@ -3561,7 +3649,7 @@
       "kind": "api",
       "key": "listEnvironments",
       "status": "implemented",
-      "tui": "ArmadaClient.ListEnvironmentsAsync",
+      "tui": "ArmadaClient.Environments.ListAsync",
       "workstream": "W0.2",
       "notes": "Environments | used by SetupWizardScreen"
     },
@@ -3569,7 +3657,7 @@
       "kind": "api",
       "key": "listEvents",
       "status": "implemented",
-      "tui": "ArmadaClient.ListEventsAsync",
+      "tui": "ArmadaClient.Events.ListAsync",
       "workstream": "W0.2",
       "notes": "Events | used by EventsScreen"
     },
@@ -3577,7 +3665,7 @@
       "kind": "api",
       "key": "listFailureCauseRules",
       "status": "implemented",
-      "tui": "ArmadaClient.ListFailureCauseRulesAsync",
+      "tui": "ArmadaClient.StageOutcomes.ListFailureCauseRulesAsync",
       "workstream": "W0.2",
       "notes": "Stage outcomes and failure-cause rules"
     },
@@ -3585,15 +3673,23 @@
       "kind": "api",
       "key": "listFleets",
       "status": "implemented",
-      "tui": "ArmadaClient.ListFleetsAsync",
+      "tui": "ArmadaClient.Fleets.ListAsync",
       "workstream": "W0.2",
       "notes": "Fleets | used by SetupWizardScreen"
     },
     {
       "kind": "api",
+      "key": "listGateReports",
+      "status": "implemented",
+      "tui": "ArmadaClient.Reliability.ListGateReportsAsync",
+      "workstream": "W0.2",
+      "notes": "Reliability (1.5.0)"
+    },
+    {
+      "kind": "api",
       "key": "listHarborJobs",
       "status": "implemented",
-      "tui": "ArmadaClient.ListHarborJobsAsync",
+      "tui": "ArmadaClient.Harbors.ListJobsAsync",
       "workstream": "W0.2",
       "notes": "Harbors (host runners)"
     },
@@ -3601,7 +3697,7 @@
       "kind": "api",
       "key": "listHarbors",
       "status": "implemented",
-      "tui": "ArmadaClient.ListHarborsAsync",
+      "tui": "ArmadaClient.Harbors.ListAsync",
       "workstream": "W0.2",
       "notes": "Harbors (host runners)"
     },
@@ -3609,7 +3705,7 @@
       "kind": "api",
       "key": "listHistoryTimeline",
       "status": "implemented",
-      "tui": "ArmadaClient.ListHistoryTimelineAsync",
+      "tui": "ArmadaClient.History.ListTimelineAsync",
       "workstream": "W0.2",
       "notes": "History"
     },
@@ -3617,7 +3713,7 @@
       "kind": "api",
       "key": "listIncidents",
       "status": "implemented",
-      "tui": "ArmadaClient.ListIncidentsAsync",
+      "tui": "ArmadaClient.Incidents.ListAsync",
       "workstream": "W0.2",
       "notes": "Incidents"
     },
@@ -3625,7 +3721,7 @@
       "kind": "api",
       "key": "listJobs",
       "status": "implemented",
-      "tui": "ArmadaClient.ListJobsAsync",
+      "tui": "ArmadaClient.Jobs.ListAsync",
       "workstream": "W0.2",
       "notes": "Background jobs | used by JobsScreen"
     },
@@ -3633,7 +3729,7 @@
       "kind": "api",
       "key": "listMemories",
       "status": "implemented",
-      "tui": "ArmadaClient.ListMemoriesAsync",
+      "tui": "ArmadaClient.Memories.ListAsync",
       "workstream": "W0.2",
       "notes": "Memories"
     },
@@ -3641,7 +3737,7 @@
       "kind": "api",
       "key": "listMergeQueue",
       "status": "implemented",
-      "tui": "ArmadaClient.ListMergeQueueAsync",
+      "tui": "ArmadaClient.MergeQueue.ListAsync",
       "workstream": "W0.2",
       "notes": "Merge Queue"
     },
@@ -3649,7 +3745,15 @@
       "kind": "api",
       "key": "listMissionBlackBoxEntries",
       "status": "implemented",
-      "tui": "ArmadaClient.ListMissionBlackBoxEntriesAsync",
+      "tui": "ArmadaClient.BlackBox.ListMissionEntriesAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "listMissionSubmissions",
+      "status": "implemented",
+      "tui": "ArmadaClient.StageSubmissions.ListForMissionAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -3657,7 +3761,7 @@
       "kind": "api",
       "key": "listMissionSummaries",
       "status": "implemented",
-      "tui": "ArmadaClient.ListMissionSummariesAsync",
+      "tui": "ArmadaClient.Missions.ListSummariesAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -3665,7 +3769,7 @@
       "kind": "api",
       "key": "listMissions",
       "status": "implemented",
-      "tui": "ArmadaClient.ListMissionsAsync",
+      "tui": "ArmadaClient.Missions.ListAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -3673,7 +3777,7 @@
       "kind": "api",
       "key": "listModelEndpoints",
       "status": "implemented",
-      "tui": "ArmadaClient.ListModelEndpointsAsync",
+      "tui": "ArmadaClient.ModelEndpoints.ListAsync",
       "workstream": "W0.2",
       "notes": "Model endpoints (embedding/inference)"
     },
@@ -3681,7 +3785,15 @@
       "kind": "api",
       "key": "listModelProbeRuns",
       "status": "implemented",
-      "tui": "ArmadaClient.ListModelProbeRunsAsync",
+      "tui": "ArmadaClient.ModelProbes.ListRunsAsync",
+      "workstream": "W0.2",
+      "notes": "Model Probes"
+    },
+    {
+      "kind": "api",
+      "key": "listModelProfiles",
+      "status": "implemented",
+      "tui": "ArmadaClient.ModelProfiles.ListAsync",
       "workstream": "W0.2",
       "notes": "Model Probes"
     },
@@ -3689,7 +3801,7 @@
       "kind": "api",
       "key": "listMuxEndpoints",
       "status": "implemented",
-      "tui": "ArmadaClient.ListMuxEndpointsAsync",
+      "tui": "ArmadaClient.MuxEndpoints.ListAsync",
       "workstream": "W0.2",
       "notes": "Vessel Health | used by SetupWizardScreen"
     },
@@ -3697,7 +3809,7 @@
       "kind": "api",
       "key": "listObjectiveRefinementMessages",
       "status": "implemented",
-      "tui": "ArmadaClient.ListObjectiveRefinementMessagesAsync",
+      "tui": "ArmadaClient.Objectives.ListRefinementMessagesAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -3705,7 +3817,7 @@
       "kind": "api",
       "key": "listObjectiveRefinementSessions",
       "status": "implemented",
-      "tui": "ArmadaClient.ListObjectiveRefinementSessionsAsync",
+      "tui": "ArmadaClient.Objectives.ListRefinementSessionsAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -3713,7 +3825,7 @@
       "kind": "api",
       "key": "listObjectives",
       "status": "implemented",
-      "tui": "ArmadaClient.ListObjectivesAsync",
+      "tui": "ArmadaClient.Objectives.ListAsync",
       "workstream": "W0.2",
       "notes": "Objectives | used by ActivityScreen"
     },
@@ -3721,7 +3833,7 @@
       "kind": "api",
       "key": "listPersonas",
       "status": "implemented",
-      "tui": "ArmadaClient.ListPersonasAsync",
+      "tui": "ArmadaClient.Personas.ListAsync",
       "workstream": "W0.2",
       "notes": "Personas"
     },
@@ -3729,7 +3841,7 @@
       "kind": "api",
       "key": "listPipelines",
       "status": "implemented",
-      "tui": "ArmadaClient.ListPipelinesAsync",
+      "tui": "ArmadaClient.Pipelines.ListAsync",
       "workstream": "W0.2",
       "notes": "Pipelines"
     },
@@ -3737,7 +3849,7 @@
       "kind": "api",
       "key": "listPlanningSessionMessages",
       "status": "implemented",
-      "tui": "ArmadaClient.ListPlanningSessionMessagesAsync",
+      "tui": "ArmadaClient.PlanningSessions.ListMessagesAsync",
       "workstream": "W0.2",
       "notes": "Planning Sessions"
     },
@@ -3745,7 +3857,7 @@
       "kind": "api",
       "key": "listPlanningSessions",
       "status": "implemented",
-      "tui": "ArmadaClient.ListPlanningSessionsAsync",
+      "tui": "ArmadaClient.PlanningSessions.ListAsync",
       "workstream": "W0.2",
       "notes": "Planning Sessions"
     },
@@ -3753,7 +3865,7 @@
       "kind": "api",
       "key": "listPlaybooks",
       "status": "implemented",
-      "tui": "ArmadaClient.ListPlaybooksAsync",
+      "tui": "ArmadaClient.Playbooks.ListAsync",
       "workstream": "W0.2",
       "notes": "Playbooks"
     },
@@ -3761,7 +3873,7 @@
       "kind": "api",
       "key": "listProjectProfiles",
       "status": "implemented",
-      "tui": "ArmadaClient.ListProjectProfilesAsync",
+      "tui": "ArmadaClient.ProjectProfiles.ListAsync",
       "workstream": "W0.2",
       "notes": "Project profiles"
     },
@@ -3769,7 +3881,7 @@
       "kind": "api",
       "key": "listPromptTemplates",
       "status": "implemented",
-      "tui": "ArmadaClient.ListPromptTemplatesAsync",
+      "tui": "ArmadaClient.PromptTemplates.ListAsync",
       "workstream": "W0.2",
       "notes": "Prompt Templates"
     },
@@ -3777,7 +3889,7 @@
       "kind": "api",
       "key": "listReleases",
       "status": "implemented",
-      "tui": "ArmadaClient.ListReleasesAsync",
+      "tui": "ArmadaClient.Releases.ListAsync",
       "workstream": "W0.2",
       "notes": "Releases"
     },
@@ -3785,7 +3897,7 @@
       "kind": "api",
       "key": "listRequestHistory",
       "status": "implemented",
-      "tui": "ArmadaClient.ListRequestHistoryAsync",
+      "tui": "ArmadaClient.RequestHistory.ListAsync",
       "workstream": "W0.2",
       "notes": "Request History | used by RequestHistoryScreen"
     },
@@ -3793,7 +3905,7 @@
       "kind": "api",
       "key": "listRunbookExecutions",
       "status": "implemented",
-      "tui": "ArmadaClient.ListRunbookExecutionsAsync",
+      "tui": "ArmadaClient.Runbooks.ListExecutionsAsync",
       "workstream": "W0.2",
       "notes": "Runbooks"
     },
@@ -3801,7 +3913,7 @@
       "kind": "api",
       "key": "listRunbooks",
       "status": "implemented",
-      "tui": "ArmadaClient.ListRunbooksAsync",
+      "tui": "ArmadaClient.Runbooks.ListAsync",
       "workstream": "W0.2",
       "notes": "Runbooks"
     },
@@ -3809,7 +3921,7 @@
       "kind": "api",
       "key": "listSignals",
       "status": "implemented",
-      "tui": "ArmadaClient.ListSignalsAsync",
+      "tui": "ArmadaClient.Signals.ListAsync",
       "workstream": "W0.2",
       "notes": "Signals | used by SignalsScreen"
     },
@@ -3817,7 +3929,7 @@
       "kind": "api",
       "key": "listSkills",
       "status": "implemented",
-      "tui": "ArmadaClient.ListSkillsAsync",
+      "tui": "ArmadaClient.Skills.ListAsync",
       "workstream": "W0.2",
       "notes": "Skills directory"
     },
@@ -3825,7 +3937,7 @@
       "kind": "api",
       "key": "listStageOutcomes",
       "status": "implemented",
-      "tui": "ArmadaClient.ListStageOutcomesAsync",
+      "tui": "ArmadaClient.StageOutcomes.ListAsync",
       "workstream": "W0.2",
       "notes": "Stage outcomes and failure-cause rules"
     },
@@ -3833,7 +3945,7 @@
       "kind": "api",
       "key": "listStorageHosts",
       "status": "implemented",
-      "tui": "ArmadaClient.ListStorageHostsAsync",
+      "tui": "ArmadaClient.Server.ListStorageHostsAsync",
       "workstream": "W0.2",
       "notes": "Fleet Actions"
     },
@@ -3841,7 +3953,7 @@
       "kind": "api",
       "key": "listTenants",
       "status": "implemented",
-      "tui": "ArmadaClient.ListTenantsAsync",
+      "tui": "ArmadaClient.Tenants.ListAsync",
       "workstream": "W0.2",
       "notes": "Tenants (admin) | used by CredentialsScreen, TenantsScreen, UsersScreen"
     },
@@ -3849,7 +3961,7 @@
       "kind": "api",
       "key": "listUsers",
       "status": "implemented",
-      "tui": "ArmadaClient.ListUsersAsync",
+      "tui": "ArmadaClient.Users.ListAsync",
       "workstream": "W0.2",
       "notes": "Users (admin) | used by CredentialsScreen, UsersScreen"
     },
@@ -3857,7 +3969,7 @@
       "kind": "api",
       "key": "listVesselCleanupResources",
       "status": "implemented",
-      "tui": "ArmadaClient.ListVesselCleanupResourcesAsync",
+      "tui": "ArmadaClient.Vessels.ListCleanupResourcesAsync",
       "workstream": "W0.2",
       "notes": "Vessels | used by VesselCleanupDialog"
     },
@@ -3865,7 +3977,7 @@
       "kind": "api",
       "key": "listVesselDependencies",
       "status": "implemented",
-      "tui": "ArmadaClient.ListVesselDependenciesAsync",
+      "tui": "ArmadaClient.VesselHealth.ListDependenciesAsync",
       "workstream": "W0.2",
       "notes": "Vessel Health"
     },
@@ -3873,7 +3985,7 @@
       "kind": "api",
       "key": "listVesselReservations",
       "status": "implemented",
-      "tui": "ArmadaClient.ListVesselReservationsAsync",
+      "tui": "ArmadaClient.BlackBoxInsights.ListVesselReservationsAsync",
       "workstream": "BB",
       "notes": "Vessel screen Reservations tab (server paged)"
     },
@@ -3881,7 +3993,7 @@
       "kind": "api",
       "key": "listVessels",
       "status": "implemented",
-      "tui": "ArmadaClient.ListVesselsAsync",
+      "tui": "ArmadaClient.Vessels.ListAsync",
       "workstream": "W0.2",
       "notes": "Vessels | used by ActivityScreen, EventsScreen, ServerSettingsScreen, SetupWizardScreen"
     },
@@ -3889,7 +4001,7 @@
       "kind": "api",
       "key": "listVoyages",
       "status": "implemented",
-      "tui": "ArmadaClient.ListVoyagesAsync",
+      "tui": "ArmadaClient.Voyages.ListAsync",
       "workstream": "W0.2",
       "notes": "Voyages"
     },
@@ -3897,7 +4009,7 @@
       "kind": "api",
       "key": "listWorkflowProfiles",
       "status": "implemented",
-      "tui": "ArmadaClient.ListWorkflowProfilesAsync",
+      "tui": "ArmadaClient.WorkflowProfiles.ListAsync",
       "workstream": "W0.2",
       "notes": "Workflow Profiles | used by SetupWizardScreen"
     },
@@ -3905,7 +4017,7 @@
       "kind": "api",
       "key": "listWorkspaceActiveMissions",
       "status": "implemented",
-      "tui": "ArmadaClient.ListWorkspaceActiveMissionsAsync",
+      "tui": "ArmadaClient.Workspace.ListActiveMissionsAsync",
       "workstream": "W0.2",
       "notes": "Workspace"
     },
@@ -3913,7 +4025,7 @@
       "kind": "api",
       "key": "listWorkspaceDirectory",
       "status": "implemented",
-      "tui": "ArmadaClient.ListWorkspaceDirectoryAsync",
+      "tui": "ArmadaClient.Workspace.ListDirectoryAsync",
       "workstream": "W0.2",
       "notes": "Workspace"
     },
@@ -3921,7 +4033,7 @@
       "kind": "api",
       "key": "logoutProxy",
       "status": "implemented",
-      "tui": "ArmadaClient.LogoutProxyAsync",
+      "tui": "ArmadaClient.Auth.LogoutProxyAsync",
       "workstream": "W0.2",
       "notes": "Auth"
     },
@@ -3929,7 +4041,7 @@
       "kind": "api",
       "key": "lookupTenants",
       "status": "implemented",
-      "tui": "ArmadaClient.LookupTenantsAsync",
+      "tui": "ArmadaClient.Auth.LookupTenantsAsync",
       "workstream": "W0.2",
       "notes": "Auth"
     },
@@ -3937,7 +4049,7 @@
       "kind": "api",
       "key": "markAskThreadRead",
       "status": "implemented",
-      "tui": "ArmadaClient.MarkAskThreadReadAsync",
+      "tui": "ArmadaClient.Ask.MarkThreadReadAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -3945,7 +4057,7 @@
       "kind": "api",
       "key": "markAskThreadUnread",
       "status": "implemented",
-      "tui": "ArmadaClient.MarkAskThreadUnreadAsync",
+      "tui": "ArmadaClient.Ask.MarkThreadUnreadAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -3953,7 +4065,7 @@
       "kind": "api",
       "key": "markSignalRead",
       "status": "implemented",
-      "tui": "ArmadaClient.MarkSignalReadAsync",
+      "tui": "ArmadaClient.Signals.MarkReadAsync",
       "workstream": "W0.2",
       "notes": "Signals | used by SignalsScreen"
     },
@@ -3961,7 +4073,7 @@
       "kind": "api",
       "key": "mergeVesselBranch",
       "status": "implemented",
-      "tui": "ArmadaClient.MergeVesselBranchAsync",
+      "tui": "ArmadaClient.Vessels.MergeBranchAsync",
       "workstream": "W0.2",
       "notes": "Vessels"
     },
@@ -3969,7 +4081,7 @@
       "kind": "api",
       "key": "migrateBlackBoxStorage",
       "status": "implemented",
-      "tui": "ArmadaClient.MigrateBlackBoxStorageAsync",
+      "tui": "ArmadaClient.BlackBox.MigrateStorageAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -3977,7 +4089,7 @@
       "kind": "api",
       "key": "openWorkspaceTerminal",
       "status": "implemented",
-      "tui": "ArmadaClient.OpenWorkspaceTerminalAsync",
+      "tui": "ArmadaClient.Workspace.OpenTerminalAsync",
       "workstream": "W0.2",
       "notes": "Workspace"
     },
@@ -3985,7 +4097,7 @@
       "kind": "api",
       "key": "pinBlackBox",
       "status": "implemented",
-      "tui": "ArmadaClient.PinBlackBoxAsync",
+      "tui": "ArmadaClient.BlackBox.PinAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -3993,7 +4105,7 @@
       "kind": "api",
       "key": "previewCaptainSelection",
       "status": "implemented",
-      "tui": "ArmadaClient.PreviewCaptainSelectionAsync",
+      "tui": "ArmadaClient.CaptainSelection.PreviewAsync",
       "workstream": "U4",
       "notes": "Mission Captain Selection tab (MissionSelectionPanel): summary, comparison, history, preview and administrator recovery"
     },
@@ -4001,7 +4113,7 @@
       "kind": "api",
       "key": "previewMissionOverlap",
       "status": "implemented",
-      "tui": "ArmadaClient.PreviewMissionOverlapAsync",
+      "tui": "ArmadaClient.BlackBoxInsights.PreviewMissionOverlapAsync",
       "workstream": "BB",
       "notes": "Alt+P dispatch preview on Dispatch, Create Voyage and Create Mission"
     },
@@ -4009,7 +4121,7 @@
       "kind": "api",
       "key": "previewPersonaPrompt",
       "status": "implemented",
-      "tui": "ArmadaClient.PreviewPersonaPromptAsync",
+      "tui": "ArmadaClient.ProjectProfiles.PreviewPersonaPromptAsync",
       "workstream": "W0.2",
       "notes": "Project profiles"
     },
@@ -4017,7 +4129,7 @@
       "kind": "api",
       "key": "previewWorkflowProfileForVessel",
       "status": "implemented",
-      "tui": "ArmadaClient.PreviewWorkflowProfileForVesselAsync",
+      "tui": "ArmadaClient.WorkflowProfiles.PreviewForVesselAsync",
       "workstream": "W0.2",
       "notes": "Workflow Profiles"
     },
@@ -4025,7 +4137,7 @@
       "kind": "api",
       "key": "processAllMergeQueue",
       "status": "implemented",
-      "tui": "ArmadaClient.ProcessAllMergeQueueAsync",
+      "tui": "ArmadaClient.MergeQueue.ProcessAllAsync",
       "workstream": "W0.2",
       "notes": "Merge Queue"
     },
@@ -4033,7 +4145,7 @@
       "kind": "api",
       "key": "processMergeEntry",
       "status": "implemented",
-      "tui": "ArmadaClient.ProcessMergeEntryAsync",
+      "tui": "ArmadaClient.MergeQueue.ProcessAsync",
       "workstream": "W0.2",
       "notes": "Merge Queue"
     },
@@ -4041,7 +4153,7 @@
       "kind": "api",
       "key": "purgeBlackBox",
       "status": "implemented",
-      "tui": "ArmadaClient.PurgeBlackBoxAsync",
+      "tui": "ArmadaClient.BlackBox.PurgeAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -4049,7 +4161,7 @@
       "kind": "api",
       "key": "purgeMission",
       "status": "implemented",
-      "tui": "ArmadaClient.PurgeMissionAsync",
+      "tui": "ArmadaClient.Missions.PurgeAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -4057,7 +4169,7 @@
       "kind": "api",
       "key": "purgeVoyage",
       "status": "implemented",
-      "tui": "ArmadaClient.PurgeVoyageAsync",
+      "tui": "ArmadaClient.Voyages.PurgeAsync",
       "workstream": "W0.2",
       "notes": "Voyages"
     },
@@ -4065,7 +4177,7 @@
       "kind": "api",
       "key": "pushVesselBranch",
       "status": "implemented",
-      "tui": "ArmadaClient.PushVesselBranchAsync",
+      "tui": "ArmadaClient.Vessels.PushBranchAsync",
       "workstream": "W0.2",
       "notes": "Vessels"
     },
@@ -4073,7 +4185,7 @@
       "kind": "api",
       "key": "readBatteryPackFile",
       "status": "implemented",
-      "tui": "ArmadaClient.ReadBatteryPackFileAsync",
+      "tui": "ArmadaClient.Battery.ReadPackFileAsync",
       "workstream": "W0.2",
       "notes": "Battery packs"
     },
@@ -4081,7 +4193,7 @@
       "kind": "api",
       "key": "readBlackBoxObject",
       "status": "implemented",
-      "tui": "ArmadaClient.ReadBlackBoxObjectAsync",
+      "tui": "ArmadaClient.BlackBox.ReadObjectAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -4089,7 +4201,7 @@
       "kind": "api",
       "key": "reanalyzeBlackBox",
       "status": "implemented",
-      "tui": "ArmadaClient.ReanalyzeBlackBoxAsync",
+      "tui": "ArmadaClient.BlackBox.ReanalyzeAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -4097,7 +4209,7 @@
       "kind": "api",
       "key": "rebuildServer",
       "status": "implemented",
-      "tui": "ArmadaClient.RebuildServerAsync",
+      "tui": "ArmadaClient.Server.RebuildAsync",
       "workstream": "W0.2",
       "notes": "Server | used by ServerSettingsScreen"
     },
@@ -4105,7 +4217,7 @@
       "kind": "api",
       "key": "recallCaptain",
       "status": "implemented",
-      "tui": "ArmadaClient.RecallCaptainAsync",
+      "tui": "ArmadaClient.Captains.RecallAsync",
       "workstream": "W0.2",
       "notes": "Captains"
     },
@@ -4113,7 +4225,7 @@
       "kind": "api",
       "key": "reclassifyStageOutcomes",
       "status": "implemented",
-      "tui": "ArmadaClient.ReclassifyStageOutcomesAsync",
+      "tui": "ArmadaClient.StageOutcomes.ReclassifyAsync",
       "workstream": "W0.2",
       "notes": "Stage outcomes and failure-cause rules"
     },
@@ -4121,7 +4233,7 @@
       "kind": "api",
       "key": "refreshRelease",
       "status": "implemented",
-      "tui": "ArmadaClient.RefreshReleaseAsync",
+      "tui": "ArmadaClient.Releases.RefreshAsync",
       "workstream": "W0.2",
       "notes": "Releases"
     },
@@ -4129,7 +4241,7 @@
       "kind": "api",
       "key": "refreshStorage",
       "status": "implemented",
-      "tui": "ArmadaClient.RefreshStorageAsync",
+      "tui": "ArmadaClient.Server.RefreshStorageAsync",
       "workstream": "W0.2",
       "notes": "Fleet Actions"
     },
@@ -4137,7 +4249,7 @@
       "kind": "api",
       "key": "rejectAskProposal",
       "status": "implemented",
-      "tui": "ArmadaClient.RejectAskProposalAsync",
+      "tui": "ArmadaClient.Ask.RejectProposalAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -4145,7 +4257,7 @@
       "kind": "api",
       "key": "renameWorkspaceEntry",
       "status": "implemented",
-      "tui": "ArmadaClient.RenameWorkspaceEntryAsync",
+      "tui": "ArmadaClient.Workspace.RenameEntryAsync",
       "workstream": "W0.2",
       "notes": "Workspace"
     },
@@ -4153,7 +4265,7 @@
       "kind": "api",
       "key": "reorderBacklog",
       "status": "implemented",
-      "tui": "ArmadaClient.ReorderBacklogAsync",
+      "tui": "ArmadaClient.Objectives.ReorderBacklogAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -4161,7 +4273,7 @@
       "kind": "api",
       "key": "reorderObjectives",
       "status": "implemented",
-      "tui": "ArmadaClient.ReorderObjectivesAsync",
+      "tui": "ArmadaClient.Objectives.ReorderAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -4169,7 +4281,7 @@
       "kind": "api",
       "key": "resetPromptTemplate",
       "status": "implemented",
-      "tui": "ArmadaClient.ResetPromptTemplateAsync",
+      "tui": "ArmadaClient.PromptTemplates.ResetAsync",
       "workstream": "W0.2",
       "notes": "Prompt Templates"
     },
@@ -4177,7 +4289,7 @@
       "kind": "api",
       "key": "resetServer",
       "status": "implemented",
-      "tui": "ArmadaClient.ResetServerAsync",
+      "tui": "ArmadaClient.Server.ResetAsync",
       "workstream": "W0.2",
       "notes": "Server | used by ServerSettingsScreen"
     },
@@ -4185,7 +4297,7 @@
       "kind": "api",
       "key": "resolveBlackBox",
       "status": "implemented",
-      "tui": "ArmadaClient.ResolveBlackBoxAsync",
+      "tui": "ArmadaClient.BlackBox.ResolveAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -4193,7 +4305,7 @@
       "kind": "api",
       "key": "resolveProjectProfileForVessel",
       "status": "implemented",
-      "tui": "ArmadaClient.ResolveProjectProfileForVesselAsync",
+      "tui": "ArmadaClient.ProjectProfiles.ResolveForVesselAsync",
       "workstream": "W0.2",
       "notes": "Project profiles"
     },
@@ -4201,7 +4313,7 @@
       "kind": "api",
       "key": "resolveWorkflowProfile",
       "status": "implemented",
-      "tui": "ArmadaClient.ResolveWorkflowProfileAsync",
+      "tui": "ArmadaClient.WorkflowProfiles.ResolveAsync",
       "workstream": "W0.2",
       "notes": "Workflow Profiles"
     },
@@ -4209,7 +4321,7 @@
       "kind": "api",
       "key": "restartCaptain",
       "status": "implemented",
-      "tui": "ArmadaClient.RestartCaptainAsync",
+      "tui": "ArmadaClient.Captains.RestartAsync",
       "workstream": "W0.2",
       "notes": "Vessel Health"
     },
@@ -4217,7 +4329,7 @@
       "kind": "api",
       "key": "restartMission",
       "status": "implemented",
-      "tui": "ArmadaClient.RestartMissionAsync",
+      "tui": "ArmadaClient.Missions.RestartAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -4225,7 +4337,7 @@
       "kind": "api",
       "key": "restartServer",
       "status": "implemented",
-      "tui": "ArmadaClient.RestartServerAsync",
+      "tui": "ArmadaClient.Server.RestartAsync",
       "workstream": "W0.2",
       "notes": "Server | used by ServerSettingsScreen"
     },
@@ -4233,7 +4345,7 @@
       "kind": "api",
       "key": "restoreBackup",
       "status": "implemented",
-      "tui": "ArmadaClient.RestoreBackupAsync",
+      "tui": "ArmadaClient.Server.RestoreBackupAsync",
       "workstream": "W0.2",
       "notes": "Backup / Restore | used by ServerSettingsScreen"
     },
@@ -4241,7 +4353,7 @@
       "kind": "api",
       "key": "retryCheckRun",
       "status": "implemented",
-      "tui": "ArmadaClient.RetryCheckRunAsync",
+      "tui": "ArmadaClient.CheckRuns.RetryAsync",
       "workstream": "W0.2",
       "notes": "Check Runs"
     },
@@ -4249,7 +4361,7 @@
       "kind": "api",
       "key": "retryMissionLanding",
       "status": "implemented",
-      "tui": "ArmadaClient.RetryMissionLandingAsync",
+      "tui": "ArmadaClient.Missions.RetryLandingAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -4257,7 +4369,7 @@
       "kind": "api",
       "key": "rollbackDeployment",
       "status": "implemented",
-      "tui": "ArmadaClient.RollbackDeploymentAsync",
+      "tui": "ArmadaClient.Deployments.RollbackAsync",
       "workstream": "W0.2",
       "notes": "Deployments"
     },
@@ -4265,7 +4377,7 @@
       "kind": "api",
       "key": "rollbackServer",
       "status": "implemented",
-      "tui": "ArmadaClient.RollbackServerAsync",
+      "tui": "ArmadaClient.Server.RollbackAsync",
       "workstream": "W0.2",
       "notes": "Server | used by ServerSettingsScreen"
     },
@@ -4273,7 +4385,7 @@
       "kind": "api",
       "key": "runAdHocFleetAction",
       "status": "implemented",
-      "tui": "ArmadaClient.RunAdHocFleetActionAsync",
+      "tui": "ArmadaClient.FleetActions.RunAdHocAsync",
       "workstream": "W0.2",
       "notes": "Fleet Actions"
     },
@@ -4281,7 +4393,7 @@
       "kind": "api",
       "key": "runAskQuickAction",
       "status": "implemented",
-      "tui": "ArmadaClient.RunAskQuickActionAsync",
+      "tui": "ArmadaClient.Ask.RunQuickActionAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -4289,7 +4401,7 @@
       "kind": "api",
       "key": "runBlackBoxGc",
       "status": "implemented",
-      "tui": "ArmadaClient.RunBlackBoxGcAsync",
+      "tui": "ArmadaClient.BlackBox.RunGcAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -4297,7 +4409,7 @@
       "kind": "api",
       "key": "runBlackBoxRecovery",
       "status": "implemented",
-      "tui": "ArmadaClient.RunBlackBoxRecoveryAsync",
+      "tui": "ArmadaClient.BlackBox.RunRecoveryAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -4305,7 +4417,7 @@
       "kind": "api",
       "key": "runCheck",
       "status": "implemented",
-      "tui": "ArmadaClient.RunCheckAsync",
+      "tui": "ArmadaClient.CheckRuns.RunAsync",
       "workstream": "W0.2",
       "notes": "Check Runs"
     },
@@ -4313,7 +4425,7 @@
       "kind": "api",
       "key": "runFleetAction",
       "status": "implemented",
-      "tui": "ArmadaClient.RunFleetActionAsync",
+      "tui": "ArmadaClient.FleetActions.RunAsync",
       "workstream": "W0.2",
       "notes": "Fleet Actions; run flow and follow-up run (FromRunId, FromTargetStatuses, InputValues)"
     },
@@ -4321,7 +4433,7 @@
       "kind": "api",
       "key": "runVesselCleanup",
       "status": "implemented",
-      "tui": "ArmadaClient.RunVesselCleanupAsync",
+      "tui": "ArmadaClient.Vessels.RunCleanupAsync",
       "workstream": "W0.2",
       "notes": "Vessels | used by VesselCleanupDialog"
     },
@@ -4329,7 +4441,7 @@
       "kind": "api",
       "key": "saveWorkspaceFile",
       "status": "implemented",
-      "tui": "ArmadaClient.SaveWorkspaceFileAsync",
+      "tui": "ArmadaClient.Workspace.SaveFileAsync",
       "workstream": "W0.2",
       "notes": "Workspace"
     },
@@ -4337,7 +4449,7 @@
       "kind": "api",
       "key": "searchBlackBox",
       "status": "implemented",
-      "tui": "ArmadaClient.SearchBlackBoxAsync",
+      "tui": "ArmadaClient.BlackBox.SearchAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -4345,7 +4457,7 @@
       "kind": "api",
       "key": "searchWorkspace",
       "status": "implemented",
-      "tui": "ArmadaClient.SearchWorkspaceAsync",
+      "tui": "ArmadaClient.Workspace.SearchAsync",
       "workstream": "W0.2",
       "notes": "Workspace"
     },
@@ -4353,7 +4465,7 @@
       "kind": "api",
       "key": "sendAskMessage",
       "status": "implemented",
-      "tui": "ArmadaClient.SendAskMessageAsync",
+      "tui": "ArmadaClient.Ask.SendMessageAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -4361,7 +4473,7 @@
       "kind": "api",
       "key": "sendObjectiveRefinementMessage",
       "status": "implemented",
-      "tui": "ArmadaClient.SendObjectiveRefinementMessageAsync",
+      "tui": "ArmadaClient.Objectives.SendRefinementMessageAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -4369,7 +4481,7 @@
       "kind": "api",
       "key": "sendPlanningSessionMessage",
       "status": "implemented",
-      "tui": "ArmadaClient.SendPlanningSessionMessageAsync",
+      "tui": "ArmadaClient.PlanningSessions.SendMessageAsync",
       "workstream": "W0.2",
       "notes": "Planning Sessions"
     },
@@ -4377,7 +4489,7 @@
       "kind": "api",
       "key": "sendSignal",
       "status": "implemented",
-      "tui": "ArmadaClient.SendSignalAsync",
+      "tui": "ArmadaClient.Signals.SendAsync",
       "workstream": "W0.2",
       "notes": "Signals | used by SignalsScreen"
     },
@@ -4385,7 +4497,7 @@
       "kind": "api",
       "key": "setAskThreadCliPermissionPolicy",
       "status": "implemented",
-      "tui": "ArmadaClient.SetAskThreadCliPermissionPolicyAsync",
+      "tui": "ArmadaClient.CliPermissions.SetAskThreadPolicyAsync",
       "workstream": "W0.2",
       "notes": "CLI tool permissions"
     },
@@ -4393,7 +4505,7 @@
       "kind": "api",
       "key": "setCaptainCliPermissionPolicy",
       "status": "implemented",
-      "tui": "ArmadaClient.SetCaptainCliPermissionPolicyAsync",
+      "tui": "ArmadaClient.CliPermissions.SetCaptainPolicyAsync",
       "workstream": "W0.2",
       "notes": "CLI tool permissions"
     },
@@ -4401,7 +4513,7 @@
       "kind": "api",
       "key": "setVesselHealthOverride",
       "status": "implemented",
-      "tui": "ArmadaClient.SetVesselHealthOverrideAsync",
+      "tui": "ArmadaClient.VesselHealth.SetOverrideAsync",
       "workstream": "W0.2",
       "notes": "Vessel Health"
     },
@@ -4409,7 +4521,7 @@
       "kind": "api",
       "key": "startRunbookExecution",
       "status": "implemented",
-      "tui": "ArmadaClient.StartRunbookExecutionAsync",
+      "tui": "ArmadaClient.Runbooks.StartExecutionAsync",
       "workstream": "W0.2",
       "notes": "Runbooks"
     },
@@ -4417,7 +4529,7 @@
       "kind": "api",
       "key": "stopAllCaptains",
       "status": "implemented",
-      "tui": "ArmadaClient.StopAllCaptainsAsync",
+      "tui": "ArmadaClient.Captains.StopAllAsync",
       "workstream": "W0.2",
       "notes": "Captains"
     },
@@ -4425,7 +4537,7 @@
       "kind": "api",
       "key": "stopCaptain",
       "status": "implemented",
-      "tui": "ArmadaClient.StopCaptainAsync",
+      "tui": "ArmadaClient.Captains.StopAsync",
       "workstream": "W0.2",
       "notes": "Captains"
     },
@@ -4433,7 +4545,7 @@
       "kind": "api",
       "key": "stopHarborJob",
       "status": "implemented",
-      "tui": "ArmadaClient.StopHarborJobAsync",
+      "tui": "ArmadaClient.Harbors.StopJobAsync",
       "workstream": "W0.2",
       "notes": "Harbors (host runners)"
     },
@@ -4441,7 +4553,7 @@
       "kind": "api",
       "key": "stopObjectiveRefinementSession",
       "status": "implemented",
-      "tui": "ArmadaClient.StopObjectiveRefinementSessionAsync",
+      "tui": "ArmadaClient.Objectives.StopRefinementSessionAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -4449,7 +4561,7 @@
       "kind": "api",
       "key": "stopPlanningSession",
       "status": "implemented",
-      "tui": "ArmadaClient.StopPlanningSessionAsync",
+      "tui": "ArmadaClient.PlanningSessions.StopAsync",
       "workstream": "W0.2",
       "notes": "Planning Sessions"
     },
@@ -4457,7 +4569,7 @@
       "kind": "api",
       "key": "stopPlanningTurn",
       "status": "implemented",
-      "tui": "ArmadaClient.StopPlanningTurnAsync",
+      "tui": "ArmadaClient.PlanningSessions.StopTurnAsync",
       "workstream": "W0.2",
       "notes": "Planning Sessions"
     },
@@ -4465,7 +4577,7 @@
       "kind": "api",
       "key": "stopServer",
       "status": "implemented",
-      "tui": "ArmadaClient.StopServerAsync",
+      "tui": "ArmadaClient.Server.StopAsync",
       "workstream": "W0.2",
       "notes": "Server | used by ServerSettingsScreen"
     },
@@ -4473,7 +4585,7 @@
       "kind": "api",
       "key": "summarizeAskThread",
       "status": "implemented",
-      "tui": "ArmadaClient.SummarizeAskThreadAsync",
+      "tui": "ArmadaClient.Ask.SummarizeThreadAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -4481,7 +4593,7 @@
       "kind": "api",
       "key": "summarizeObjectiveRefinementSession",
       "status": "implemented",
-      "tui": "ArmadaClient.SummarizeObjectiveRefinementSessionAsync",
+      "tui": "ArmadaClient.Objectives.SummarizeRefinementSessionAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -4489,7 +4601,7 @@
       "kind": "api",
       "key": "summarizePlanningSession",
       "status": "implemented",
-      "tui": "ArmadaClient.SummarizePlanningSessionAsync",
+      "tui": "ArmadaClient.PlanningSessions.SummarizeAsync",
       "workstream": "W0.2",
       "notes": "Planning Sessions"
     },
@@ -4497,7 +4609,7 @@
       "kind": "api",
       "key": "syncGitHubActions",
       "status": "implemented",
-      "tui": "ArmadaClient.SyncGitHubActionsAsync",
+      "tui": "ArmadaClient.Deployments.SyncGitHubActionsAsync",
       "workstream": "W0.2",
       "notes": "Deployments"
     },
@@ -4505,7 +4617,7 @@
       "kind": "api",
       "key": "transitionMission",
       "status": "implemented",
-      "tui": "ArmadaClient.TransitionMissionAsync",
+      "tui": "ArmadaClient.Missions.TransitionAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -4513,7 +4625,7 @@
       "kind": "api",
       "key": "tui:GetI18nCatalogAsync",
       "status": "extension",
-      "tui": "ArmadaClient.GetI18nCatalogAsync",
+      "tui": "ArmadaClient.Support.GetI18nCatalogAsync",
       "workstream": "W0.2",
       "notes": "TUI-only client call"
     },
@@ -4521,7 +4633,7 @@
       "kind": "api",
       "key": "tui:GetOpenApiDocumentAsync",
       "status": "extension",
-      "tui": "ArmadaClient.GetOpenApiDocumentAsync",
+      "tui": "ArmadaClient.Support.GetOpenApiDocumentAsync",
       "workstream": "W0.2",
       "notes": "TUI-only client call"
     },
@@ -4537,7 +4649,7 @@
       "kind": "api",
       "key": "unpinBlackBox",
       "status": "implemented",
-      "tui": "ArmadaClient.UnpinBlackBoxAsync",
+      "tui": "ArmadaClient.BlackBox.UnpinAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -4545,7 +4657,7 @@
       "kind": "api",
       "key": "unquarantineCaptain",
       "status": "implemented",
-      "tui": "ArmadaClient.UnquarantineCaptainAsync",
+      "tui": "ArmadaClient.Captains.UnquarantineAsync",
       "workstream": "W0.2",
       "notes": "Captains"
     },
@@ -4553,7 +4665,7 @@
       "kind": "api",
       "key": "updateAskThread",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateAskThreadAsync",
+      "tui": "ArmadaClient.Ask.UpdateThreadAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -4561,7 +4673,7 @@
       "kind": "api",
       "key": "updateBacklogItem",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateBacklogItemAsync",
+      "tui": "ArmadaClient.Objectives.UpdateBacklogItemAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -4569,7 +4681,7 @@
       "kind": "api",
       "key": "updateBatteryPackManifest",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateBatteryPackManifestAsync",
+      "tui": "ArmadaClient.Battery.UpdatePackManifestAsync",
       "workstream": "W0.2",
       "notes": "Battery packs"
     },
@@ -4577,7 +4689,7 @@
       "kind": "api",
       "key": "updateCaptain",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateCaptainAsync",
+      "tui": "ArmadaClient.Captains.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Captains"
     },
@@ -4585,7 +4697,7 @@
       "kind": "api",
       "key": "updateCliPermissionRule",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateCliPermissionRuleAsync",
+      "tui": "ArmadaClient.CliPermissions.UpdateRuleAsync",
       "workstream": "W0.2",
       "notes": "CLI tool permissions"
     },
@@ -4593,7 +4705,7 @@
       "kind": "api",
       "key": "updateCredential",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateCredentialAsync",
+      "tui": "ArmadaClient.Credentials.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Credentials (admin) | used by CredentialsScreen"
     },
@@ -4601,7 +4713,7 @@
       "kind": "api",
       "key": "updateDeployment",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateDeploymentAsync",
+      "tui": "ArmadaClient.Deployments.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Deployments"
     },
@@ -4609,7 +4721,7 @@
       "kind": "api",
       "key": "updateEnvironment",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateEnvironmentAsync",
+      "tui": "ArmadaClient.Environments.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Environments"
     },
@@ -4617,7 +4729,7 @@
       "kind": "api",
       "key": "updateFailureCauseRule",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateFailureCauseRuleAsync",
+      "tui": "ArmadaClient.StageOutcomes.UpdateFailureCauseRuleAsync",
       "workstream": "W0.2",
       "notes": "Stage outcomes and failure-cause rules"
     },
@@ -4625,7 +4737,7 @@
       "kind": "api",
       "key": "updateFleet",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateFleetAsync",
+      "tui": "ArmadaClient.Fleets.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Fleets"
     },
@@ -4633,7 +4745,7 @@
       "kind": "api",
       "key": "updateFleetAction",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateFleetActionAsync",
+      "tui": "ArmadaClient.FleetActions.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Fleet Actions; mission mode and applicability commands"
     },
@@ -4641,7 +4753,7 @@
       "kind": "api",
       "key": "updateHarbor",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateHarborAsync",
+      "tui": "ArmadaClient.Harbors.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Harbors (host runners)"
     },
@@ -4649,7 +4761,7 @@
       "kind": "api",
       "key": "updateIncident",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateIncidentAsync",
+      "tui": "ArmadaClient.Incidents.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Incidents"
     },
@@ -4657,7 +4769,7 @@
       "kind": "api",
       "key": "updateMemory",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateMemoryAsync",
+      "tui": "ArmadaClient.Memories.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Memories"
     },
@@ -4665,7 +4777,7 @@
       "kind": "api",
       "key": "updateMission",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateMissionAsync",
+      "tui": "ArmadaClient.Missions.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -4673,15 +4785,23 @@
       "kind": "api",
       "key": "updateModelEndpoint",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateModelEndpointAsync",
+      "tui": "ArmadaClient.ModelEndpoints.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Model endpoints (embedding/inference)"
     },
     {
       "kind": "api",
+      "key": "updateModelProfile",
+      "status": "implemented",
+      "tui": "ArmadaClient.ModelProfiles.UpdateAsync",
+      "workstream": "W0.2",
+      "notes": "Model Probes"
+    },
+    {
+      "kind": "api",
       "key": "updateObjective",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateObjectiveAsync",
+      "tui": "ArmadaClient.Objectives.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
     },
@@ -4689,7 +4809,7 @@
       "kind": "api",
       "key": "updatePersona",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdatePersonaAsync",
+      "tui": "ArmadaClient.Personas.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Personas"
     },
@@ -4697,7 +4817,7 @@
       "kind": "api",
       "key": "updatePipeline",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdatePipelineAsync",
+      "tui": "ArmadaClient.Pipelines.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Pipelines"
     },
@@ -4705,7 +4825,7 @@
       "kind": "api",
       "key": "updatePlaybook",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdatePlaybookAsync",
+      "tui": "ArmadaClient.Playbooks.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Playbooks"
     },
@@ -4713,7 +4833,7 @@
       "kind": "api",
       "key": "updateProjectProfile",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateProjectProfileAsync",
+      "tui": "ArmadaClient.ProjectProfiles.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Project profiles"
     },
@@ -4721,7 +4841,7 @@
       "kind": "api",
       "key": "updatePromptTemplate",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdatePromptTemplateAsync",
+      "tui": "ArmadaClient.PromptTemplates.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Prompt Templates"
     },
@@ -4729,7 +4849,7 @@
       "kind": "api",
       "key": "updateRelease",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateReleaseAsync",
+      "tui": "ArmadaClient.Releases.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Releases"
     },
@@ -4737,7 +4857,7 @@
       "kind": "api",
       "key": "updateRunbook",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateRunbookAsync",
+      "tui": "ArmadaClient.Runbooks.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Runbooks"
     },
@@ -4745,7 +4865,7 @@
       "kind": "api",
       "key": "updateRunbookExecution",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateRunbookExecutionAsync",
+      "tui": "ArmadaClient.Runbooks.UpdateExecutionAsync",
       "workstream": "W0.2",
       "notes": "Runbooks"
     },
@@ -4753,7 +4873,7 @@
       "kind": "api",
       "key": "updateSettings",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateSettingsAsync",
+      "tui": "ArmadaClient.Server.UpdateSettingsAsync",
       "workstream": "W0.2",
       "notes": "Settings | used by ServerSettingsScreen"
     },
@@ -4761,7 +4881,7 @@
       "kind": "api",
       "key": "updateSkill",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateSkillAsync",
+      "tui": "ArmadaClient.Skills.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Skills directory"
     },
@@ -4769,7 +4889,7 @@
       "kind": "api",
       "key": "updateTenant",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateTenantAsync",
+      "tui": "ArmadaClient.Tenants.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Tenants (admin) | used by TenantsScreen"
     },
@@ -4777,7 +4897,7 @@
       "kind": "api",
       "key": "updateUser",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateUserAsync",
+      "tui": "ArmadaClient.Users.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Users (admin) | used by UsersScreen"
     },
@@ -4785,7 +4905,7 @@
       "kind": "api",
       "key": "updateVessel",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateVesselAsync",
+      "tui": "ArmadaClient.Vessels.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Vessels | VesselUpsertRequest carries the write-only gitHubTokenOverride"
     },
@@ -4793,7 +4913,7 @@
       "kind": "api",
       "key": "updateVesselContext",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateVesselContextAsync",
+      "tui": "ArmadaClient.Vessels.UpdateContextAsync",
       "workstream": "W0.2",
       "notes": "Vessels"
     },
@@ -4801,7 +4921,7 @@
       "kind": "api",
       "key": "updateWorkflowProfile",
       "status": "implemented",
-      "tui": "ArmadaClient.UpdateWorkflowProfileAsync",
+      "tui": "ArmadaClient.WorkflowProfiles.UpdateAsync",
       "workstream": "W0.2",
       "notes": "Workflow Profiles"
     },
@@ -4809,7 +4929,7 @@
       "kind": "api",
       "key": "validateBatteryPack",
       "status": "implemented",
-      "tui": "ArmadaClient.ValidateBatteryPackAsync",
+      "tui": "ArmadaClient.Battery.ValidatePackAsync",
       "workstream": "W0.2",
       "notes": "Battery packs"
     },
@@ -4817,7 +4937,7 @@
       "kind": "api",
       "key": "validateModelEndpoint",
       "status": "implemented",
-      "tui": "ArmadaClient.ValidateModelEndpointAsync",
+      "tui": "ArmadaClient.ModelEndpoints.ValidateAsync",
       "workstream": "W0.2",
       "notes": "Model endpoints (embedding/inference)"
     },
@@ -4825,7 +4945,7 @@
       "kind": "api",
       "key": "validateProjectProfile",
       "status": "implemented",
-      "tui": "ArmadaClient.ValidateProjectProfileAsync",
+      "tui": "ArmadaClient.ProjectProfiles.ValidateAsync",
       "workstream": "W0.2",
       "notes": "Project profiles"
     },
@@ -4833,7 +4953,7 @@
       "kind": "api",
       "key": "validateWorkflowProfile",
       "status": "implemented",
-      "tui": "ArmadaClient.ValidateWorkflowProfileAsync",
+      "tui": "ArmadaClient.WorkflowProfiles.ValidateAsync",
       "workstream": "W0.2",
       "notes": "Workflow Profiles"
     },
@@ -4841,7 +4961,7 @@
       "kind": "api",
       "key": "verifyDeployment",
       "status": "implemented",
-      "tui": "ArmadaClient.VerifyDeploymentAsync",
+      "tui": "ArmadaClient.Deployments.VerifyAsync",
       "workstream": "W0.2",
       "notes": "Deployments"
     },
@@ -4849,7 +4969,7 @@
       "kind": "api",
       "key": "whoami",
       "status": "implemented",
-      "tui": "ArmadaClient.WhoamiAsync",
+      "tui": "ArmadaClient.Auth.WhoamiAsync",
       "workstream": "W0.2",
       "notes": "Auth"
     },
@@ -4857,7 +4977,7 @@
       "kind": "api",
       "key": "writeBatteryPackFile",
       "status": "implemented",
-      "tui": "ArmadaClient.WriteBatteryPackFileAsync",
+      "tui": "ArmadaClient.Battery.WritePackFileAsync",
       "workstream": "W0.2",
       "notes": "Battery packs"
     },
@@ -4964,6 +5084,22 @@
       "tui": "NotificationService",
       "workstream": "W1.10",
       "notes": "toast and notification history; approvals queue (reviews, landings, stalls, deployment approvals)"
+    },
+    {
+      "kind": "event",
+      "key": "mission.escalated",
+      "status": "implemented",
+      "tui": "MissionScreen",
+      "workstream": "RS-12.9",
+      "notes": "mission detail reloads its attempts"
+    },
+    {
+      "kind": "event",
+      "key": "mission.repaired",
+      "status": "implemented",
+      "tui": "MissionScreen",
+      "workstream": "RS-12.9",
+      "notes": "mission detail reloads its attempts"
     },
     {
       "kind": "event",
@@ -5092,6 +5228,14 @@
       "tui": "NotificationService",
       "workstream": "W1.10",
       "notes": "toast and notification history"
+    },
+    {
+      "kind": "setting",
+      "key": "settings.acceptLegacyMissionMarkers",
+      "status": "implemented",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
     },
     {
       "kind": "setting",
@@ -5320,6 +5464,14 @@
     {
       "kind": "setting",
       "key": "settings.mcpPort",
+      "status": "implemented",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.outputRepairNormalizerCaptainId",
       "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",

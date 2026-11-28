@@ -428,6 +428,7 @@ export default function Captains() {
         <span className="captain-state-cell">
           <StatusBadge status={c.state} />{' '}
           <span>{t(c.active === false ? 'Inactive' : 'Active')}</span>
+          {c.harborUpdateRecommended && <>{' '}<span className="tag stalled" title={t("Harbor update recommended: a Harbor running this captain's work is missing a capability flag this Admiral expects, so it runs the 1.4.0 behavior for that feature. See the Harbors page.")}>{t('Harbor update recommended')}</span></>}
           {c.state === 'Quarantined' && (
             <span className="tag stalled" title={c.quarantineReason ? t('Quarantined: dispatch skips this captain until the time shown. Reason: {{reason}}', { reason: c.quarantineReason }) : t('Quarantined: dispatch skips this captain until the time shown, then it returns to Idle.')}>
               {c.quarantineUntilUtc ? t('until {{time}}', { time: formatRelativeTime(c.quarantineUntilUtc) }) : t('quarantined')}

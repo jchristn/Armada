@@ -88,7 +88,7 @@ namespace Armada.Helm
             HelpHeading("Missions (armada mission ...)");
             HelpRow("mission list", "List missions");
             HelpRow("mission show <id|name>", "Show mission details");
-            HelpRow("mission create", "Create a standalone mission");
+            HelpRow("mission create", "Create a standalone mission (--persona, --mode)");
             HelpRow("mission cancel <id>", "Cancel a mission");
             HelpRow("mission restart <id>", "Restart a failed mission (edit instructions)");
             HelpRow("mission retry <id>", "Retry a failed mission (new copy)");
@@ -96,6 +96,7 @@ namespace Armada.Helm
             HelpRow("mission lint-brief", "Lint a mission brief before dispatch (--brief-file, --vessel)");
             HelpRow("mission selection <id>", "Captain selection: summary, --history, or --preview");
             HelpRow("mission selection-recovery <id>", "Allow audited selection recovery (--allow-fallback, --reason)");
+            HelpRow("mission attempts <id>", "Attempts, repairs and escalations");
 
             HelpHeading("Voyages (armada voyage ...)");
             HelpRow("voyage list", "List all voyages");
@@ -170,6 +171,19 @@ namespace Armada.Helm
             HelpRow("captain stop <id|name>", "Recall a captain");
             HelpRow("captain remove <id|name>", "Remove a captain");
             HelpRow("captain stop-all", "Emergency recall of all captains");
+
+            HelpHeading("Personas and model profiles");
+            HelpRow("persona list", "List personas");
+            HelpRow("persona show <name>", "Captain priorities and escalation ladder");
+            HelpRow("persona ladder <name>", "Show or replace the escalation ladder (--rung, --clear)");
+            HelpRow("model-profile list", "List model profiles (tier, served context)");
+            HelpRow("model-profile show <id>", "Context, tier, recovery policy and timeouts");
+            HelpRow("model-profile update <id>", "Change tier, recovery policy or timeouts");
+
+            HelpHeading("Battery and gate (armada battery ...)");
+            HelpRow("battery runs", "List battery runs (--status, --captain)");
+            HelpRow("battery cancel <run>", "Cancel a battery run (--reason)");
+            HelpRow("battery report [id]", "Latest reliability gate report, or one by ID");
 
             HelpHeading("Fleets (armada fleet ...)");
             HelpRow("fleet list", "List all fleets (groups of repos)");
@@ -296,6 +310,9 @@ namespace Armada.Helm
                     .WithExample("mission", "selection-recovery", "msn_example", "--allow-fallback", "--reason", "\"Preferred captain offline\"");
                 mission.AddCommand<MissionShowCommand>("show")
                     .WithDescription("Show mission details (accepts name or ID)");
+                mission.AddCommand<MissionAttemptsCommand>("attempts")
+                    .WithDescription("Show a mission's attempts, failure kinds, repairs and escalations")
+                    .WithExample("mission", "attempts", "msn_example");
                 mission.AddCommand<MissionCancelCommand>("cancel")
                     .WithDescription("Cancel a mission");
                 mission.AddCommand<MissionRestartCommand>("restart")
@@ -415,6 +432,45 @@ namespace Armada.Helm
                 blackbox.AddCommand<BlackBoxGapsCommand>("gaps")
                     .WithDescription("List Armada resilience gaps (handoff and landing failures triaged ArmadaDefect, by fingerprint)")
                     .WithExample("blackbox", "gaps", "--phase", "Landing", "--since", "30d");
+            });
+
+            config.AddBranch("battery", battery =>
+            {
+                battery.SetDescription("Fixture battery runs");
+                battery.AddCommand<BatteryRunsCommand>("runs")
+                    .WithDescription("List battery runs (--status, --captain)");
+                battery.AddCommand<BatteryCancelCommand>("cancel")
+                    .WithDescription("Cancel a battery run (cancels its open mission, releases its dock)")
+                    .WithExample("battery", "cancel", "bat_example", "--reason", "\"Wrong pack\"");
+                battery.AddCommand<BatteryReportCommand>("report")
+                    .WithDescription("Show the latest reliability gate report (or one by ID)")
+                    .WithExample("battery", "report")
+                    .WithExample("battery", "report", "gate-example");
+            });
+
+            config.AddBranch("persona", persona =>
+            {
+                persona.SetDescription("Personas: captain priorities and escalation ladders");
+                persona.AddCommand<PersonaListCommand>("list")
+                    .WithDescription("List personas");
+                persona.AddCommand<PersonaShowCommand>("show")
+                    .WithDescription("Show a persona's captain priorities and escalation ladder");
+                persona.AddCommand<PersonaLadderCommand>("ladder")
+                    .WithDescription("Show or replace a persona's escalation ladder")
+                    .WithExample("persona", "ladder", "Worker", "--rung", "model=qwen3.8,tier=Standard", "--rung", "runtime=ClaudeCode,tier=Premium")
+                    .WithExample("persona", "ladder", "Worker", "--clear");
+            });
+
+            config.AddBranch("model-profile", profile =>
+            {
+                profile.SetDescription("Model profiles: tier, recovery policy, timeouts");
+                profile.AddCommand<ModelProfileListCommand>("list")
+                    .WithDescription("List model profiles");
+                profile.AddCommand<ModelProfileShowCommand>("show")
+                    .WithDescription("Show a model profile's context, tier, recovery policy and timeouts");
+                profile.AddCommand<ModelProfileUpdateCommand>("update")
+                    .WithDescription("Change a model profile's tier, recovery policy or timeouts (-1 clears an override)")
+                    .WithExample("model-profile", "update", "mdl_example", "--tier", "Standard", "--max-resumes", "2", "--stall-minutes", "20");
             });
 
             config.AddBranch("action", action =>

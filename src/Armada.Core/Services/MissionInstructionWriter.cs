@@ -1,0 +1,1070 @@
+namespace Armada.Core.Services
+{
+    using System.Text;
+    using System.Text.Json;
+    using Armada.Core;
+    using Armada.Core.BlackBox;
+    using Armada.Core.Database;
+    using Armada.Core.Enums;
+    using Armada.Core.Models;
+    using Armada.Core.Services.Interfaces;
+    using Armada.Core.Settings;
+    using SyslogLogging;
+
+    /// <summary>
+    /// Writes a mission's instructions file into its dock: persona template, playbooks, handoff, and sections.
+    /// </summary>
+    internal sealed class MissionInstructionWriter
+    {
+        #region Private-Members
+
+        private readonly MissionServiceContext _Context;
+        private readonly DatabaseDriver _Database;
+        private readonly IGitService? _Git;
+        private readonly string _Header;
+        private readonly LoggingModule _Logging;
+        private readonly IPromptTemplateService? _PromptTemplates;
+        private readonly ArmadaSettings _Settings;
+
+        #endregion
+
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="service">The mission service facade.</param>
+        /// <param name="context">State and services shared by the mission services.</param>
+        /// <exception cref="ArgumentNullException">A parameter is null.</exception>
+        internal MissionInstructionWriter(MissionService service, MissionServiceContext context)
+        {
+            if (service == null) throw new ArgumentNullException(nameof(service));
+            _Context = context ?? throw new ArgumentNullException(nameof(context));
+            _Database = context.Database;
+            _Git = context.Git;
+            _Header = context.Header;
+            _Logging = context.Logging;
+            _PromptTemplates = context.PromptTemplates;
+            _Settings = context.Settings;
+        }
+
+        #endregion
+
+        #region Internal-Methods
+
+        /// <inheritdoc />
+        internal async Task RegenerateInstructionsAsync(Mission mission, Captain captain, Dock dock, CancellationToken token = default)
+        {
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+            if (captain == null) throw new ArgumentNullException(nameof(captain));
+            if (dock == null) throw new ArgumentNullException(nameof(dock));
+            if (String.IsNullOrEmpty(dock.WorktreePath) || String.IsNullOrEmpty(mission.VesselId)) return;
+            Vessel? vessel = await _Database.Vessels.ReadAsync(mission.VesselId!, token).ConfigureAwait(false);
+            if (vessel == null) return;
+            DockHost? harborHost = _Context.StageCheckRunner.HarborHostFor(dock);
+            await GenerateClaudeMdOnHostAsync(harborHost, dock.WorktreePath!, mission, vessel, captain, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        internal Task GenerateClaudeMdAsync(string worktreePath, Mission mission, Vessel vessel, Captain? captain = null, CancellationToken token = default)
+        {
+            return GenerateClaudeMdOnHostAsync(null, worktreePath, mission, vessel, captain, token);
+        }
+
+        /// <summary>
+        /// Generate the mission's instruction file into a dock: on this machine when <paramref name="harborHost"/> is null,
+        /// else on that Harbor (file writes, git anchors, and exclude entries all go through the Harbor).
+        /// </summary>
+        internal async Task GenerateClaudeMdOnHostAsync(DockHost? harborHost, string worktreePath, Mission mission, Vessel vessel, Captain? captain, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+            if (vessel == null) throw new ArgumentNullException(nameof(vessel));
+
+            string instructionsFileName = MissionPromptBuilder.GetInstructionsFileName(captain != null ? captain.Runtime.ToString() : null);
+            string instructionsPath = Path.Combine(worktreePath, instructionsFileName);
+
+            Mission? previousStage = await ReadPreviousStageAsync(mission, token).ConfigureAwait(false);
+            ModelEndpoint? captainEndpoint = await ReadCaptainEndpointAsync(captain, token).ConfigureAwait(false);
+            ModelProfile? captainProfile = await ReadCaptainProfileAsync(captain, token).ConfigureAwait(false);
+            HandoffReader reader = HandoffReaderResolver.Resolve(captain, captainEndpoint);
+            HandoffRendering? handoff = previousStage != null
+                ? await RenderHandoffAsync(harborHost, worktreePath, previousStage, reader, token).ConfigureAwait(false)
+                : null;
+            Dictionary<string, string> templateParams = MissionPromptBuilder.BuildTemplateParams(mission, vessel, captain, null, previousStage, handoff);
+            await _Context.MissionOwnershipService.AddOwnershipParamsAsync(mission, templateParams, token).ConfigureAwait(false);
+            List<MissionPlaybookSnapshot> playbookSnapshots = await LoadMissionPlaybookSnapshotsAsync(mission, token).ConfigureAwait(false);
+
+            // RS-6.11: the file is assembled from declared sections in a fixed order and held to the reader's budget
+            // (InstructionsComposer); a trimmable section carries a rank and a one-line note that replaces it.
+            List<InstructionSection> sections = new List<InstructionSection>();
+
+            if (!String.IsNullOrWhiteSpace(templateParams["CaptainInstructions"]))
+            {
+                sections.Add(new InstructionSection("captain instructions",
+                    await ResolveSectionAsync("mission.captain_instructions_wrapper", templateParams, token).ConfigureAwait(false) + "\n"));
+            }
+
+            // Vessel context sections
+            if (!String.IsNullOrEmpty(vessel.ProjectContext))
+            {
+                sections.Add(new InstructionSection("project context",
+                    await ResolveSectionAsync("mission.project_context_wrapper", templateParams, token).ConfigureAwait(false) + "\n",
+                    InstructionsComposer.ProjectContextRank,
+                    InstructionsComposer.TrimNote("The vessel's project context", "Read the repository's README and docs instead.")));
+            }
+
+            if (!String.IsNullOrEmpty(vessel.StyleGuide))
+            {
+                sections.Add(new InstructionSection("style guide",
+                    await ResolveSectionAsync("mission.code_style_wrapper", templateParams, token).ConfigureAwait(false) + "\n",
+                    InstructionsComposer.StyleGuideRank,
+                    InstructionsComposer.TrimNote("The vessel's style guide", "Follow the style of the surrounding code.")));
+            }
+
+            if (vessel.EnableModelContext && !String.IsNullOrEmpty(vessel.ModelContext))
+            {
+                sections.Add(new InstructionSection("model context",
+                    await ResolveSectionAsync("mission.model_context_wrapper", templateParams, token).ConfigureAwait(false) + "\n",
+                    InstructionsComposer.ModelContextRank,
+                    InstructionsComposer.TrimNote("The vessel's model context")));
+            }
+
+            if (playbookSnapshots.Count > 0)
+            {
+                templateParams["SelectedPlaybooksMarkdown"] = await RenderSelectedPlaybooksMarkdownAsync(
+                    harborHost,
+                    worktreePath,
+                    mission,
+                    playbookSnapshots,
+                    token).ConfigureAwait(false);
+                sections.Add(new InstructionSection("playbooks",
+                    await ResolveSectionAsync("mission.playbooks_wrapper", templateParams, token).ConfigureAwait(false) + "\n",
+                    InstructionsComposer.PlaybooksRank,
+                    InstructionsComposer.TrimNote("The selected playbooks (" + String.Join(", ", playbookSnapshots.Select(p => p.FileName)) + ")")));
+            }
+
+            // Inject the vessel's project-profile skills (best-effort) as a Skills section.
+            string skillsMarkdown = await ResolveSkillsMarkdownAsync(vessel, token).ConfigureAwait(false);
+            if (!String.IsNullOrWhiteSpace(skillsMarkdown))
+            {
+                sections.Add(new InstructionSection("skills", "## Skills\n\n" + skillsMarkdown + "\n",
+                    InstructionsComposer.SkillsRank, InstructionsComposer.TrimNote("The Skills section")));
+            }
+
+            // Toolchain validation advice from the vessel's workflow profile (best-effort), for example .NET restore.
+            string validationGuidance = await ResolveValidationGuidanceAsync(vessel, token).ConfigureAwait(false);
+            if (!String.IsNullOrEmpty(validationGuidance))
+            {
+                sections.Add(new InstructionSection("validation notes", "## Validation Notes\n\n" + validationGuidance + "\n\n",
+                    InstructionsComposer.ValidationNotesRank, InstructionsComposer.TrimNote("The Validation Notes section")));
+            }
+
+            // Persona prompt: choose the template, read its declared slots, fill the description, then render it once.
+            // Apply the vessel's project-profile persona override (if any) so per-project customization takes effect.
+            PersonaOverride? personaOverride = await ResolvePersonaOverrideAsync(vessel, mission.Persona, token).ConfigureAwait(false);
+            string? personaTemplateName = await ResolvePersonaTemplateNameAsync(mission, token).ConfigureAwait(false);
+            PromptVariantEnum promptVariant = await ResolvePromptVariantAsync(mission, captain, captainEndpoint, captainProfile, token).ConfigureAwait(false);
+            PromptTemplate? personaTemplate = await MissionPromptBuilder.ChoosePersonaTemplateAsync(mission.Persona, personaTemplateName, promptVariant, _PromptTemplates, personaOverride, token).ConfigureAwait(false);
+            string? appendedHandoff = DeliverHandoff(templateParams, handoff, personaTemplate?.Content);
+            string personaPrompt = await MissionPromptBuilder.RenderPersonaPromptBodyAsync(mission.Persona, personaTemplate, templateParams, _PromptTemplates, personaOverride, token).ConfigureAwait(false);
+
+            string personaTemplateLabel = personaOverride != null && personaOverride.Enabled && !String.IsNullOrWhiteSpace(personaOverride.PromptTemplateName)
+                ? personaOverride.PromptTemplateName!.Trim()
+                : !String.IsNullOrWhiteSpace(personaTemplateName) ? personaTemplateName!.Trim() : MissionPromptBuilder.GetPersonaVariantTemplateName(mission.Persona, promptVariant);
+            personaPrompt = _Context.WorkerEnvelopeService.EnsureWorkerEnvelopeSection(personaPrompt, mission, personaTemplateLabel, templateParams);
+            templateParams["PersonaPrompt"] = personaPrompt;
+            sections.Add(new InstructionSection("mission", await ResolveSectionAsync("mission.metadata", templateParams, token).ConfigureAwait(false) + "\n"));
+            if (appendedHandoff != null) sections.Add(new InstructionSection("prior stage output", appendedHandoff));
+
+            // Mission-mode contract: read-only modes (Audit/Research) get a report-shaped brief that forbids
+            // repository changes and states that an empty diff is a successful outcome. Write missions add nothing.
+            string missionModeSection = MissionModeContract.BuildBriefSection(mission.Mode);
+            if (!String.IsNullOrEmpty(missionModeSection))
+            {
+                sections.Add(new InstructionSection("mission mode", missionModeSection + "\n"));
+            }
+
+            // RS-8.2: the captain's model profile can cap the files a mission changes; a writing persona is told the limit.
+            if (!MissionModeContract.IsReadOnly(mission.Mode))
+            {
+                string fileLimit = WorkerEnvelopeRules.FileLimitSection(captainProfile?.Rendering.MaxFilesPerMission,
+                    WorkerEnvelopeRules.Effective(vessel.WorkerEnvelope, mission.WorkerEnvelope, previousStage?.WorkerEnvelope), mission.Persona);
+                if (fileLimit.Length > 0) sections.Add(new InstructionSection("file limit", "\n" + fileLimit + "\n"));
+            }
+
+            // Resolved git anchors (start commit, target branch, working branch, recent commits on the paths
+            // the mission names, and which subject terms already exist in the tree) so the captain does not
+            // burn opening turns deriving them. Best-effort: a git failure degrades to a smaller section.
+            string? headCommit = null;
+            IReadOnlyList<string>? recentPathCommits = null;
+            IReadOnlyList<string>? subjectTermsPresent = null;
+            IGitService? anchorGit = harborHost != null ? harborHost.Git : _Git;
+            if (anchorGit != null)
+            {
+                try { headCommit = await anchorGit.GetHeadCommitHashAsync(worktreePath, token).ConfigureAwait(false); }
+                catch { headCommit = null; }
+
+                string missionText = (mission.Title ?? "") + "\n" + (mission.Description ?? "");
+                try
+                {
+                    IReadOnlyList<string> namedPaths = GitAnchorInputs.ExtractPaths(missionText);
+                    if (namedPaths.Count > 0)
+                        recentPathCommits = await anchorGit.GetRecentCommitsForPathsAsync(worktreePath, namedPaths, 3, token).ConfigureAwait(false);
+                }
+                catch { recentPathCommits = null; }
+
+                try
+                {
+                    IReadOnlyList<string> terms = GitAnchorInputs.ExtractSubjectTerms(mission.Title, mission.Description);
+                    if (terms.Count > 0)
+                        subjectTermsPresent = await anchorGit.FindExistingSubjectTermsAsync(worktreePath, terms, token).ConfigureAwait(false);
+                }
+                catch { subjectTermsPresent = null; }
+            }
+            string gitAnchors = GitAnchorsFormatter.Render(headCommit, vessel.DefaultBranch, mission.BranchName, recentPathCommits, subjectTermsPresent);
+            if (!String.IsNullOrEmpty(gitAnchors))
+            {
+                sections.Add(new InstructionSection("git anchors", gitAnchors + "\n",
+                    InstructionsComposer.GitAnchorsRank, InstructionsComposer.TrimNote("The git anchors section", "Run git log and git status to orient yourself.")));
+
+                // Persist the resolved anchors on the dock (documented raw-JSON snapshot) so the dashboard
+                // and a resuming captain can read them without re-deriving. Best-effort.
+                if (!String.IsNullOrEmpty(mission.DockId))
+                {
+                    try
+                    {
+                        GitAnchorsSnapshot snapshot = new GitAnchorsSnapshot
+                        {
+                            StartCommit = headCommit,
+                            TargetBranch = vessel.DefaultBranch,
+                            WorkingBranch = mission.BranchName,
+                            RecentPathCommits = recentPathCommits != null ? new List<string>(recentPathCommits) : new List<string>(),
+                            SubjectTermsPresent = subjectTermsPresent != null ? new List<string>(subjectTermsPresent) : new List<string>(),
+                        };
+                        Dock? anchorDock = await _Database.Docks.ReadAsync(mission.DockId!, token).ConfigureAwait(false);
+                        if (anchorDock != null)
+                        {
+                            // The start commit was recorded at provision; a later render (a resume) must not move it.
+                            snapshot.StartCommit = DockStartCommit.FromDock(anchorDock) ?? snapshot.StartCommit;
+                            anchorDock.GitAnchorsJson = System.Text.Json.JsonSerializer.Serialize(snapshot);
+                            anchorDock.LastUpdateUtc = DateTime.UtcNow;
+                            await _Database.Docks.UpdateAsync(anchorDock, token).ConfigureAwait(false);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _Logging.Debug(_Header + "could not persist git anchors on dock " + mission.DockId + ": " + ex.Message);
+                    }
+                }
+            }
+
+            // Rules, context conservation, merge conflicts, progress signals -- from templates or hardcoded fallback
+            Voyage? promptVoyage = null;
+            if (!String.IsNullOrEmpty(mission.VoyageId))
+            {
+                promptVoyage = await _Database.Voyages.ReadAsync(mission.VoyageId, token).ConfigureAwait(false);
+            }
+            LandingModeEnum landingMode = promptVoyage?.LandingMode ?? vessel.LandingMode ?? _Settings.LandingMode ?? LandingModeEnum.MergeAndPush;
+            bool readOnlyMission = MissionModeContract.IsReadOnly(mission.Mode);
+            templateParams["MissionCommitInstruction"] = readOnlyMission ? String.Empty : "- Commit all changes to the current branch\n";
+            // An undefined landing mode keeps the captain push instruction.
+            templateParams["MissionPushInstruction"] = readOnlyMission
+                ? String.Empty
+                : landingMode switch
+                {
+                    LandingModeEnum.LocalMerge or LandingModeEnum.MergeQueue or LandingModeEnum.None or LandingModeEnum.MergeAndPush => String.Empty,
+                    LandingModeEnum.PullRequest => "- Commit and push your changes -- the Admiral will also push if needed\n",
+                    _ => "- Commit and push your changes -- the Admiral will also push if needed\n"
+                };
+            sections.Add(new InstructionSection("rules",
+                await ResolveSectionAsync("mission.rules", templateParams, token).ConfigureAwait(false) + "\n"
+                + await ResolveSectionAsync("mission.context_conservation", templateParams, token).ConfigureAwait(false) + "\n"
+                + await ResolveSectionAsync("mission.merge_conflict_avoidance", templateParams, token).ConfigureAwait(false) + "\n"
+                + await ResolveSectionAsync("mission.progress_signals", templateParams, token).ConfigureAwait(false)));
+
+            // Papercuts apply to every mission mode: an audit meets stale docs and dead links exactly as
+            // an implementation does. Judge and Architect are excluded -- a judge reports what it finds
+            // through its verdict, and an architect emits mission blocks only.
+            if (!PersonaCatalog.Matches(mission.Persona, PersonaCatalog.Judge) &&
+                !PersonaCatalog.Matches(mission.Persona, PersonaCatalog.Architect))
+            {
+                sections.Add(new InstructionSection("papercuts", "\n" + BuildPapercutsSection(),
+                    InstructionsComposer.PapercutsRank, "\n" + InstructionsComposer.TrimNote("The papercut directive")));
+            }
+
+            // Model context updates
+            if (vessel.EnableModelContext)
+            {
+                sections.Add(new InstructionSection("model context updates",
+                    "\n" + await ResolveSectionAsync("mission.model_context_updates", templateParams, token).ConfigureAwait(false),
+                    InstructionsComposer.ModelContextUpdatesRank, String.Empty));
+            }
+
+            // If there's an existing runtime instruction file, preserve it and prepend our instructions
+            IDockFileSystem files = harborHost != null ? harborHost.Files : _Context.LocalFiles;
+            string? existing = await files.ReadTextAsync(instructionsPath, token).ConfigureAwait(false);
+            string existingSource = instructionsFileName;
+            // Pi's generated override is output, not repository context. Read AGENTS.md again on regeneration.
+            if (instructionsFileName == "AGENTS.override.md" && existing?.Contains("# Mission Instructions", StringComparison.Ordinal) == true)
+                existing = null;
+
+            // A runtime whose instructions file is not the repository's own (MUX.md, GEMINI.md, CURSOR.md, ARMADA.md,
+            // AGENTS.override.md for Codex and pi) would otherwise never see the project's rules: mux loads MUX.md first
+            // and skips AGENTS.md and CLAUDE.md, and the AGENTS.override.md that Codex and pi load hides the dock's
+            // AGENTS.md. Carry the repository's AGENTS.md, else CLAUDE.md, into the generated file. A generated AGENTS.md
+            // (OpenCode) already holds the repository's AGENTS.md when there is one, and carries CLAUDE.md otherwise.
+            if (existing == null && !String.Equals(instructionsFileName, "CLAUDE.md", StringComparison.Ordinal))
+            {
+                string[] fallbacks = String.Equals(instructionsFileName, "AGENTS.md", StringComparison.Ordinal)
+                    ? new[] { "CLAUDE.md" }
+                    : new[] { "AGENTS.md", "CLAUDE.md" };
+                foreach (string fallback in fallbacks)
+                {
+                    string? projectInstructions = await files.ReadTextAsync(Path.Combine(worktreePath, fallback), token).ConfigureAwait(false);
+                    if (!String.IsNullOrWhiteSpace(projectInstructions))
+                    {
+                        existing = projectInstructions;
+                        existingSource = fallback;
+                        _Logging.Debug(_Header + "carrying the repository's " + fallback + " into " + instructionsFileName + " for mission " + mission.Id);
+                        break;
+                    }
+                }
+            }
+
+            if (existing != null)
+            {
+                string sanitizedExisting = SanitizeExistingInstructions(existing);
+
+                if (!String.IsNullOrWhiteSpace(sanitizedExisting))
+                {
+                    if (!String.Equals(existing, sanitizedExisting, StringComparison.Ordinal))
+                    {
+                        _Logging.Debug(_Header + "sanitized generated mission sections from existing instructions at " + instructionsPath);
+                    }
+
+                    templateParams["ExistingClaudeMd"] = sanitizedExisting;
+                    string where = String.Equals(existingSource, instructionsFileName, StringComparison.Ordinal)
+                        ? "Read it with `git show HEAD:" + existingSource + "`."
+                        : "Read " + existingSource + " in the repository root.";
+                    sections.Add(new InstructionSection("repository instructions",
+                        await ResolveSectionAsync("mission.existing_instructions_wrapper", templateParams, token).ConfigureAwait(false),
+                        InstructionsComposer.ExistingInstructionsRank,
+                        "\n" + InstructionsComposer.TrimNote("The repository's own instructions file", where)));
+                }
+            }
+
+            // The one output contract closes the file, after the handoff and everything else (RS-6.1, RS-6.11).
+            string outputContract = StageOutputContract.For(mission.Persona);
+            if (!String.IsNullOrEmpty(outputContract))
+                sections.Add(new InstructionSection("output contract", "\n\n" + outputContract));
+
+            long toolSchemaTokens = captain != null && captain.Runtime == AgentRuntimeEnum.ApiEndpoint
+                ? PersonaToolScope.EstimateSchemaTokens(mission.Persona, reader.CanReadFiles, reader.HasMcpTools)
+                : 0;
+            InstructionsComposition composition = InstructionsComposer.Compose(sections, InstructionsComposer.ResolveBudget(reader, toolSchemaTokens), toolSchemaTokens);
+            if (composition.TrimmedSections.Count > 0)
+            {
+                _Logging.Info(_Header + "mission " + mission.Id + " instructions trimmed to fit a budget of " + composition.BudgetTokens
+                    + " tokens (" + toolSchemaTokens + " of them tool schemas): " + String.Join(", ", composition.TrimmedSections));
+            }
+            if (composition.OverBudget)
+            {
+                _Logging.Warn(_Header + "mission " + mission.Id + " instructions are about " + composition.EstimatedTokens + " tokens, over the budget of "
+                    + composition.BudgetTokens + " after trimming; the role, description, rules and contract are never trimmed");
+            }
+            string content = composition.Text;
+
+            await files.WriteTextAsync(instructionsPath, content, token).ConfigureAwait(false);
+
+            // Persist a stable copy outside the dock so the dashboard and APIs can still
+            // show the generated mission instructions after the worktree is reclaimed.
+            try
+            {
+                string instructionsSnapshotDir = Path.Combine(_Settings.LogDirectory, "instructions");
+                Directory.CreateDirectory(instructionsSnapshotDir);
+                string snapshotPath = Path.Combine(instructionsSnapshotDir, mission.Id + "." + instructionsFileName);
+                await File.WriteAllTextAsync(snapshotPath, content).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "could not persist mission instructions snapshot for " + mission.Id + ": " + ex.ToString());
+            }
+
+            // Ensure the generated instruction file is ignored locally so agents don't commit it.
+            // Mission instructions are ephemeral and should not alter tracked repository files.
+            bool isGitCheckout = false;
+            try
+            {
+                isGitCheckout = await files.AddGitExcludeEntryAsync(worktreePath, instructionsFileName, token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException))
+            {
+                _Logging.Warn(_Header + "could not update git exclude for " + instructionsFileName + ": " + ex.ToString());
+            }
+
+            try
+            {
+                if (isGitCheckout)
+                {
+                    await _Context.StageCheckRunner.HideTrackedInstructionsFileAsync(harborHost != null ? harborHost.Commands : _Context.LocalCommands, worktreePath, instructionsFileName, token).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException))
+            {
+                _Logging.Warn(_Header + "could not hide tracked " + instructionsFileName + " from git: " + ex.Message);
+            }
+
+            _Logging.Debug(_Header + "generated mission instructions at " + instructionsPath);
+        }
+
+        /// <summary>
+        /// Deliver the prior stage's handoff once (RS-6.11). The persona template's declared slots decide where it goes:
+        /// a template that declares <c>{PreviousStageOutput}</c> (or <c>{Diff}</c>) receives that part, and the
+        /// description's prior-stage placeholder receives the rest, or a note that the evidence is in the role
+        /// instructions. A rework description gets its findings and the rest of the handoff. When neither the template nor
+        /// the description has a slot for the evidence (an operator-edited template and an older description), the
+        /// handoff is returned for the composer to append after the mission section; otherwise null.
+        /// </summary>
+        internal static string? DeliverHandoff(Dictionary<string, string> templateParams, HandoffRendering? handoff, string? personaTemplateContent)
+        {
+            string description = templateParams["MissionDescription"];
+            bool rework = ReworkPromptBuilder.IsReworkDescription(description);
+            if (handoff == null)
+            {
+                // No reviewer stage to render: keep the fallback findings line and drop the placeholder.
+                if (rework) templateParams["MissionDescription"] = ReworkPromptBuilder.Compose(description, null);
+                return null;
+            }
+
+            bool templateCarriesEvidence = InstructionsComposer.DeclaresSlot(personaTemplateContent, "PreviousStageOutput");
+            bool templateCarriesDiff = InstructionsComposer.DeclaresSlot(personaTemplateContent, "Diff");
+            string block;
+            if (templateCarriesEvidence)
+                block = MissionService.HandoffInRoleNote + (templateCarriesDiff ? "" : "\n\n" + handoff.Diff.TrimEnd() + "\n");
+            else
+                block = templateCarriesDiff ? handoff.Evidence.TrimEnd() + "\n" : handoff.Combined();
+
+            // A rework description lists the reviewer's findings, its demands and the rest of the handoff (Phase 3 item 2).
+            string filled = rework
+                ? ReworkPromptBuilder.Compose(description, handoff, templateCarriesEvidence ? MissionService.HandoffInRoleNote : null)
+                : PipelineHandoffContext.Fill(description, block);
+            templateParams["MissionDescription"] = filled;
+
+            bool delivered = templateCarriesEvidence || rework || !String.Equals(filled, description, StringComparison.Ordinal);
+            return delivered ? null : "## Prior Stage Output\n\n" + block.TrimEnd() + "\n\n";
+        }
+
+        /// <summary>
+        /// Builds the papercut directive. A captain that meets broken friction -- a stale doc, a dead
+        /// link, a brief that contradicts itself, a missing sibling repository -- works around it and
+        /// says nothing, so the next captain on the same vessel pays the same cost again. This asks for
+        /// one line per problem and forbids fixing it out of scope, which keeps the report cheap and the
+        /// diff clean.
+        ///
+        /// Built in code rather than added to a template, so an existing stored template row that
+        /// predates this module cannot silently drop it.
+        /// </summary>
+        /// <returns>The papercut section.</returns>
+        internal static string BuildPapercutsSection()
+        {
+            return
+                "## Papercuts\n" +
+                "\n" +
+                "Report friction you meet. Do not work around it silently. One line each, on its own line:\n" +
+                "\n" +
+                "`[ARMADA:PAPERCUT] {\"category\":\"MissingDoc\",\"severity\":\"Low\",\"title\":\"one line\",\"detail\":\"optional\",\"path\":\"optional/file.cs\"}`\n" +
+                "\n" +
+                "- Categories: BriefContradiction, ToolFailure, MissingDoc, BrokenLink, RepoFriction, " +
+                "TestFlake, EnvSetup, PlatformBug, Other. Severity: Low, Medium, High.\n" +
+                "- Report it, do not fix it. A fix outside your mission scope is a merge conflict for another captain.\n" +
+                "- Never block on a papercut. Report it and continue the mission.\n" +
+                "- Your own assigned work is not a papercut. Report what made the work harder than it needed to be.\n" +
+                "- Include no credentials, tokens, or absolute host paths.\n" +
+                "- Ten per mission is the limit. Report the ones that cost you time.\n";
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private async Task<List<MissionPlaybookSnapshot>> LoadMissionPlaybookSnapshotsAsync(Mission mission, CancellationToken token)
+        {
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+            if (mission.PlaybookSnapshots != null && mission.PlaybookSnapshots.Count > 0)
+                return mission.PlaybookSnapshots;
+
+            if (String.IsNullOrEmpty(mission.Id))
+                return new List<MissionPlaybookSnapshot>();
+
+            List<MissionPlaybookSnapshot> snapshots = await _Database.Playbooks
+                .GetMissionSnapshotsAsync(mission.Id, token)
+                .ConfigureAwait(false);
+            mission.PlaybookSnapshots = snapshots;
+            return snapshots;
+        }
+
+        private async Task<string> RenderSelectedPlaybooksMarkdownAsync(
+            DockHost? harborHost,
+            string worktreePath,
+            Mission mission,
+            List<MissionPlaybookSnapshot> snapshots,
+            CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+            if (snapshots == null || snapshots.Count == 0) return String.Empty;
+
+            List<string> sections = new List<string>();
+            bool snapshotStateChanged = false;
+
+            for (int i = 0; i < snapshots.Count; i++)
+            {
+                MissionPlaybookSnapshot snapshot = snapshots[i];
+                string header = "### " + snapshot.FileName;
+                string? description = String.IsNullOrWhiteSpace(snapshot.Description) ? null : snapshot.Description.Trim();
+
+                // A captain on a Harbor cannot read the Admiral's files, so a by-reference playbook is attached into its
+                // dock instead.
+                PlaybookDeliveryModeEnum deliveryMode = snapshot.DeliveryMode;
+                if (harborHost != null && deliveryMode == PlaybookDeliveryModeEnum.InstructionWithReference)
+                    deliveryMode = PlaybookDeliveryModeEnum.AttachIntoWorktree;
+
+                switch (deliveryMode)
+                {
+                    case PlaybookDeliveryModeEnum.InstructionWithReference:
+                        string resolvedPath = await MaterializeReferencePlaybookAsync(mission, snapshot, i, token).ConfigureAwait(false);
+                        if (!String.Equals(snapshot.ResolvedPath, resolvedPath, StringComparison.Ordinal))
+                        {
+                            snapshot.ResolvedPath = resolvedPath;
+                            snapshot.WorktreeRelativePath = null;
+                            snapshotStateChanged = true;
+                        }
+
+                        sections.Add(
+                            header + "\n" +
+                            (description != null ? description + "\n" : "") +
+                            "Read and follow this playbook at `" + resolvedPath + "`.");
+                        break;
+
+                    case PlaybookDeliveryModeEnum.AttachIntoWorktree:
+                        WorktreePlaybookLocation attachedPlaybook = await MaterializeWorktreePlaybookAsync(
+                            harborHost != null ? harborHost.Files : _Context.LocalFiles,
+                            worktreePath,
+                            snapshot,
+                            i,
+                            token).ConfigureAwait(false);
+                        if (!String.Equals(snapshot.ResolvedPath, attachedPlaybook.ResolvedPath, StringComparison.Ordinal) ||
+                            !String.Equals(snapshot.WorktreeRelativePath, attachedPlaybook.RelativePath, StringComparison.Ordinal))
+                        {
+                            snapshot.ResolvedPath = attachedPlaybook.ResolvedPath;
+                            snapshot.WorktreeRelativePath = attachedPlaybook.RelativePath;
+                            snapshotStateChanged = true;
+                        }
+
+                        sections.Add(
+                            header + "\n" +
+                            (description != null ? description + "\n" : "") +
+                            "Read and follow this attached playbook at `" + attachedPlaybook.RelativePath.Replace("\\", "/") + "`.");
+                        break;
+
+                    default:
+                        sections.Add(
+                            header + "\n" +
+                            (description != null ? description + "\n\n" : "") +
+                            snapshot.Content.TrimEnd());
+                        break;
+                }
+            }
+
+            if (snapshotStateChanged)
+            {
+                await _Database.Playbooks.SetMissionSnapshotsAsync(mission.Id, snapshots, token).ConfigureAwait(false);
+            }
+
+            return String.Join("\n\n", sections);
+        }
+
+        private async Task<string> MaterializeReferencePlaybookAsync(
+            Mission mission,
+            MissionPlaybookSnapshot snapshot,
+            int selectionOrder,
+            CancellationToken token)
+        {
+            string playbookDir = Path.Combine(_Settings.LogDirectory, "playbooks", mission.Id);
+            Directory.CreateDirectory(playbookDir);
+
+            string fileName = BuildMaterializedPlaybookFileName(selectionOrder, snapshot.FileName);
+            string resolvedPath = Path.Combine(playbookDir, fileName);
+            await File.WriteAllTextAsync(resolvedPath, snapshot.Content, token).ConfigureAwait(false);
+            return resolvedPath;
+        }
+
+        private async Task<WorktreePlaybookLocation> MaterializeWorktreePlaybookAsync(
+            IDockFileSystem files,
+            string worktreePath,
+            MissionPlaybookSnapshot snapshot,
+            int selectionOrder,
+            CancellationToken token)
+        {
+            string relativeDir = Path.Combine(".armada", "playbooks");
+            string absoluteDir = Path.Combine(worktreePath, relativeDir);
+
+            string fileName = BuildMaterializedPlaybookFileName(selectionOrder, snapshot.FileName);
+            string absolutePath = Path.Combine(absoluteDir, fileName);
+            await files.WriteTextAsync(absolutePath, snapshot.Content, token).ConfigureAwait(false);
+
+            await files.AddGitExcludeEntryAsync(worktreePath, ".armada/playbooks/", token).ConfigureAwait(false);
+
+            return new WorktreePlaybookLocation
+            {
+                ResolvedPath = absolutePath,
+                RelativePath = Path.Combine(relativeDir, fileName)
+            };
+        }
+
+        private static string BuildMaterializedPlaybookFileName(int selectionOrder, string? originalFileName)
+        {
+            string safeName = String.IsNullOrWhiteSpace(originalFileName) ? "PLAYBOOK.md" : originalFileName.Trim();
+            foreach (char invalid in Path.GetInvalidFileNameChars())
+            {
+                safeName = safeName.Replace(invalid, '_');
+            }
+
+            return (selectionOrder + 1).ToString("D2") + "_" + safeName;
+        }
+
+        /// <summary>
+        /// Resolve the persona prompt variant for the mission (<see cref="PromptVariantResolver"/>): the voyage's captain
+        /// override for the mission's persona, then the captain's <c>promptVariant</c> runtime option, then the captain's
+        /// model profile rendering template, then the served context against the automatic thresholds, then Current.
+        /// Best-effort: a voyage read failure falls back to the captain's setting.
+        /// </summary>
+        private async Task<PromptVariantEnum> ResolvePromptVariantAsync(Mission mission, Captain? captain, ModelEndpoint? endpoint, ModelProfile? profile, CancellationToken token)
+        {
+            List<CaptainAssignmentOverride> overrides;
+            try
+            {
+                overrides = await _Context.MissionCaptainRouter.ReadVoyageCaptainOverridesAsync(mission.VoyageId, token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException))
+            {
+                _Logging.Debug(_Header + "could not read voyage overrides for the prompt variant of mission " + mission.Id + ": " + ex.Message);
+                overrides = new List<CaptainAssignmentOverride>();
+            }
+
+            PromptVariantResolution resolution = PromptVariantResolver.Resolve(mission.Persona, overrides, captain, profile?.Rendering,
+                PromptVariantResolver.ServedContextOf(endpoint, profile), _Settings.PromptVariantCompactMaxContextTokens, _Settings.PromptVariantLeanMaxContextTokens);
+            if (resolution.Source != PromptVariantSourceEnum.Default)
+            {
+                _Logging.Debug(_Header + "mission " + mission.Id + " renders the " + resolution.Variant + " persona prompt variant (from "
+                    + resolution.Source + (resolution.Source == PromptVariantSourceEnum.ServedContext ? ", " + resolution.ServedContextTokens + " tokens served" : "") + ")");
+            }
+            if (profile != null && !String.IsNullOrWhiteSpace(profile.Rendering.Template) && !PromptVariantResolver.FromRendering(profile.Rendering).HasValue)
+                _Logging.Warn(_Header + "model profile " + profile.Id + " names rendering template '" + profile.Rendering.Template + "', which is not Current, Lean or Compact; ignored");
+            return resolution.Variant;
+        }
+
+        /// <summary>
+        /// Resolve the prompt template configured on the mission's persona (<see cref="Persona.PromptTemplateName"/>).
+        /// Returns null (use the conventional persona.&lt;name&gt; template) when the persona is not found or names no
+        /// template, and logs and returns null when the configured template does not exist.
+        /// </summary>
+        private async Task<string?> ResolvePersonaTemplateNameAsync(Mission mission, CancellationToken token)
+        {
+            string personaName = PersonaCatalog.NormalizeName(mission.Persona ?? PersonaCatalog.Worker);
+            if (String.IsNullOrWhiteSpace(personaName)) return null;
+
+            Persona? persona;
+            try
+            {
+                persona = await _Context.MissionCaptainRouter.ReadPersonaByNameAsync(mission.TenantId, personaName, token, mission.UserId).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "could not read persona " + personaName + " for mission " + mission.Id + "; using the default persona template: " + ex.Message);
+                return null;
+            }
+
+            if (persona == null || String.IsNullOrWhiteSpace(persona.PromptTemplateName)) return null;
+            string templateName = persona.PromptTemplateName.Trim();
+            if (_PromptTemplates == null) return templateName;
+
+            PromptTemplate? template = await _PromptTemplates.ResolveAsync(templateName, token).ConfigureAwait(false);
+            if (template == null)
+            {
+                _Logging.Warn(_Header + "persona " + persona.Name + " references prompt template " + templateName +
+                    ", which does not exist; mission " + mission.Id + " uses the default template " + MissionPromptBuilder.GetPersonaTemplateName(personaName));
+                return null;
+            }
+
+            return templateName;
+        }
+
+        /// <summary>
+        /// The model endpoint of the captain about to launch, or null when it has none or it could not be read.
+        /// </summary>
+        private async Task<ModelEndpoint?> ReadCaptainEndpointAsync(Captain? captain, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(captain?.ModelEndpointId)) return null;
+            try { return await _Database.ModelEndpoints.ReadAsync(captain!.ModelEndpointId!, token).ConfigureAwait(false); }
+            catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested)) { return null; }
+        }
+
+        /// <summary>
+        /// The model profile of the captain about to launch, or null when it has none or it could not be read.
+        /// </summary>
+        private async Task<ModelProfile?> ReadCaptainProfileAsync(Captain? captain, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(captain?.ModelProfileId)) return null;
+            try { return await _Database.ModelProfiles.ReadAsync(captain!.ModelProfileId!, token).ConfigureAwait(false); }
+            catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
+            {
+                _Logging.Debug(_Header + "could not read model profile " + captain!.ModelProfileId + " of captain " + captain.Id + ": " + ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Render the prior stage's stored handoff artifact, followed by the earlier stages of the chain (newest first), for
+        /// the captain about to read it: the budget comes from the captain's
+        /// served context when known, else <see cref="ArmadaSettings.HandoffBudgetTokens"/>; the pointer to the complete
+        /// artifact uses a tool the captain has. A captain that can only read files gets the complete artifact written to
+        /// .armada/handoff/ in its worktree (git-excluded and a scratch path, so it is never committed). If that write
+        /// fails, the rendering says that nothing beyond it can reach the captain.
+        /// </summary>
+        private async Task<HandoffRendering> RenderHandoffAsync(DockHost? harborHost, string worktreePath, Mission previousStage, HandoffReader reader, CancellationToken token)
+        {
+            // RS-6.9 and RS-6.10: read the stored artifacts of the prior stage and of the stages behind it; a launch never
+            // stores one.
+            HandoffArtifactService artifacts = new HandoffArtifactService(_Database, _Logging);
+            HandoffArtifact artifact = await artifacts.ReadForLaunchAsync(previousStage, token).ConfigureAwait(false);
+            List<HandoffArtifact> earlier = await artifacts.ReadEarlierChainAsync(previousStage, token).ConfigureAwait(false);
+            HandoffRendering rendering = HandoffRenderer.RenderChainWithBudget(artifact, earlier, reader, HandoffRenderer.ResolveBudget(reader, _Settings.HandoffBudgetTokens));
+            if (rendering.Pointer == HandoffPointerKindEnum.File && rendering.FilePath != null)
+            {
+                IDockFileSystem files = harborHost != null ? harborHost.Files : _Context.LocalFiles;
+                try
+                {
+                    string absolute = Path.Combine(worktreePath, rendering.FilePath.Replace('/', Path.DirectorySeparatorChar));
+                    await files.WriteTextAsync(absolute, HandoffRenderer.RenderFullDocument(artifact), token).ConfigureAwait(false);
+                    await files.AddGitExcludeEntryAsync(worktreePath, HandoffRenderer.HandoffDirectory + "/", token).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
+                {
+                    _Logging.Warn(_Header + "could not write the handoff file for mission " + previousStage.Id + " into " + worktreePath + ": " + ex.Message);
+                    HandoffReader noAccess = new HandoffReader { ContextTokens = reader.ContextTokens, HasMcpTools = false, CanReadFiles = false };
+                    rendering = HandoffRenderer.RenderChainWithBudget(artifact, earlier, noAccess, rendering.BudgetTokens);
+                }
+            }
+
+            return rendering;
+        }
+
+        /// <summary>
+        /// Read the prior pipeline stage (the mission this one depends on), or null. Best-effort.
+        /// </summary>
+        private async Task<Mission?> ReadPreviousStageAsync(Mission mission, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(mission.DependsOnMissionId)) return null;
+            try
+            {
+                return !String.IsNullOrEmpty(mission.TenantId)
+                    ? await _Database.Missions.ReadAsync(mission.TenantId!, mission.DependsOnMissionId!, token).ConfigureAwait(false)
+                    : await _Database.Missions.ReadAsync(mission.DependsOnMissionId!, token).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "could not read prior stage " + mission.DependsOnMissionId + " for mission " + mission.Id + ": " + ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Resolve the effective per-project persona override for a mission's persona by selecting the
+        /// vessel's project profile (vessel -> fleet -> global). Best-effort: returns null on any error so
+        /// a profile lookup never blocks dispatch.
+        /// </summary>
+        private async Task<PersonaOverride?> ResolvePersonaOverrideAsync(Vessel vessel, string? persona, CancellationToken token)
+        {
+            if (vessel == null || String.IsNullOrWhiteSpace(persona)) return null;
+
+            try
+            {
+                List<ProjectProfile> profiles = await _Database.ProjectProfiles.EnumerateAllAsync(
+                    new ProjectProfileQuery
+                    {
+                        TenantId = vessel.TenantId,
+                        Active = true,
+                        PageNumber = 1,
+                        PageSize = 1000
+                    },
+                    token).ConfigureAwait(false);
+
+                if (profiles.Count == 0) return null;
+
+                ProjectProfile? profile = ProjectProfileService.SelectForVessel(profiles, vessel);
+                return ProjectProfileService.ResolvePersonaOverride(profile, persona);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "error resolving persona override for vessel " + vessel.Id + ": " + ex.ToString());
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Resolve the vessel's project-profile skills into a combined markdown block for prompt
+        /// injection. Best-effort: returns an empty string on any error or when no profile/skills apply.
+        /// Skill references in the profile may be skill ids (skl_...) or skill names.
+        /// </summary>
+        private async Task<string> ResolveValidationGuidanceAsync(Vessel vessel, CancellationToken token)
+        {
+            if (vessel == null) return String.Empty;
+            try
+            {
+                List<WorkflowProfile> profiles = await _Database.WorkflowProfiles.EnumerateAllAsync(
+                    new WorkflowProfileQuery { VesselId = vessel.Id, Active = true },
+                    token).ConfigureAwait(false);
+                return WorkflowProfileTemplates.ValidationGuidance(profiles);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Debug(_Header + "could not read workflow profiles for vessel " + vessel.Id + ": " + ex.Message);
+                return String.Empty;
+            }
+        }
+
+        private async Task<string> ResolveSkillsMarkdownAsync(Vessel vessel, CancellationToken token)
+        {
+            if (vessel == null) return String.Empty;
+
+            try
+            {
+                List<ProjectProfile> profiles = await _Database.ProjectProfiles.EnumerateAllAsync(
+                    new ProjectProfileQuery { TenantId = vessel.TenantId, Active = true, PageNumber = 1, PageSize = 1000 },
+                    token).ConfigureAwait(false);
+                if (profiles.Count == 0) return String.Empty;
+
+                ProjectProfile? profile = ProjectProfileService.SelectForVessel(profiles, vessel);
+                if (profile == null || profile.Skills == null || profile.Skills.Count == 0) return String.Empty;
+
+                List<Skill> skills = await _Database.Skills.EnumerateAllAsync(
+                    new SkillQuery { TenantId = vessel.TenantId, Active = true, PageNumber = 1, PageSize = 1000 },
+                    token).ConfigureAwait(false);
+                if (skills.Count == 0) return String.Empty;
+
+                Dictionary<string, Skill> byId = new Dictionary<string, Skill>(StringComparer.Ordinal);
+                Dictionary<string, Skill> byName = new Dictionary<string, Skill>(StringComparer.OrdinalIgnoreCase);
+                foreach (Skill skill in skills)
+                {
+                    byId[skill.Id] = skill;
+                    if (!String.IsNullOrWhiteSpace(skill.Name)) byName[skill.Name.Trim()] = skill;
+                }
+
+                List<string> blocks = new List<string>();
+                foreach (string reference in profile.Skills)
+                {
+                    if (String.IsNullOrWhiteSpace(reference)) continue;
+                    Skill? resolved = null;
+                    if (byId.TryGetValue(reference.Trim(), out Skill? byIdMatch)) resolved = byIdMatch;
+                    else if (byName.TryGetValue(reference.Trim(), out Skill? byNameMatch)) resolved = byNameMatch;
+                    if (resolved == null || String.IsNullOrWhiteSpace(resolved.Content)) continue;
+                    blocks.Add("### " + resolved.Name + "\n\n" + resolved.Content.Trim());
+                }
+
+                return String.Join("\n\n", blocks);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "error resolving skills for vessel " + vessel.Id + ": " + ex.ToString());
+                return String.Empty;
+            }
+        }
+
+        /// <summary>
+        /// Preserve only stable project instructions from an existing runtime instruction file.
+        /// Generated Armada mission blocks are stripped to avoid recursively injecting stale
+        /// mission objectives into future captain prompts.
+        /// </summary>
+        private static string SanitizeExistingInstructions(string existing)
+        {
+            if (String.IsNullOrWhiteSpace(existing)) return String.Empty;
+
+            int generatedSectionIndex = existing.IndexOf("# Mission Instructions", StringComparison.Ordinal);
+            if (generatedSectionIndex < 0)
+            {
+                generatedSectionIndex = existing.IndexOf("## Mission Instructions", StringComparison.Ordinal);
+            }
+
+            if (generatedSectionIndex >= 0)
+            {
+                return existing.Substring(0, generatedSectionIndex).TrimEnd();
+            }
+
+            return existing.TrimEnd();
+        }
+
+        /// <summary>
+        /// Resolve a named template section. Falls back to empty string if no template service or template not found.
+        /// </summary>
+        private async Task<string> ResolveSectionAsync(string templateName, Dictionary<string, string> templateParams, CancellationToken token)
+        {
+            if (_PromptTemplates != null)
+            {
+                string rendered = await _PromptTemplates.RenderAsync(templateName, templateParams, token).ConfigureAwait(false);
+                if (!String.IsNullOrEmpty(rendered))
+                    return rendered;
+            }
+
+            // Hardcoded fallbacks for backward compatibility when template service is unavailable
+            string fallback = GetHardcodedFallback(templateName);
+            if (!String.IsNullOrEmpty(fallback))
+            {
+                foreach (KeyValuePair<string, string> kvp in templateParams)
+                {
+                    fallback = fallback.Replace("{" + kvp.Key + "}", kvp.Value ?? "");
+                }
+            }
+            return fallback;
+        }
+
+        /// <summary>
+        /// Returns hardcoded prompt section content as a fallback when the template service is unavailable.
+        /// </summary>
+        private string GetHardcodedFallback(string templateName)
+        {
+            switch (templateName)
+            {
+                case "mission.rules":
+                    return
+                        "## Rules\n" +
+                        "- Work only within this worktree directory\n" +
+                        "{MissionCommitInstruction}" +
+                        "{MissionPushInstruction}" +
+                        "- If you encounter a blocking issue, commit what you have and exit\n" +
+                        "- Exit with code 0 on success\n" +
+                        "- Do not use extended/Unicode characters (em dashes, smart quotes, etc.) -- use only ASCII characters in all output and commit messages\n" +
+                        "- Do not use ANSI color codes or terminal formatting in output -- keep all output plain text\n";
+
+                case "mission.context_conservation":
+                    return
+                        "## Context Conservation (CRITICAL)\n" +
+                        "\n" +
+                        "You have a limited context window. Exceeding it will crash your process and fail the mission. " +
+                        "Follow these rules to stay within limits:\n" +
+                        "\n" +
+                        "1. **NEVER read entire large files.** If a file is over 200 lines, read only the specific " +
+                        "section you need using line offsets. Use grep/search to find the right section first.\n" +
+                        "\n" +
+                        "2. **Read before you write, but read surgically.** Read only the 10-30 lines around the code " +
+                        "you need to change, not the whole file.\n" +
+                        "\n" +
+                        "3. **Do not explore the codebase broadly.** Only read files explicitly mentioned in your " +
+                        "mission description. If the mission says to edit README.md, read only the section you need " +
+                        "to edit, not the entire README.\n" +
+                        "\n" +
+                        "4. **Make your changes and finish.** Do not re-read files to verify your changes, do not " +
+                        "read files for 'context' that isn't directly needed for your edit, and do not explore related " +
+                        "files out of curiosity.\n" +
+                        "\n" +
+                        "5. **Complete the assigned scope.** Work incrementally and validate relevant changes. If a real " +
+                        "blocker prevents completion, preserve your work and report the blocker explicitly. Never " +
+                        "emit a success marker or claim completion for partial work.\n";
+
+                case "mission.merge_conflict_avoidance":
+                    return MergeConflictPrompt.Default;
+
+                case "mission.progress_signals":
+                    return
+                        "## Progress Signals (Optional)\n" +
+                        "You can report progress to the Admiral by printing these lines to stdout:\n" +
+                        "- `[ARMADA:PROGRESS] 50` -- report completion percentage (0-100)\n" +
+                        "- `[ARMADA:STATUS] Testing` -- report that you are now running tests (informational; `[ARMADA:STATUS] InProgress` switches back)\n" +
+                        "- `[ARMADA:MESSAGE] your message here` -- send a progress message\n" +
+                        "- `[ARMADA:TOKENS] input=1234 output=567 cached=0` -- report the tokens you consumed this session (input/prompt, output/completion, and cache-read). Emit this once near the end if your runtime can determine the counts; it lets the Admiral record real token usage instead of an estimate.\n" +
+                        CaptainBlockedContract.SignalLine;
+
+                case "mission.model_context_updates":
+                    return
+                        "## Model Context Updates\n" +
+                        "\n" +
+                        "Model context accumulation is enabled for this vessel. Before you finish your mission, " +
+                        "review the existing model context above (if any) and consider whether you have discovered " +
+                        "key information that would help future agents work on this repository more effectively. " +
+                        "Examples include: architectural insights, code style conventions, naming conventions, " +
+                        "logging patterns, error handling patterns, testing patterns, build quirks, common pitfalls, " +
+                        "important dependencies, interdependencies between modules, concurrency patterns, " +
+                        "and performance considerations.\n" +
+                        "\n" +
+                        "If you have useful additions, call `update_vessel_context` with the `modelContext` " +
+                        "parameter set to the COMPLETE updated model context (not just your additions -- include " +
+                        "the existing content with your additions merged in). Be thorough -- this context is a " +
+                        "goldmine for future agents. Focus on information that is not obvious from reading the code, " +
+                        "and organize it clearly with sections or headings.\n" +
+                        "\n" +
+                        "If you have nothing to add, skip this step.\n";
+
+                case "mission.playbooks_wrapper":
+                    return
+                        "## Playbooks\n" +
+                        "These playbooks are part of the required instructions for this mission. Read and follow them.\n" +
+                        "\n" +
+                        "{SelectedPlaybooksMarkdown}\n";
+
+                case "mission.captain_instructions_wrapper":
+                    return
+                        "## Captain Instructions\n" +
+                        "{CaptainInstructions}\n";
+
+                case "mission.project_context_wrapper":
+                    return
+                        "## Project Context\n" +
+                        "{ProjectContext}\n";
+
+                case "mission.code_style_wrapper":
+                    return
+                        "## Code Style\n" +
+                        "{StyleGuide}\n";
+
+                case "mission.model_context_wrapper":
+                    return
+                        "## Model Context\n" +
+                        "The following context was accumulated by AI agents during previous missions on this repository. " +
+                        "Use this information to work more effectively.\n" +
+                        "\n" +
+                        "{ModelContext}\n";
+
+                case "mission.metadata":
+                    return
+                        "# Mission Instructions\n" +
+                        "\n" +
+                        "{PersonaPrompt}\n" +
+                        "\n" +
+                        "## Mission\n" +
+                        "- **Title:** {MissionTitle}\n" +
+                        "- **ID:** {MissionId}\n" +
+                        "- **Voyage:** {VoyageId}\n" +
+                        "\n" +
+                        "## Description\n" +
+                        "{MissionDescription}\n" +
+                        "\n" +
+                        "## Repository\n" +
+                        "- **Name:** {VesselName}\n" +
+                        "- **Branch:** {BranchName}\n" +
+                        "- **Default Branch:** {DefaultBranch}\n";
+
+                case "mission.existing_instructions_wrapper":
+                    return
+                        "\n## Existing Project Instructions\n" +
+                        "\n" +
+                        "{ExistingClaudeMd}";
+
+                default:
+                    return "";
+            }
+        }
+
+        #endregion
+    }
+}

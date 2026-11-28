@@ -30,7 +30,7 @@ namespace Armada.Tui.Screens.Configuration
             request.Content = template.Content;
             request.Active = template.Active;
             request.Description = EntityUi.Blank(template.Description);
-            EntityUi.Run<PromptTemplate?>(context, ct => context.Client.CreatePromptTemplateAsync(request, ct), created =>
+            EntityUi.Run<PromptTemplate?>(context, ct => context.Client.PromptTemplates.CreateAsync(request, ct), created =>
             {
                 if (created == null) return;
                 EntityUi.Toast(context, NotificationSeverityEnum.Success, EntityUi.T(context, "Template \"{{name}}\" duplicated.", "name", created.Name));
@@ -53,7 +53,7 @@ namespace Armada.Tui.Screens.Configuration
                 : EntityUi.T(context, "Reset template \"{{name}}\" to its built-in default content? Any custom edits will be lost.", "name", name);
             context.Confirm("Reset to Default", message, () =>
             {
-                EntityUi.Run<PromptTemplate?>(context, ct => context.Client.ResetPromptTemplateAsync(name, ct), result =>
+                EntityUi.Run<PromptTemplate?>(context, ct => context.Client.PromptTemplates.ResetAsync(name, ct), result =>
                 {
                     string text = fromDetail ? context.Loc.T("Template reset to default.") : EntityUi.T(context, "Template \"{{name}}\" reset to default.", "name", name);
                     EntityUi.Toast(context, NotificationSeverityEnum.Success, text);

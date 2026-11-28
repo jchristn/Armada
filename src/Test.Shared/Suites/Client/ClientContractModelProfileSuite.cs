@@ -56,46 +56,49 @@ namespace Test.Shared.Suites.Client
                     second = await service.ResolveAsync(observation).ConfigureAwait(false);
                 }
 
-                EnumerationResult<ModelProfile> listed = (await c.ListModelProfilesAsync(new ModelProfileQuery { Runtime = runtime, ModelContains = "CONTRACT", PageSize = 5 }))!;
+                EnumerationResult<ModelProfile> listed = (await c.ModelProfiles.ListAsync(new ModelProfileQuery { Runtime = runtime, ModelContains = "CONTRACT", PageSize = 5 }))!;
                 AssertEqual(first.Profile.Id, listed.Objects.Single().Id, "list with filters");
                 AssertEqual(5, listed.PageSize, "page size sent");
-                AssertTrue((await c.ListModelProfilesAsync())!.TotalRecords >= 1, "list without a query");
-                EnumerationResult<ModelProfile> enumerated = (await c.EnumerateModelProfilesAsync(new ModelProfileQuery { Runtime = runtime }))!;
+                AssertTrue((await c.ModelProfiles.ListAsync())!.TotalRecords >= 1, "list without a query");
+                EnumerationResult<ModelProfile> enumerated = (await c.ModelProfiles.EnumerateAsync(new ModelProfileQuery { Runtime = runtime }))!;
                 AssertEqual(first.Profile.Id, enumerated.Objects.Single().Id, "enumerate");
 
-                ModelProfile got = (await c.GetModelProfileAsync(first.Profile.Id))!;
+                ModelProfile got = (await c.ModelProfiles.GetAsync(first.Profile.Id))!;
                 AssertEqual(2, got.Revisions.Count, "revisions");
                 AssertEqual(first.Revision.Id, got.Revisions[0].Id, "oldest first");
 
-                ModelProfile updated = (await c.UpdateModelProfileAsync(first.Profile.Id, new ModelProfileUpdateRequest
+                ModelProfile updated = (await c.ModelProfiles.UpdateAsync(first.Profile.Id, new ModelProfileUpdateRequest
                 {
                     Rendering = new ModelProfileRendering { Template = "Compact", MaxFilesPerMission = 2 },
+                    Recovery = new ModelProfileRecovery { UnclassifiedResumes = 0 },
                     Notes = "contract"
                 }))!;
                 AssertEqual("Compact", updated.Rendering.Template, "template");
                 AssertEqual((int?)2, updated.Rendering.MaxFilesPerMission, "max files");
+                AssertEqual((int?)0, updated.Recovery.UnclassifiedResumes, "recovery override");
+                AssertEqual(0, updated.EffectiveRecovery!.UnclassifiedResumes, "policy in effect");
                 AssertEqual("contract", updated.Notes, "notes");
 
-                ModelProfileRevision marked = (await c.SetModelProfileRevisionCompatibilityAsync(first.Profile.Id, first.Revision.Id,
+                ModelProfileRevision marked = (await c.ModelProfiles.SetRevisionCompatibilityAsync(first.Profile.Id, first.Revision.Id,
                     new ModelProfileCompatibilityRequest { CompatibleWith = new List<string> { second.Revision.Id } }))!;
                 AssertTrue(marked.CompatibleWith.SequenceEqual(new[] { second.Revision.Id }), "marked");
 
-                ModelScorecard scorecard = (await c.GetModelScorecardAsync(first.Profile.Id, new ModelScorecardRequest { Persona = "Worker", WindowDays = 7, WindowMissions = 5 }))!;
+                ModelScorecard scorecard = (await c.ModelProfiles.GetScorecardAsync(first.Profile.Id, new ModelScorecardRequest { Persona = "Worker", WindowDays = 7, WindowMissions = 5 }))!;
                 AssertEqual(first.Profile.Id, scorecard.ProfileId, "scorecard profile");
                 AssertEqual(7, scorecard.WindowDays, "scorecard days");
                 AssertEqual(5, scorecard.WindowMissions, "scorecard missions");
                 AssertEqual(1, scorecard.Groups.Count, "the two revisions were just marked compatible, so they pool");
                 AssertTrue(scorecard.Groups[0].Pooled && scorecard.Groups[0].RevisionIds.Count == 2, "pooled group");
-                await ClientContract.ExpectErrorAsync(() => c.GetModelScorecardAsync(first.Profile.Id, new ModelScorecardRequest()), "scorecard without persona", 400, 400);
-                await ClientContract.ExpectErrorAsync(() => c.GetModelScorecardAsync("mdl_missing", new ModelScorecardRequest { Persona = "Worker" }), "unknown profile scorecard", 404, 404);
-                await ClientContract.ExpectErrorAsync(() => c.GetModelProfileAsync("mdl_missing"), "unknown profile", 404, 404);
-                await ClientContract.ExpectErrorAsync(() => c.UpdateModelProfileAsync("mdl_missing", new ModelProfileUpdateRequest()), "unknown profile update", 404, 404);
-                await ClientContract.ExpectErrorAsync(() => c.SetModelProfileRevisionCompatibilityAsync(first.Profile.Id, "mdv_missing", new ModelProfileCompatibilityRequest { CompatibleWith = new List<string>() }), "unknown revision", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.ModelProfiles.GetScorecardAsync(first.Profile.Id, new ModelScorecardRequest()), "scorecard without persona", 400, 400);
+                await ClientContract.ExpectErrorAsync(() => c.ModelProfiles.GetScorecardAsync("mdl_missing", new ModelScorecardRequest { Persona = "Worker" }), "unknown profile scorecard", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.ModelProfiles.GetAsync("mdl_missing"), "unknown profile", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.ModelProfiles.UpdateAsync("mdl_missing", new ModelProfileUpdateRequest()), "unknown profile update", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.ModelProfiles.SetRevisionCompatibilityAsync(first.Profile.Id, "mdv_missing", new ModelProfileCompatibilityRequest { CompatibleWith = new List<string>() }), "unknown revision", 404, 404);
             }));
 
             cases.Add(ClientContract.Case(Suite, this, "alerts", "Evaluate, list, enumerate, get, apply, ignore and thresholds of model alerts; unknown ids fail", async (c, fx) =>
             {
-                ModelAlertEvaluation evaluation = (await c.EvaluateModelAlertsAsync())!;
+                ModelAlertEvaluation evaluation = (await c.ModelAlerts.EvaluateAsync())!;
                 AssertTrue(evaluation.Pairs >= 0, "evaluation returned");
 
                 ModelAlert seeded;
@@ -117,23 +120,23 @@ namespace Test.Shared.Suites.Client
                     seeded = await db.ModelAlerts.CreateAsync(alert, ModelAlertRules.Key(alert.TenantId, alert.ProfileId, alert.RevisionGroup, alert.Persona, null, alert.Rule)).ConfigureAwait(false);
                 }
 
-                EnumerationResult<ModelAlert> listed = (await c.ListModelAlertsAsync(new ModelAlertQuery { ProfileId = seeded.ProfileId, Status = ModelAlertStatusEnum.Open, PageSize = 5 }))!;
+                EnumerationResult<ModelAlert> listed = (await c.ModelAlerts.ListAsync(new ModelAlertQuery { ProfileId = seeded.ProfileId, Status = ModelAlertStatusEnum.Open, PageSize = 5 }))!;
                 AssertEqual(seeded.Id, listed.Objects.Single().Id, "list with filters");
-                AssertTrue((await c.ListModelAlertsAsync())!.TotalRecords >= 1, "list without a query");
-                AssertEqual(seeded.Id, (await c.EnumerateModelAlertsAsync(new ModelAlertQuery { ProfileId = seeded.ProfileId }))!.Objects.Single().Id, "enumerate");
-                ModelAlert read = (await c.GetModelAlertAsync(seeded.Id))!;
+                AssertTrue((await c.ModelAlerts.ListAsync())!.TotalRecords >= 1, "list without a query");
+                AssertEqual(seeded.Id, (await c.ModelAlerts.EnumerateAsync(new ModelAlertQuery { ProfileId = seeded.ProfileId }))!.Objects.Single().Id, "enumerate");
+                ModelAlert read = (await c.ModelAlerts.GetAsync(seeded.Id))!;
                 AssertEqual(5, read.SuggestedActions.Count, "suggested actions");
-                ModelAlertApplyResult applied = (await c.ApplyModelAlertActionAsync(seeded.Id, new ModelAlertApplyRequest { Action = ModelAlertActionEnum.Ignore, Days = 1 }))!;
+                ModelAlertApplyResult applied = (await c.ModelAlerts.ApplyActionAsync(seeded.Id, new ModelAlertApplyRequest { Action = ModelAlertActionEnum.Ignore, Days = 1 }))!;
                 AssertEqual(ModelAlertActionEnum.Ignore, applied.Record.Action, "applied");
-                ModelAlertApplyResult ignored = (await c.IgnoreModelAlertAsync(seeded.Id, 2))!;
+                ModelAlertApplyResult ignored = (await c.ModelAlerts.IgnoreAsync(seeded.Id, 2))!;
                 AssertEqual(2, ignored.Alert.Actions.Count, "both recorded");
-                ModelAlertThresholds thresholds = (await c.GetModelAlertThresholdsAsync())!;
+                ModelAlertThresholds thresholds = (await c.ModelAlerts.GetThresholdsAsync())!;
                 AssertEqual((int?)3, thresholds.Defaults.EscalationsInARow, "defaults");
-                ModelAlertThresholds stored = (await c.UpdateModelAlertThresholdsAsync(new ModelAlertThresholds()))!;
+                ModelAlertThresholds stored = (await c.ModelAlerts.UpdateThresholdsAsync(new ModelAlertThresholds()))!;
                 AssertEqual((double?)0.3, stored.Defaults.ProtocolRepairMaxRate, "stored defaults");
-                await ClientContract.ExpectErrorAsync(() => c.GetModelAlertAsync("mal_missing"), "unknown alert", 404, 404);
-                await ClientContract.ExpectErrorAsync(() => c.ApplyModelAlertActionAsync(seeded.Id, new ModelAlertApplyRequest { Action = ModelAlertActionEnum.CompactTemplate }), "unavailable action", 400, 400);
-                await ClientContract.ExpectErrorAsync(() => c.IgnoreModelAlertAsync("mal_missing", 1), "unknown alert ignore", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.ModelAlerts.GetAsync("mal_missing"), "unknown alert", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.ModelAlerts.ApplyActionAsync(seeded.Id, new ModelAlertApplyRequest { Action = ModelAlertActionEnum.CompactTemplate }), "unavailable action", 400, 400);
+                await ClientContract.ExpectErrorAsync(() => c.ModelAlerts.IgnoreAsync("mal_missing", 1), "unknown alert ignore", 404, 404);
             }));
 
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "Armada.Client contract: model profiles", cases: cases);

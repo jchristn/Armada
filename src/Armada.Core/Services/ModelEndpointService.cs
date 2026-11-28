@@ -143,6 +143,8 @@ namespace Armada.Core.Services
             endpoint.LastHealthCheckUtc = null;
             endpoint.LastHealthError = null;
             endpoint.LastLatencyMs = null;
+            // The discovered window is server-owned too: validation or the first run reads it from the model server.
+            ClearDiscoveredContext(endpoint);
 
             _Logging.Info(_Header + "creating endpoint " + endpoint.Id + " (" + endpoint.Provider + "/" + endpoint.Kind + ")");
             return await _Database.ModelEndpoints.CreateAsync(endpoint, token).ConfigureAwait(false);
@@ -198,6 +200,10 @@ namespace Armada.Core.Services
             endpoint.Scope = (auth.IsAdmin || auth.IsTenantAdmin) ? endpoint.Scope : existing.Scope;
 
             ValidateShape(endpoint);
+
+            // A different server or model may serve a different window: forget the discovered one.
+            if (existing.Provider != endpoint.Provider || !SameText(existing.BaseUrl, endpoint.BaseUrl) || !SameText(existing.Model, endpoint.Model))
+                ClearDiscoveredContext(existing);
 
             existing.Name = endpoint.Name;
             existing.Kind = endpoint.Kind;
@@ -303,6 +309,7 @@ namespace Armada.Core.Services
 
             ModelEndpointProbeResult result = await ValidateEndpointAsync(endpoint, token).ConfigureAwait(false);
             result.Note = LocalAddressNote(endpoint.BaseUrl);
+            await DiscoverContextAsync(endpoint, result, token).ConfigureAwait(false);
             await PersistProbeAsync(endpoint, result, token).ConfigureAwait(false);
             return result;
         }
@@ -471,7 +478,7 @@ namespace Armada.Core.Services
             {
                 if (endpoint.Kind == ModelEndpointKindEnum.Embedding)
                 {
-                    using (EmbeddingClientBase client = ModelEndpointClientFactory.CreateEmbedding(endpoint, _Logging))
+                    using (ProviderClientBase client = ModelEndpointClientFactory.CreateEmbedding(endpoint, _Logging))
                     {
                         EmbeddingResponse resp = await client.EmbedAsync("Armada model endpoint connectivity check.", null, token).ConfigureAwait(false);
                         sw.Stop();
@@ -485,7 +492,7 @@ namespace Armada.Core.Services
                 }
                 else
                 {
-                    using (CompletionClientBase client = ModelEndpointClientFactory.CreateCompletion(endpoint, _Logging))
+                    using (ProviderClientBase client = ModelEndpointClientFactory.CreateCompletion(endpoint, _Logging))
                     {
                         CompletionOptions options = new CompletionOptions();
                         options.MaxTokens = 16;
@@ -520,7 +527,7 @@ namespace Armada.Core.Services
 
             try
             {
-                using (ClientBase client = ModelEndpointClientFactory.Create(endpoint, _Logging))
+                using (ProviderClientBase client = ModelEndpointClientFactory.Create(endpoint, _Logging))
                 {
                     bool reachable = await client.ValidateConnectivityAsync(token).ConfigureAwait(false);
                     sw.Stop();
@@ -559,8 +566,29 @@ namespace Armada.Core.Services
             return await _Database.ModelEndpoints.UpdateHealthAsync(current, expected, token).ConfigureAwait(false);
         }
 
+        private static async Task DiscoverContextAsync(ModelEndpoint endpoint, ModelEndpointProbeResult result, CancellationToken token)
+        {
+            // RS-7.8: with no configured window, read the one the server runs right after the validation call loaded the
+            // model. An endpoint that must run on a Harbor is discovered there (its server may be the Harbor's own host).
+            if (!result.Success || endpoint.InferenceOptions.ContextLength.HasValue || endpoint.InferenceOptions.RequireHarbor) return;
+            if (!ModelContextDiscovery.Applies(endpoint)) return;
+            ModelContextDiscoveryResult found = await ModelContextDiscovery.DiscoverAsync(endpoint, null, token).ConfigureAwait(false);
+            result.DiscoveredContextLength = found.ContextLength;
+            result.DiscoveredContextSource = found.Source;
+            result.ContextDiscoveryNote = found.Reason;
+        }
+
+        private static void ClearDiscoveredContext(ModelEndpoint endpoint)
+        {
+            endpoint.DiscoveredContextLength = null;
+            endpoint.DiscoveredContextSource = null;
+            endpoint.ContextDiscoveredUtc = null;
+        }
+
         private static void ApplyProbeResult(ModelEndpoint endpoint, ModelEndpointProbeResult result)
         {
+            if (result.DiscoveredContextLength.HasValue && !String.IsNullOrEmpty(result.DiscoveredContextSource))
+                ModelContextDiscovery.Apply(endpoint, new ModelContextDiscoveryResult { ContextLength = result.DiscoveredContextLength, Source = result.DiscoveredContextSource }, result.TimestampUtc);
             endpoint.HealthStatus = result.Success ? EndpointHealthStatusEnum.Healthy : EndpointHealthStatusEnum.Unhealthy;
             endpoint.LastHealthCheckUtc = result.TimestampUtc;
             endpoint.LastHealthError = result.Success ? null : result.Error;
@@ -631,8 +659,10 @@ namespace Armada.Core.Services
             if (left.RequireHarbor != right.RequireHarbor) return false;
             if (left.MaxConcurrentMissions != right.MaxConcurrentMissions) return false;
             if (left.ContextLength != right.ContextLength) return false;
-            if (left.Streaming != right.Streaming) return false;
+            if (left.StreamingMode != right.StreamingMode) return false;
             if (left.FirstResponseTimeoutMs != right.FirstResponseTimeoutMs) return false;
+            if (left.ToolOutputWindowPercent != right.ToolOutputWindowPercent) return false;
+            if (left.RepeatedToolCallLimit != right.RepeatedToolCallLimit) return false;
             return SameNames(left.AllowedTools, right.AllowedTools);
         }
 

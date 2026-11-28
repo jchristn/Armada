@@ -107,7 +107,7 @@ namespace Test.Shared.Suites.Runtimes
                     AssertEqual("   250\tinstruction-250\n", range.Content);
                 }
             }));
-            cases.Add(Case("small_empty_missing_oversize", "Small/empty content and missing/oversize file error contracts stay unchanged", async dir =>
+            cases.Add(Case("small_empty_missing_oversize", "Small/empty content and missing/oversize file error contracts stay unchanged; the size refusal is a setting", async dir =>
             {
                 File.WriteAllText(Path.Combine(dir, "small.txt"), "one\r\ntwo\n");
                 AssertEqual("     1\tone\n     2\ttwo\n", (await Read(dir, "small.txt")).Content);
@@ -116,8 +116,8 @@ namespace Test.Shared.Suites.Runtimes
                 ToolResult missing = await Read(dir, "missing.txt");
                 AssertFalse(missing.Success);
                 AssertContains("file_not_found", missing.Content);
-                File.WriteAllText(Path.Combine(dir, "oversize.txt"), new string('x', ToolSafetyLimits.MaxReadFileBytes + 1));
-                ToolResult oversize = await Read(dir, "oversize.txt");
+                File.WriteAllText(Path.Combine(dir, "oversize.txt"), new string('x', 4097));
+                ToolResult oversize = await new ReadFileTool(new ToolLimits { MaxReadFileBytes = 4096 }).ExecuteAsync("read", JsonSerializer.SerializeToElement(new { file_path = "oversize.txt" }), dir, CancellationToken.None);
                 AssertFalse(oversize.Success);
                 AssertContains("file_too_large", oversize.Content);
             }));

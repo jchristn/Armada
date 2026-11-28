@@ -199,6 +199,12 @@ Compile clean (no errors, no warnings) before reporting work complete. Prefer ex
 - **Gemini** - runtime `Gemini`; pin a specific Gemini model if you care about which version answers. Note that Gemini's tool-calling shape differs from Claude/OpenAI - your system instructions don't need to change but expect different cadence.
 - **Cursor** - runtime `Cursor` (the `cursor-agent` CLI). To keep a captain on review work only, give it a tight `allowedPersonas` (e.g. only `Judge`) so it doesn't pick up bulk work.
 
+- **Open models** - runtime `ApiEndpoint` with a model endpoint pointing at Ollama, vLLM, LM Studio or an
+  OpenAI-compatible proxy. Leave the endpoint's context length unset if the server reports it: Armada reads the served
+  window and sizes the prompt to fit. Put the open model on the lowest rung of a persona's escalation ladder, with
+  GPT-6.1 and Opus above it, so work it cannot finish moves up instead of failing. See
+  [docs/OPEN_MODELS.md](docs/OPEN_MODELS.md).
+
 Captains do not require unique runtimes - register as many variants as you need. They share the fleet's vessels and playbooks; only the dispatch policy decides who gets a given mission.
 
 Each running mission takes one captain slot. A CLI captain (Claude Code, Codex, Gemini, Cursor, OpenCode, pi) has one slot by default, so running N missions in parallel needs N CLI captains. An `ApiEndpoint` or `Mux` captain has four slots by default and runs several missions at once; set `maxConcurrency` on `create_captain` to change it (1 to 256). The vessel's `maxParallelMissionsPerVoyage` (default 4) and `maxParallelVoyages` (default 1, 0 means unlimited) also cap parallel work. See [SCHEDULING.md](docs/SCHEDULING.md#capacity).

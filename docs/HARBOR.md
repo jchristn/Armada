@@ -319,7 +319,7 @@ longer owns when it reconnects.
 
 The Admiral keeps the numbers behind each Harbor's charts, so the dashboard, the mobile app, and any `Armada.Client`
 consumer show the same data. `GET /api/v1/harbors/{id}/metrics?range=1h|24h|7d` (MCP `get_harbor_metrics`,
-`ArmadaClient.GetHarborMetricsAsync`) returns, over one set of buckets (1h in 1-minute buckets, 24h in 30-minute
+`client.Harbors.GetMetricsAsync`) returns, over one set of buckets (1h in 1-minute buckets, 24h in 30-minute
 buckets, the default, and 7d in 3-hour buckets, aligned to the UTC clock and ending with the bucket that holds now):
 
 | Series | What it shows | Source |
@@ -388,8 +388,9 @@ order:
 3. **Capability.** A Harbor is eligible only if it is enabled, connected, under its `maxConcurrentJobs`
    capacity, and advertises the requested runtime plus every capability in `vessel.requiredCapabilities`.
    API captains also need `api-inference-policy-v1` when their endpoint restricts tools or generation, and
-   `api-inference-context-v1` when it sets `contextLength`, and `api-inference-streaming-v1` when it sets
-   `streaming` or `firstResponseTimeoutMs`; an older Harbor would ignore those settings.
+   `api-inference-context-v1` when it sets `contextLength`, and `api-inference-streaming-v1` when its
+   `streamingMode` is `On` or it sets `firstResponseTimeoutMs`; an older Harbor would ignore those settings.
+   `Automatic` streaming requires nothing: the Admiral streams only on a Harbor that advertises the flag.
 4. **Least load.** Among the remaining eligible Harbors, the least loaded one is chosen, with larger
    remaining headroom and then name used as deterministic tie-breakers.
 

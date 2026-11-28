@@ -102,6 +102,41 @@ health service's orphan and last-scheduled lookups loaded the whole jobs table t
 the status or kind they need. The MCP `enumerate` tool's `jobs` entity, which loaded every job and paged in memory
 without a tenant scope, now uses the same paged query and caller scope as `GET /api/v1/jobs`.
 
+## Changes in 1.5.0
+
+The 1.5.0 work on the dispatcher and the recovery loops removed several reads that grew with the install rather than
+with the work in front of it. None of them showed up as a slow endpoint in the baseline above, because they run in the
+health loop and the dispatch pass, not behind a REST call, but on a large install they were where idle CPU and database
+load went.
+
+- **One read per dispatch pass.** A pass reads captains, running missions, admission rows, voyages, vessels,
+  personas, endpoints and model profiles once and evaluates every pending mission against them, instead of reading
+  them again per mission. Running missions on a vessel come from one indexed query rather than a scan of every active
+  status on every vessel.
+- **The recovery coordinator reads only recently updated missions.** Failed and LandingFailed missions come from a
+  time-bounded status query, backed by the (status, last update) index of migration 143, instead of a full scan
+  filtered in memory.
+- **Orphaned dock reclaim reads mission statuses once per sweep** instead of once per dock, and escalation and Judge
+  routing read model profiles and parent missions in single batched queries.
+- **Live output buffers are ring buffers.** Appending past the cap no longer copies the whole buffer: 6,000 lines into
+  256 KiB took 192 ms before and 8 ms after.
+- **The merge queue fetches once per repository and target branch per pass**, instead of about twice per entry.
+
+Outcome ranking (`RoutingData.RankByOutcomes`) is off by default because it costs dispatch time. Each dispatch pass
+reads outcome statistics for the candidate captains. In the 100-captain admission benchmark it measured:
+
+| Admission latency, 100 captains, 200 missions | p50 | p95 |
+|---|---|---|
+| 1.4.0 (`benchmarks/baselines/1.4.0/admission-100.json`) | 1.58 s | 1.95 s |
+| 1.5.0, ranking off (`admission-100-rank-off.json`) | 1.47 s | 1.76 s |
+| 1.5.0, ranking on (`admission-100.json`) | 1.90 s | 3.07 s |
+
+Turn it on only when routing by recorded results is worth slower dispatch.
+
+Batched landing (`MergeQueueBatchSize`, off by default) is measured separately. `benchmarks/run-landing-batch.sh` lands
+the same simulated entries serially and in batches; on a six-entry run it took 3.8 seconds batched against 10.1
+seconds serially. The gain comes from verifying once per batch, so it grows with the cost of the vessel's test command.
+
 ## Not egregious yet, worth doing
 
 These stay within budget at 5x but grow linearly, and they are the first places to look when a larger install feels

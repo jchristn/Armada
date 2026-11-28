@@ -20,6 +20,11 @@ namespace Armada.Core.Services
     /// </summary>
     public class ManualLandingReconciler
     {
+        /// <summary>
+        /// Mission status transitions (RS-3.5); the server replaces this with the instance shared across services.
+        /// </summary>
+        public MissionTransitions Transitions { get; set; }
+
         #region Private-Members
 
         private readonly string _Header = "[ManualLandingReconciler] ";
@@ -59,6 +64,7 @@ namespace Armada.Core.Services
         public ManualLandingReconciler(DatabaseDriver database, ArmadaSettings settings, IGitService git, LoggingModule logging)
         {
             _Database = database ?? throw new ArgumentNullException(nameof(database));
+            Transitions = new MissionTransitions(database, logging);
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Git = git ?? throw new ArgumentNullException(nameof(git));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
@@ -100,6 +106,46 @@ namespace Armada.Core.Services
                 catch (Exception ex)
                 {
                     _Logging.Warn(_Header + "error reconciling mission " + mission.Id + ": " + ex.Message);
+                }
+            }
+
+            return reconciled;
+        }
+
+        /// <summary>
+        /// Reconcile the given WorkProduced missions (the landing reconciler's scan, RS-9.2), oldest update first,
+        /// examining at most 25. Missions with an active merge queue entry are skipped.
+        /// </summary>
+        /// <param name="workProduced">WorkProduced missions.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The IDs of the missions moved to Complete.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when workProduced is null.</exception>
+        public async Task<List<string>> ReconcileCandidatesAsync(IEnumerable<MissionSummary> workProduced, CancellationToken token = default)
+        {
+            if (workProduced == null) throw new ArgumentNullException(nameof(workProduced));
+            List<string> reconciled = new List<string>();
+            List<MissionSummary> candidates = workProduced
+                .Where(m => m.Status == MissionStatusEnum.WorkProduced && !String.IsNullOrEmpty(m.BranchName) && !String.IsNullOrEmpty(m.VesselId))
+                .OrderBy(m => m.LastUpdateUtc)
+                .ToList();
+            if (candidates.Count == 0) return reconciled;
+
+            HashSet<string> inMergeQueue = await MergeQueueMissionActivity.GetMissionIdsWithActiveEntriesAsync(_Database, token).ConfigureAwait(false);
+            int examined = 0;
+            foreach (MissionSummary summary in candidates)
+            {
+                if (examined >= _MaxPerCycle) break;
+                if (inMergeQueue.Contains(summary.Id)) continue;
+                examined++;
+
+                try
+                {
+                    Mission? mission = await _Database.Missions.ReadAsync(summary.Id, token).ConfigureAwait(false);
+                    if (mission != null && await ReconcileMissionAsync(mission, token).ConfigureAwait(false)) reconciled.Add(mission.Id);
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
+                {
+                    _Logging.Warn(_Header + "error reconciling mission " + summary.Id + ": " + ex.Message);
                 }
             }
 
@@ -169,10 +215,10 @@ namespace Armada.Core.Services
             Mission? current = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
             if (current == null || current.Status != MissionStatusEnum.WorkProduced) return false;
 
-            current.Status = MissionStatusEnum.Complete;
             current.CompletedUtc = DateTime.UtcNow;
-            current.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.Missions.UpdateAsync(current, token).ConfigureAwait(false);
+            MissionTransitionRequest mergedByHand = new MissionTransitionRequest { To = MissionStatusEnum.Complete, Message = "Mission completed (branch merged by hand): " + current.Title };
+            mergedByHand.AllowedFrom.Add(MissionStatusEnum.WorkProduced);
+            if (!await Transitions.TryTransitionAsync(current, mergedByHand, token).ConfigureAwait(false)) return false;
             _Logging.Info(_Header + "mission " + current.Id + " branch " + current.BranchName + " is merged into " + target + "; status set to Complete");
 
             if (OnMissionReconciled != null)

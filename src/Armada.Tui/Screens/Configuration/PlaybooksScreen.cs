@@ -195,7 +195,7 @@ namespace Armada.Tui.Screens.Configuration
         /// <inheritdoc />
         protected override Task DeleteAsync(Playbook row, CancellationToken token)
         {
-            return Context.Client.DeletePlaybookAsync(row.Id, token);
+            return Context.Client.Playbooks.DeleteAsync(row.Id, token);
         }
 
         /// <inheritdoc />
@@ -216,7 +216,7 @@ namespace Armada.Tui.Screens.Configuration
 
         private Task<List<Playbook>> ReadAllAsync(CancellationToken token)
         {
-            return ArmadaPaging.ReadAllAsync<Playbook>((p, ct) => Context.Client.ListPlaybooksAsync(new ArmadaPageQuery(p, EntityLookups.PageSize), ct), 20, token);
+            return ArmadaPaging.ReadAllAsync<Playbook>((p, ct) => Context.Client.Playbooks.ListAsync(new ArmadaPageQuery(p, EntityLookups.PageSize), ct), 20, token);
         }
 
         #endregion

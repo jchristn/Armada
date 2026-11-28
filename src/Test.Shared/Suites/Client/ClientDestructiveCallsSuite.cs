@@ -40,9 +40,9 @@ namespace Test.Shared.Suites.Client
                 stub.On("POST", "/api/v1/server/reset", body => StubHttpHandler.Response(HttpStatusCode.Forbidden, "{\"Error\":\"Forbidden\",\"Message\":\"Global admin required\"}"));
                 using (ArmadaClient client = new ArmadaClient(new ArmadaClientOptions("http://127.0.0.1:9"), stub))
                 {
-                    await client.StopServerAsync();
-                    await client.RestartServerAsync();
-                    ArmadaApiException ex = await ClientContract.ExpectErrorAsync(() => client.ResetServerAsync(), "reset refused", 403, 403);
+                    await client.Server.StopAsync();
+                    await client.Server.RestartAsync();
+                    ArmadaApiException ex = await ClientContract.ExpectErrorAsync(() => client.Server.ResetAsync(), "reset refused", 403, 403);
                     AssertEqual("Global admin required", ex.Message, "server message");
                 }
 
@@ -58,10 +58,10 @@ namespace Test.Shared.Suites.Client
                 stub.Json("POST", "/api/v1/server/rollback", "{\"Slot\":\"slot-1\",\"PreviousSlot\":\"slot-2\",\"Status\":\"RolledBack\"}");
                 using (ArmadaClient client = new ArmadaClient(new ArmadaClientOptions("http://127.0.0.1:9"), stub))
                 {
-                    RebuildStatus? rebuild = await client.RebuildServerAsync();
+                    RebuildStatus? rebuild = await client.Server.RebuildAsync();
                     AssertEqual("rb_1", rebuild?.RebuildId, "rebuild id");
                     AssertEqual<ServerRebuildStatusEnum?>(ServerRebuildStatusEnum.Building, rebuild?.Status, "rebuild status");
-                    RebuildStatus? rollback = await client.RollbackServerAsync();
+                    RebuildStatus? rollback = await client.Server.RollbackAsync();
                     AssertEqual("slot-2", rollback?.PreviousSlot, "rollback slot");
                 }
 
@@ -74,7 +74,7 @@ namespace Test.Shared.Suites.Client
                 stub.Json("POST", "/api/v1/restore", "{\"Success\":true}");
                 using (ArmadaClient client = new ArmadaClient(new ArmadaClientOptions("http://127.0.0.1:9"), stub))
                 {
-                    ArmadaRawJson reply = await client.RestoreBackupAsync(new byte[] { 80, 75, 3, 4 }, "armada-backup.zip");
+                    ArmadaRawJson reply = await client.Server.RestoreBackupAsync(new byte[] { 80, 75, 3, 4 }, "armada-backup.zip");
                     AssertEqual<bool?>(true, JsonHelper.Deserialize<ClientRestoreReply>(reply.Json).Success, "reply");
                 }
 

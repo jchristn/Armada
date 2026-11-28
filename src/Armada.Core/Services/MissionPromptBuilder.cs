@@ -13,9 +13,6 @@ namespace Armada.Core.Services
     public static class MissionPromptBuilder
     {
         private const int MaxLaunchPromptChars = 6000;
-        private const int MaxPersonaSummaryChars = 320;
-        private const int MaxCaptainInstructionChars = 800;
-        private const int MaxMissionDescriptionChars = 3500;
 
         /// <summary>
         /// Text placed in <c>{Diff}</c> when the mission has no prior pipeline stage diff.
@@ -29,7 +26,7 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Every placeholder (without braces) that mission prompt rendering supplies: the keys of
-        /// <see cref="BuildTemplateParams(Mission, Vessel, Captain?, Dock?, Mission?)"/> plus <c>PersonaPrompt</c> and
+        /// <see cref="BuildTemplateParams(Mission, Vessel, Captain?, Dock?)"/> plus <c>PersonaPrompt</c> and
         /// <c>ExistingClaudeMd</c>, which mission instruction generation adds while it renders. The dashboard and TUI
         /// placeholder panels list exactly these.
         /// </summary>
@@ -67,8 +64,18 @@ namespace Armada.Core.Services
         };
 
         /// <summary>
-        /// Resolve the runtime-specific mission instructions filename.
+        /// Instructions file for a runtime that loads no context file of its own (the API endpoint runtime, a Custom
+        /// command, or an unknown runtime). The launch prompt names it, and it collides with no repository file.
         /// </summary>
+        public const string NeutralInstructionsFileName = "ARMADA.md";
+
+        /// <summary>
+        /// Resolve the runtime-specific mission instructions filename: the file each runtime loads natively, so the
+        /// mission instructions are in context even before the captain reads the launch prompt.
+        /// </summary>
+        /// <param name="runtime">Runtime name (<see cref="AgentRuntimeEnum"/>), or null when no captain is known (CLAUDE.md,
+        /// as before: a generation without a captain renders for the default Claude Code runtime).</param>
+        /// <returns>File name relative to the dock root.</returns>
         public static string GetInstructionsFileName(string? runtime)
         {
             if (String.IsNullOrWhiteSpace(runtime)) return "CLAUDE.md";
@@ -76,19 +83,25 @@ namespace Armada.Core.Services
             return runtime.Trim() switch
             {
                 "ClaudeCode" => "CLAUDE.md",
-                "Codex" => "CODEX.md",
+                // Codex and pi load one context file per directory: AGENTS.override.md, else AGENTS.md (codex-cli 0.171
+                // instructions loader; pi also falls back to CLAUDE.md). Only the override is always read, so a repository
+                // AGENTS.md cannot hide the mission instructions and is never overwritten.
+                "Codex" => "AGENTS.override.md",
+                "Pi" => "AGENTS.override.md",
                 "Cursor" => "CURSOR.md",
                 "Gemini" => "GEMINI.md",
                 "Mux" => "MUX.md",
-                // pi loads one context file per directory: AGENTS.override.md, else AGENTS.md, else CLAUDE.md. Only the
-                // override is always read, so a repository AGENTS.md cannot hide the mission instructions.
-                "Pi" => "AGENTS.override.md",
-                _ => "CLAUDE.md"
+                // OpenCode loads AGENTS.md, and CLAUDE.md only when there is no AGENTS.md (opencode 2.2), so a generated
+                // CLAUDE.md was ignored in any repository with an AGENTS.md. It has no override file.
+                "OpenCode" => "AGENTS.md",
+                _ => NeutralInstructionsFileName
             };
         }
 
         /// <summary>
-        /// Build a consistent template parameter dictionary for mission prompt rendering.
+        /// Build a consistent template parameter dictionary for mission prompt rendering without a prior stage:
+        /// <c>{Diff}</c> and <c>{PreviousStageOutput}</c> hold <see cref="NoPreviousStageDiffText"/> and
+        /// <see cref="NoPreviousStageOutputText"/>. A launch passes the stored handoff it rendered instead.
         /// </summary>
         public static Dictionary<string, string> BuildTemplateParams(
             Mission mission,
@@ -96,32 +109,7 @@ namespace Armada.Core.Services
             Captain? captain = null,
             Dock? dock = null)
         {
-            return BuildTemplateParams(mission, vessel, captain, dock, null);
-        }
-
-        /// <summary>
-        /// Build the template parameter dictionary, filling the pipeline placeholders <c>{Diff}</c> and
-        /// <c>{PreviousStageOutput}</c> from the prior pipeline stage (the mission this one depends on): its handoff
-        /// artifact rendered for an unknown reader within the default handoff budget
-        /// (<see cref="Constants.DefaultHandoffBudgetTokens"/>). Without a prior stage they hold
-        /// <see cref="NoPreviousStageDiffText"/> and <see cref="NoPreviousStageOutputText"/>.
-        /// </summary>
-        /// <param name="mission">Mission.</param>
-        /// <param name="vessel">Vessel.</param>
-        /// <param name="captain">Captain, or null.</param>
-        /// <param name="dock">Dock, or null.</param>
-        /// <param name="previousStage">The prior pipeline stage mission, or null.</param>
-        /// <returns>Placeholder values keyed by name (without braces).</returns>
-        public static Dictionary<string, string> BuildTemplateParams(
-            Mission mission,
-            Vessel vessel,
-            Captain? captain,
-            Dock? dock,
-            Mission? previousStage)
-        {
-            HandoffRendering? handoff = previousStage == null ? null
-                : HandoffRenderer.Render(HandoffArtifactBuilder.Build(previousStage), null, Constants.DefaultHandoffBudgetTokens);
-            return BuildTemplateParams(mission, vessel, captain, dock, previousStage, handoff);
+            return BuildTemplateParams(mission, vessel, captain, dock, null, null);
         }
 
         /// <summary>
@@ -151,7 +139,7 @@ namespace Armada.Core.Services
             {
                 ["MissionId"] = mission.Id,
                 ["MissionTitle"] = mission.Title,
-                ["MissionDescription"] = mission.Description ?? "No additional description provided.",
+                ["MissionDescription"] = String.IsNullOrWhiteSpace(MissionNotes.EffectiveDescription(mission)) ? "No additional description provided." : MissionNotes.EffectiveDescription(mission),
                 ["MissionCommitInstruction"] = "",
                 ["MissionPushInstruction"] = "",
                 ["MissionPersona"] = PersonaCatalog.NormalizeName(mission.Persona ?? PersonaCatalog.Worker),
@@ -297,28 +285,82 @@ namespace Armada.Core.Services
         {
             if (templateParams == null) throw new ArgumentNullException(nameof(templateParams));
 
-            bool overrideActive = personaOverride != null && personaOverride.Enabled;
+            PromptTemplate? chosen = await ChoosePersonaTemplateAsync(persona, personaTemplateName, variant, promptTemplates, personaOverride, token).ConfigureAwait(false);
+            string body = await RenderPersonaPromptBodyAsync(persona, chosen, templateParams, promptTemplates, personaOverride, token).ConfigureAwait(false);
+
+            // The one output contract, generated from the models the parsers read (StageOutputContract).
+            return StageOutputContract.AppendTo(persona, body);
+        }
+
+        /// <summary>
+        /// The persona prompt template a launch renders, chosen with the precedence of
+        /// <see cref="ResolvePersonaPromptAsync(string?, string?, PromptVariantEnum, Dictionary{string, string}, IPromptTemplateService?, PersonaOverride?, CancellationToken)"/>:
+        /// an enabled project-profile override's template, then the persona's configured template, then the variant of the
+        /// conventional template; a missing or empty template falls back to the conventional one. The instructions composer
+        /// reads the chosen template's declared slots (for example <c>{PreviousStageOutput}</c>) before rendering it once.
+        /// </summary>
+        /// <param name="persona">Mission persona name.</param>
+        /// <param name="personaTemplateName">The persona's configured prompt template name, or null for the convention.</param>
+        /// <param name="variant">Prompt variant.</param>
+        /// <param name="promptTemplates">Template service, or null.</param>
+        /// <param name="personaOverride">Project-profile persona override, or null.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The chosen template, or null when none resolves (the built-in role summary is used).</returns>
+        public static async Task<PromptTemplate?> ChoosePersonaTemplateAsync(
+            string? persona,
+            string? personaTemplateName,
+            PromptVariantEnum variant,
+            IPromptTemplateService? promptTemplates,
+            PersonaOverride? personaOverride = null,
+            CancellationToken token = default)
+        {
+            if (promptTemplates == null) return null;
 
             string conventionalName = GetPersonaTemplateName(persona);
             string templateName = String.IsNullOrWhiteSpace(personaTemplateName) ? conventionalName : personaTemplateName!.Trim();
             if (variant != PromptVariantEnum.Current && String.Equals(templateName, conventionalName, StringComparison.Ordinal))
                 templateName = GetPersonaVariantTemplateName(persona, variant);
-            if (overrideActive && !String.IsNullOrWhiteSpace(personaOverride!.PromptTemplateName))
+            if (personaOverride != null && personaOverride.Enabled && !String.IsNullOrWhiteSpace(personaOverride.PromptTemplateName))
                 templateName = personaOverride.PromptTemplateName!.Trim();
 
+            PromptTemplate? chosen = await promptTemplates.ResolveAsync(templateName, token).ConfigureAwait(false);
+            if ((chosen == null || String.IsNullOrEmpty(chosen.Content)) && !String.Equals(templateName, conventionalName, StringComparison.Ordinal))
+                chosen = await promptTemplates.ResolveAsync(conventionalName, token).ConfigureAwait(false);
+            return chosen == null || String.IsNullOrEmpty(chosen.Content) ? null : chosen;
+        }
+
+        /// <summary>
+        /// Render a chosen persona template (or the built-in role summary when none was chosen) with the override's
+        /// additional instructions, without the output contract. The instructions composer places the contract itself, at
+        /// the end of the file.
+        /// </summary>
+        /// <param name="persona">Mission persona name.</param>
+        /// <param name="chosen">Template from <see cref="ChoosePersonaTemplateAsync"/>, or null.</param>
+        /// <param name="templateParams">Template parameters.</param>
+        /// <param name="promptTemplates">Template service, or null.</param>
+        /// <param name="personaOverride">Project-profile persona override, or null.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The persona prompt without its contract.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when templateParams is null.</exception>
+        public static async Task<string> RenderPersonaPromptBodyAsync(
+            string? persona,
+            PromptTemplate? chosen,
+            Dictionary<string, string> templateParams,
+            IPromptTemplateService? promptTemplates,
+            PersonaOverride? personaOverride = null,
+            CancellationToken token = default)
+        {
+            if (templateParams == null) throw new ArgumentNullException(nameof(templateParams));
+
             string result = GetPersonaPromptFallback(persona);
-            if (promptTemplates != null)
+            if (promptTemplates != null && chosen != null)
             {
-                string rendered = await promptTemplates.RenderAsync(templateName, templateParams, token).ConfigureAwait(false);
-                if (String.IsNullOrEmpty(rendered) && !String.Equals(templateName, conventionalName, StringComparison.Ordinal))
-                    rendered = await promptTemplates.RenderAsync(conventionalName, templateParams, token).ConfigureAwait(false);
-                if (!String.IsNullOrEmpty(rendered))
-                    result = rendered;
+                string rendered = await promptTemplates.RenderAsync(chosen.Name, templateParams, token).ConfigureAwait(false);
+                if (!String.IsNullOrEmpty(rendered)) result = rendered;
             }
 
-            if (overrideActive && !String.IsNullOrWhiteSpace(personaOverride!.AdditionalInstructions))
+            if (personaOverride != null && personaOverride.Enabled && !String.IsNullOrWhiteSpace(personaOverride.AdditionalInstructions))
                 result = result + "\n\n" + personaOverride.AdditionalInstructions!.Trim();
-
             return result;
         }
 
@@ -350,7 +392,7 @@ namespace Armada.Core.Services
                 sections.Add(
                     "Read " + instructionsFileName + " in the working directory. " +
                     "It contains the objective, repository context, and mission-format requirements. " +
-                    "Do not ask for more input. Read the file immediately and respond only with real mission definitions derived from that file: one fenced `armada-plan` JSON block (preferred) or real [ARMADA:MISSION] blocks.");
+                    "Do not ask for more input. Read the file immediately and respond only with the plan its Output Contract section describes.");
             }
             else
             {
@@ -368,90 +410,46 @@ namespace Armada.Core.Services
             return Task.FromResult(prompt.Substring(0, allowed).TrimEnd() + overflowMessage);
         }
 
+        /// <summary>
+        /// Repeat the output contract at the end of a launch prompt when the captain's model profile asks for it
+        /// (<see cref="ModelProfileRendering.RepeatContractAtEnd"/>, RS-8.2). The launch prompt opens with the role summary;
+        /// the repetition is the last thing the model reads before it starts. A persona without a contract, and a
+        /// rendering that does not set the flag to true, leave the prompt unchanged.
+        /// </summary>
+        /// <param name="prompt">The launch prompt, including anything appended after it (commit guidance).</param>
+        /// <param name="persona">Mission persona.</param>
+        /// <param name="rendering">The captain's model profile rendering overrides, or null.</param>
+        /// <returns>The prompt, with the contract summary appended when asked for.</returns>
+        public static string AppendContractReminder(string? prompt, string? persona, ModelProfileRendering? rendering)
+        {
+            string text = prompt ?? String.Empty;
+            if (rendering?.RepeatContractAtEnd != true) return text;
+            if (String.IsNullOrEmpty(StageOutputContract.For(persona))) return text;
+            return text.TrimEnd() + "\n\nOutput contract, repeated: " + StageOutputContract.RoleSummary(persona);
+        }
+
         private static string BuildBootstrapRoleSummary(string? persona)
         {
-            return PersonaCatalog.NormalizeName(persona) switch
-            {
-                PersonaCatalog.Architect => "You are an Armada architect agent. Respond only with real mission definitions: one fenced `armada-plan` JSON block (preferred) or real [ARMADA:MISSION] blocks. Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.",
-                PersonaCatalog.ProductManager => "You are an Armada product manager agent. Include `## Product Vision`, `## Use Cases`, `## Experience Requirements`, `## Validation`, and `## Future Readiness` sections before a standalone [ARMADA:RESULT] COMPLETE line.",
-                PersonaCatalog.UsabilityEngineer => "You are an Armada usability engineer agent. Include `## Usability`, `## Consistency`, `## Edge Cases`, and `## Residual Risks` sections before a standalone [ARMADA:RESULT] COMPLETE line.",
-                PersonaCatalog.Worker => "You are an Armada worker agent. End with a standalone [ARMADA:RESULT] COMPLETE line followed by a brief plain-text summary.",
-                PersonaCatalog.TestEngineer => "You are an Armada test engineer agent. Include `## Coverage Added`, `## Negative Paths`, and `## Residual Risks` sections before a standalone [ARMADA:RESULT] COMPLETE line.",
-                PersonaCatalog.Linter => "You are an Armada linter agent. Evaluate the changed code and documentation for style and correctness, fix clear in-scope violations, include `## Code Style`, `## Code Correctness`, `## Documentation`, `## Fixes Applied`, and `## Residual Issues` sections before a standalone [ARMADA:RESULT] COMPLETE line.",
-                PersonaCatalog.Judge => JudgeContract.RoleSummary(),
-                _ => "You are an Armada captain executing a mission."
-            };
-        }
-
-        private static string SummarizeText(string? input, int maxChars)
-        {
-            if (String.IsNullOrWhiteSpace(input)) return "";
-
-            string compact = Regex.Replace(input, "\\s+", " ").Trim();
-            if (compact.Length <= maxChars) return compact;
-            if (maxChars <= 3) return compact.Substring(0, maxChars);
-            return compact.Substring(0, maxChars - 3).TrimEnd() + "...";
-        }
-
-        private static string BuildRoleSummary(string? persona, string personaSummary)
-        {
-            if (PersonaCatalog.Matches(persona, PersonaCatalog.Architect))
-            {
-                return "You are an Armada architect agent. Analyze the objective and decompose it into bounded, independently verifiable slices in one fenced `armada-plan` JSON block (or [ARMADA:MISSION] markers). Use parent only where a slice needs another's code, and give slices that can run at the same time disjoint ownedPaths. Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.";
-            }
-
-            if (!String.IsNullOrEmpty(personaSummary))
-                return personaSummary;
-
-            return GetPersonaPromptFallback(persona);
+            return StageOutputContract.RoleSummary(persona);
         }
 
         private static string BuildCaptainInstructions(string? existingInstructions, string? persona)
         {
-            string existing = existingInstructions?.Trim() ?? String.Empty;
-            string outputContract = GetPersonaOutputContract(persona);
-
-            if (String.IsNullOrEmpty(outputContract))
-                return existing;
-
-            if (String.IsNullOrEmpty(existing))
-                return outputContract;
-
-            return existing + "\n\n## Required Output Contract\n" + outputContract;
-        }
-
-        private static string GetPersonaOutputContract(string? persona)
-        {
-            return PersonaCatalog.NormalizeName(persona) switch
-            {
-                PersonaCatalog.Architect =>
-                    ArchitectPlanParser.FormatInstructions() + " Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.",
-                PersonaCatalog.ProductManager =>
-                    "Before your result line, include `## Product Vision`, `## Use Cases`, `## Experience Requirements`, `## Validation`, and `## Future Readiness` sections. End with a standalone line `[ARMADA:RESULT] COMPLETE` followed by a brief plain-text summary.",
-                PersonaCatalog.UsabilityEngineer =>
-                    "Before your result line, include `## Usability`, `## Consistency`, `## Edge Cases`, and `## Residual Risks` sections. End with a standalone line `[ARMADA:RESULT] COMPLETE` followed by a brief plain-text summary." + VerifierContract.BlockingInstruction(),
-                PersonaCatalog.Worker =>
-                    "Stay within scope and make the requested changes. Derive acceptance cases from the behaviors the change advertises, including configuration create/edit/save transitions and negative paths when applicable. For provider or API integrations, exercise the actual request path against a local HTTP fixture and verify URL, authentication, payload, and response handling; successful compilation or client construction alone does not establish working integration. Report executed checks separately from unverified behavior. End with a standalone line `[ARMADA:RESULT] COMPLETE` followed by a brief plain-text summary.",
-                PersonaCatalog.TestEngineer =>
-                    "Before your result line, include short `## Coverage Added`, `## Negative Paths`, and `## Residual Risks` sections. End with a standalone line `[ARMADA:RESULT] COMPLETE` followed by a brief plain-text summary." + VerifierContract.BlockingInstruction(),
-                PersonaCatalog.Linter =>
-                    "Evaluate the changed code and documentation for style and correctness, staying strictly within the files this mission changed. Fix clear in-scope violations and flag judgment calls. Before your result line, include `## Code Style`, `## Code Correctness`, `## Documentation`, `## Fixes Applied`, and `## Residual Issues` sections. End with a standalone line `[ARMADA:RESULT] COMPLETE` followed by a brief plain-text summary." + VerifierContract.BlockingInstruction(),
-                PersonaCatalog.Judge => JudgeContract.OutputContract(),
-                _ => String.Empty
-            };
+            // The output contract is appended to the persona prompt once (StageOutputContract), not repeated here.
+            return existingInstructions?.Trim() ?? String.Empty;
         }
 
         private static string GetPersonaPromptFallback(string? persona)
         {
             return PersonaCatalog.NormalizeName(persona) switch
             {
-                PersonaCatalog.Architect => "You are an Armada architect agent. Analyze the codebase and decompose the objective into bounded, independently verifiable slices in one fenced `armada-plan` JSON block (or [ARMADA:MISSION] markers). Use parent only where a slice needs another's code, and give slices that can run at the same time disjoint ownedPaths. Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.",
-                PersonaCatalog.ProductManager => "You are an Armada product manager agent. Clarify the whole product picture, define user value and experience requirements, include `## Product Vision`, `## Use Cases`, `## Experience Requirements`, `## Validation`, and `## Future Readiness` sections, and end with a standalone [ARMADA:RESULT] COMPLETE line.",
-                PersonaCatalog.UsabilityEngineer => "You are an Armada usability engineer agent. Improve the work through the lens of usability, consistency, and edge-case handling, include `## Usability`, `## Consistency`, `## Edge Cases`, and `## Residual Risks` sections, and end with a standalone [ARMADA:RESULT] COMPLETE line.",
-                PersonaCatalog.Worker => "You are an Armada worker agent. Implement the requested code changes carefully, stay within scope, and end with a standalone [ARMADA:RESULT] COMPLETE line.",
-                PersonaCatalog.TestEngineer => "You are an Armada test engineer agent. Write tests for the current mission scope, cover negative and edge paths for validation, timeout, cancellation, retry, cleanup, and error-handling changes when applicable, include `## Coverage Added`, `## Negative Paths`, and `## Residual Risks` sections, and end with a standalone [ARMADA:RESULT] COMPLETE line.",
-                PersonaCatalog.Linter => "You are an Armada linter agent. Evaluate the changed code and documentation for style and correctness, fix clear in-scope violations and flag judgment calls, include `## Code Style`, `## Code Correctness`, `## Documentation`, `## Fixes Applied`, and `## Residual Issues` sections, and end with a standalone [ARMADA:RESULT] COMPLETE line.",
-                PersonaCatalog.Judge => JudgeContract.PersonaPromptFallback(),
+                PersonaCatalog.Architect => "You are an Armada architect agent. Analyze the codebase and decompose the objective into bounded, independently verifiable slices. Use parent only where a slice needs another's code, and give slices that can run at the same time disjoint ownedPaths.",
+                PersonaCatalog.ProductManager => "You are an Armada product manager agent. Clarify the whole product picture and define user value and experience requirements.",
+                PersonaCatalog.UsabilityEngineer => "You are an Armada usability engineer agent. Improve the work through the lens of usability, consistency, and edge-case handling.",
+                PersonaCatalog.Worker => "You are an Armada worker agent. Implement the requested code changes carefully and stay within scope.",
+                PersonaCatalog.TestEngineer => "You are an Armada test engineer agent. Write tests for the current mission scope, covering negative and edge paths for validation, timeout, cancellation, retry, cleanup, and error-handling changes when applicable.",
+                PersonaCatalog.Linter => "You are an Armada linter agent. Evaluate the changed code and documentation for style and correctness, fix clear in-scope violations and flag judgment calls.",
+                PersonaCatalog.Judge => "You are an Armada judge agent. Review the completed work through three lenses (correctness, blast radius, and source fidelity) and assume there may be a hidden defect.",
                 _ => "You are an Armada captain executing a mission. Follow these instructions carefully."
             };
         }

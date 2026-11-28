@@ -70,17 +70,17 @@ namespace Armada.Tui.Ask
             if (client == null) throw new ArgumentNullException(nameof(client));
             if (String.IsNullOrEmpty(threadId)) throw new ArgumentNullException(nameof(threadId));
             AskThreadState state = new AskThreadState();
-            state.Detail = await client.GetAskThreadAsync(threadId, token).ConfigureAwait(false);
+            state.Detail = await client.Ask.GetThreadAsync(threadId, token).ConfigureAwait(false);
             if (state.Detail == null) return state;
 
             if (state.Detail.TrackedWorkCount > 0)
             {
-                state.TrackedWork = await ReadAllAsync((page, t) => client.EnumerateAskWorkAsync(threadId, Query(page, null, EnumerationOrderEnum.CreatedDescending), t), token).ConfigureAwait(false);
+                state.TrackedWork = await ReadAllAsync((page, t) => client.Ask.EnumerateWorkAsync(threadId, Query(page, null, EnumerationOrderEnum.CreatedDescending), t), token).ConfigureAwait(false);
             }
 
             if (state.Detail.PendingProposalCount > 0)
             {
-                state.PendingProposals = await ReadAllAsync((page, t) => client.EnumerateAskProposalsAsync(threadId, Query(page, AskProposalStatusEnum.Pending.ToString(), EnumerationOrderEnum.CreatedAscending), t), token).ConfigureAwait(false);
+                state.PendingProposals = await ReadAllAsync((page, t) => client.Ask.EnumerateProposalsAsync(threadId, Query(page, AskProposalStatusEnum.Pending.ToString(), EnumerationOrderEnum.CreatedAscending), t), token).ConfigureAwait(false);
             }
 
             if (state.Detail.PendingCliPermissionCount > 0)
@@ -92,7 +92,7 @@ namespace Armada.Tui.Ask
                     q.Status = CliPermissionRequestStatusEnum.Pending.ToString();
                     q.PageNumber = page;
                     q.PageSize = PageSize;
-                    return client.ListCliPermissionRequestsAsync(q, t);
+                    return client.CliPermissions.ListRequestsAsync(q, t);
                 }, token).ConfigureAwait(false);
             }
 

@@ -191,7 +191,7 @@ namespace Armada.Harbor
 
                 try
                 {
-                    SettingsData? data = await client.GetSettingsAsync().ConfigureAwait(true);
+                    SettingsData? data = await client.Server.GetSettingsAsync().ConfigureAwait(true);
                     if (data == null)
                     {
                         _LiveState.Text = "The Admiral returned no settings.";
@@ -263,7 +263,7 @@ namespace Armada.Harbor
                 if (client == null) return;
                 try
                 {
-                    SettingsData? updated = await client.UpdateSettingsAsync(changes).ConfigureAwait(true);
+                    SettingsData? updated = await client.Server.UpdateSettingsAsync(changes).ConfigureAwait(true);
                     if (updated != null)
                     {
                         _Loaded = updated;
@@ -356,7 +356,7 @@ namespace Armada.Harbor
                     {
                         try
                         {
-                            _Privilege = AdminPrivilegeCheck.FromWhoAmI(await client.WhoamiAsync().ConfigureAwait(true));
+                            _Privilege = AdminPrivilegeCheck.FromWhoAmI(await client.Auth.WhoamiAsync().ConfigureAwait(true));
                         }
                         catch (ArmadaApiException ex)
                         {
@@ -447,7 +447,7 @@ namespace Armada.Harbor
                 if (client == null) return;
                 try
                 {
-                    await client.RestartServerAsync().ConfigureAwait(true);
+                    await client.Server.RestartAsync().ConfigureAwait(true);
                     _Session.Window.ReportActivity("Admiral restart requested");
                     SetMessage(_LiveMessage, "Restart requested. The link reconnects when the Admiral is back.", false);
                     _Loaded = null;

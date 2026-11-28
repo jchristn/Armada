@@ -132,7 +132,7 @@ namespace Armada.Tui.Screens.Configuration
         /// <inheritdoc />
         protected override async Task<GridPage<Pipeline>> FetchPageAsync(GridQuery query, CancellationToken token)
         {
-            List<Pipeline> all = await ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => Context.Client.ListPipelinesAsync(new ArmadaPageQuery(p, 500), ct), 20, token).ConfigureAwait(false);
+            List<Pipeline> all = await ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => Context.Client.Pipelines.ListAsync(new ArmadaPageQuery(p, 500), ct), 20, token).ConfigureAwait(false);
             List<Pipeline> filtered = all.Where(p => Matches(Filter("name"), p.Name) && Matches(Filter("description"), p.Description))
                 .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
@@ -201,7 +201,7 @@ namespace Armada.Tui.Screens.Configuration
         /// <inheritdoc />
         protected override Task DeleteAsync(Pipeline row, CancellationToken token)
         {
-            return Context.Client.DeletePipelineAsync(row.Name, token);
+            return Context.Client.Pipelines.DeleteAsync(row.Name, token);
         }
 
         /// <inheritdoc />

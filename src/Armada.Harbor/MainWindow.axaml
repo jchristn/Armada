@@ -42,10 +42,22 @@
                        VerticalAlignment="Center" />
           </StackPanel>
           <SelectableTextBlock x:Name="ServerText" Classes="dim" FontSize="14" Text="-" TextWrapping="Wrap" />
+          <!-- RS-12.19: shown when the Admiral expects capability flags this Harbor lacks. -->
+          <Border x:Name="UpdateBanner" IsVisible="False" BorderBrush="{DynamicResource HarborWarningBrush}"
+                  BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,6,0,0">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+              <SelectableTextBlock Grid.Column="0" x:Name="UpdateText" FontSize="12" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource HarborWarningBrush}" VerticalAlignment="Center" />
+              <Button Grid.Column="1" x:Name="UpdateHelpButton" Content="How to update" VerticalAlignment="Center"
+                      ToolTip.Tip="Open the Harbor install instructions" Click="OnUpdateHelpClick" />
+            </Grid>
+          </Border>
           <SelectableTextBlock x:Name="DetailText" Classes="dim" FontSize="12" TextWrapping="Wrap" MaxLines="4"
                                Margin="0,6,0,0"
                                Text="Not connected. Connect to start taking work from the Admiral." />
           <TextBlock x:Name="RuntimesText" Classes="dim" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" Text="" />
+          <TextBlock x:Name="CapabilitiesText" Classes="dim" FontSize="12" TextWrapping="Wrap" Text="" IsVisible="False" />
+          <TextBlock x:Name="ContextsText" Classes="dim" FontSize="12" TextWrapping="Wrap" Text="" IsVisible="False" />
         </StackPanel>
         <Button Grid.Column="1" x:Name="ConnectButton" Classes="accent" Content="Connect"
                 MinWidth="128" MinHeight="38" FontSize="15" Padding="18,6" VerticalAlignment="Top"

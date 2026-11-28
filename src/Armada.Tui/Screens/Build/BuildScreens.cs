@@ -22,6 +22,10 @@ namespace Armada.Tui.Screens.Build
             screens.Register("FleetScreen", (m, c) => new FleetScreen(m, c));
             screens.Register("DocksScreen", (m, c) => new DocksScreen(m, c));
             screens.Register("DockScreen", (m, c) => new DockScreen(m, c));
+            screens.Register("ModelProfilesScreen", (m, c) => new ModelProfilesScreen(m, c));
+            screens.Register("ModelProfileScreen", (m, c) => new ModelProfileScreen(m, c));
+            screens.Register("ReliabilityScreen", (m, c) => new ReliabilityScreen(m, c));
+            screens.Register("BatteryRunsScreen", (m, c) => new BatteryRunsScreen(m, c));
             screens.Register("CaptainsScreen", (m, c) => new CaptainsScreen(m, c));
             screens.Register("CaptainScreen", (m, c) => new CaptainScreen(m, c));
             screens.Register("VesselsScreen", (m, c) => new VesselsScreen(m, c));

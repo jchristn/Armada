@@ -724,7 +724,7 @@ namespace Armada.Helm.Commands
         {
             if (File.Exists(ArmadaSettings.DefaultSettingsPath)) return;
 
-            // First run — save defaults silently
+            // First run: save defaults silently
             settings.InitializeDirectories();
             settings.SaveAsync().GetAwaiter().GetResult();
             AnsiConsole.MarkupLine($"[dim]Initialized Armada config at {Markup.Escape(ArmadaSettings.DefaultSettingsPath)}[/]");

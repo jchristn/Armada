@@ -2834,7 +2834,18 @@ namespace Armada.Core.Database.Sqlite.Queries
                 Armada.Core.Database.UsageSelectionSchema.OmittedCandidatesMigration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
                 Armada.Core.Database.UsageSelectionSchema.TenantTimestampMigration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
                 Armada.Core.Database.ProcessLaunchSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
-                Armada.Core.Database.AskThreadLocationSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite)
+                Armada.Core.Database.AskThreadLocationSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
+                Armada.Core.Database.MissionTypedStateSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
+                Armada.Core.Database.RecoveryStateSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
+                Armada.Core.Database.ModelProfileRecoverySchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
+                Armada.Core.Database.EscalationLadderSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
+                Armada.Core.Database.HandoffAttemptSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
+                Armada.Core.Database.StageSubmissionTableSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
+                Armada.Core.Database.ContextDiscoverySchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
+                Armada.Core.Database.RoutingDataSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
+                Armada.Core.Database.ModelProfileTimeoutsSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
+                Armada.Core.Database.ProbedCapabilitiesSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
+                Armada.Core.Database.TimeBoundedScanSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite)
 
             };
         }

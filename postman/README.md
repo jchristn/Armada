@@ -1,7 +1,32 @@
+# Open-model behavior simulation
+
+The open-model simulator (RELIABILITY_SIMPLICITY_PLAN.md RS-1.1) is not a Postman simulation. It runs in-process as
+`OpenModelSimulator` under `src/Test.Shared/Infrastructure/OpenModel`, an OpenAI-compatible and Ollama `/api/chat` fake
+scripted per request. It produces the failure shapes open models show in practice: Hermes or Qwen `<tool_call>` text,
+`<function=...>` text, fenced JSON tool calls, malformed tool arguments, Ollama's malformed-tool-call HTTP 500, unknown
+or repeated tool calls, reasoning without the opening `<think>`, 429 with and without `insufficient_quota`, runner
+crashes, out-of-memory, context overflow, `length` cuts, and slow or non-streamed output. It needs no Postman CLI:
+
+```sh
+dotnet run --project src/Test.Automated -f net10.0 -- --suites Runtimes.OpenModelSimulator
+```
+
+See [docs/TESTING.md](../docs/TESTING.md#open-model-simulator) for the scripting API.
+
+# Reliability folder
+
+The `Reliability` folder covers the 1.5.0 reliability reads: a mission's attempt history
+(`GET /api/v1/missions/{id}/attempts`), reliability per model and persona (`GET /api/v1/reliability/summary`), and the
+acceptance gate reports (`POST` and `GET /api/v1/reliability/gate-reports`, `GET .../gate-reports/latest`). Set
+`missionId` to a mission with recorded attempts. Uploading a gate report needs a global admin. The battery run list
+and cancel requests (`List Battery Runs`, `Cancel Battery Run`) are in the `Captains` folder with the other battery
+requests; set `batteryRunId` first. `Update Model Profile` carries `Timeouts` and `Tiering`, and the pipeline create
+and update requests carry `JudgeStrength`.
+
 # Model provider smoke simulation
 
 The fixture models the native xAI Responses and embeddings contracts used by
-PolyPrompt 3.5.0, following the upstream PolyPrompt `postman/xai.openapi.json` and
+PolyPrompt 5.0.1, following the upstream PolyPrompt `postman/xai.openapi.json` and
 its xAI fixture. The owner's published mock search was unavailable because the
 Postman CLI was signed out. This fixture runs locally without login or real keys.
 

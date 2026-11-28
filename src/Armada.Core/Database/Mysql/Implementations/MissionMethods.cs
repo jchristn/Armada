@@ -2,6 +2,7 @@ namespace Armada.Core.Database.Mysql.Implementations
 {
     using System;
     using System.Collections.Generic;
+    using System.Data.Common;
     using System.Globalization;
     using System.Threading;
     using System.Threading.Tasks;
@@ -13,11 +14,12 @@ namespace Armada.Core.Database.Mysql.Implementations
     /// <summary>
     /// MySQL implementation of mission database operations.
     /// </summary>
-    public partial class MissionMethods : IMissionMethods
+    public class MissionMethods : IMissionMethods
     {
         #region Private-Members
 
         private string _ConnectionString;
+        private readonly MissionSummaryMethods _Summaries;
         private static readonly string _Iso8601Format = "yyyy-MM-dd HH:mm:ss.ffffff";
 
         #endregion
@@ -31,6 +33,7 @@ namespace Armada.Core.Database.Mysql.Implementations
         public MissionMethods(string connectionString)
         {
             _ConnectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
+            _Summaries = new MissionSummaryMethods(_ConnectionString);
         }
 
         #endregion
@@ -91,6 +94,40 @@ namespace Armada.Core.Database.Mysql.Implementations
 
                 if (created.Count > 0) await TouchVoyageAsync(conn, created[0].VoyageId, created[0].LastUpdateUtc, token).ConfigureAwait(false);
             }
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> WriteBatchAsync(MissionWriteBatch batch, CancellationToken token = default)
+        {
+            if (batch == null) throw new ArgumentNullException(nameof(batch));
+            if (batch.IsEmpty) return true;
+            foreach (Mission mission in batch.Created) mission.LastUpdateUtc = DateTime.UtcNow;
+
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (MySqlTransaction tx = (MySqlTransaction)await conn.BeginTransactionAsync(token).ConfigureAwait(false))
+                {
+                    foreach (Mission mission in batch.Created)
+                        await InsertMissionAsync(conn, tx, mission, token).ConfigureAwait(false);
+                    foreach (MissionGuardedWrite write in batch.Updated)
+                    {
+                        if (await UpdateRowAsync(conn, tx, write.Mission, write.ExpectedStatuses, null, token).ConfigureAwait(false) > 0) continue;
+                        await tx.RollbackAsync(token).ConfigureAwait(false);
+                        return false;
+                    }
+                    foreach (MissionSnapshotSet set in batch.Snapshots)
+                        await PlaybookMethods.ReplaceMissionSnapshotsAsync(conn, tx, set.MissionId, set.Snapshots, token).ConfigureAwait(false);
+                    foreach (HandoffArtifact artifact in batch.HandoffArtifacts)
+                        await HandoffArtifactMethods.InsertAsync(conn, tx, artifact, token).ConfigureAwait(false);
+                    await tx.CommitAsync(token).ConfigureAwait(false);
+                }
+
+                Mission? touched = batch.Created.Concat(batch.Updated.Select(w => w.Mission)).FirstOrDefault(m => !String.IsNullOrEmpty(m.VoyageId));
+                if (touched != null) await TouchVoyageAsync(conn, touched.VoyageId, touched.LastUpdateUtc, token).ConfigureAwait(false);
+            }
+
+            return true;
         }
 
         /// <summary>
@@ -371,6 +408,37 @@ namespace Armada.Core.Database.Mysql.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<List<Mission>> EnumerateRunningOnVesselAsync(string vesselId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));
+            List<Mission> results = new List<Mission>();
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (MySqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT id, title, description, status, branch_name, voyage_id FROM missions WHERE vessel_id = @vessel_id AND status IN ('Assigned', 'InProgress', 'Verifying');";
+                    cmd.Parameters.AddWithValue("@vessel_id", vesselId);
+                    using (MySqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                            results.Add(new Mission
+                            {
+                                Id = reader.GetString(0),
+                                Title = reader.GetString(1),
+                                Description = reader.IsDBNull(2) ? null : reader.GetString(2),
+                                Status = Enum.Parse<MissionStatusEnum>(reader.GetString(3)),
+                                BranchName = reader.IsDBNull(4) ? null : reader.GetString(4),
+                                VoyageId = reader.IsDBNull(5) ? null : reader.GetString(5),
+                                VesselId = vesselId
+                            });
+                    }
+                }
+            }
+            return results;
+        }
+
+        /// <inheritdoc />
         public async Task<List<Mission>> EnumerateByVesselAsync(string vesselId, CancellationToken token = default)
         {
             if (string.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));
@@ -440,6 +508,30 @@ namespace Armada.Core.Database.Mysql.Implementations
                 {
                     cmd.CommandText = "SELECT * FROM missions WHERE status = @status ORDER BY priority ASC, created_utc ASC;";
                     cmd.Parameters.AddWithValue("@status", status.ToString());
+                    using (MySqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                            results.Add(MissionFromReader(reader));
+                    }
+                }
+            }
+
+            return results;
+        }
+
+        /// <inheritdoc />
+        public async Task<List<Mission>> EnumerateByStatusAsync(MissionStatusEnum status, DateTime updatedSince, CancellationToken token = default)
+        {
+            List<Mission> results = new List<Mission>();
+
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (MySqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT * FROM missions WHERE status = @status AND last_update_utc >= @updated_since ORDER BY priority ASC, created_utc ASC;";
+                    cmd.Parameters.AddWithValue("@status", status.ToString());
+                    cmd.Parameters.AddWithValue("@updated_since", updatedSince.ToUniversalTime());
                     using (MySqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         while (await reader.ReadAsync(token).ConfigureAwait(false))
@@ -1044,6 +1136,100 @@ namespace Armada.Core.Database.Mysql.Implementations
             }
         }
 
+        /// <inheritdoc />
+        public async Task<int> CountExecutionSlotsAsync(CancellationToken token = default)
+        {
+            using MySqlConnection connection = new MySqlConnection(_ConnectionString);
+            await connection.OpenAsync(token).ConfigureAwait(false);
+            using DbCommand command = connection.CreateCommand();
+            command.CommandText = "SELECT COUNT(*) FROM missions WHERE status IN ('Assigned','InProgress');";
+            return Convert.ToInt32(await command.ExecuteScalarAsync(token).ConfigureAwait(false));
+        }
+
+        /// <inheritdoc />
+        public Task<MissionSummary?> ReadSummaryAsync(string id, CancellationToken token = default)
+            => _Summaries.ReadSummaryAsync(id, token);
+
+        /// <inheritdoc />
+        public Task<EnumerationResult<MissionSummary>> EnumerateSummariesAsync(EnumerationQuery query, CancellationToken token = default)
+            => _Summaries.EnumerateSummariesAsync(query, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionSummary>> EnumerateSummariesByVoyageAsync(string voyageId, CancellationToken token = default)
+            => _Summaries.EnumerateSummariesByVoyageAsync(voyageId, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionSummary>> EnumerateSummariesByVesselAsync(string vesselId, CancellationToken token = default)
+            => _Summaries.EnumerateSummariesByVesselAsync(vesselId, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionSummary>> EnumerateSummariesByCaptainAsync(string captainId, CancellationToken token = default)
+            => _Summaries.EnumerateSummariesByCaptainAsync(captainId, token);
+
+        /// <inheritdoc />
+        public Task<Dictionary<MissionStatusEnum, int>> CountByStatusAsync(CancellationToken token = default)
+            => _Summaries.CountByStatusAsync(token);
+
+        /// <inheritdoc />
+        public Task<List<MissionHistoryPoint>> EnumerateHistoryPointsAsync(MissionHistoryQuery query, CancellationToken token = default)
+            => _Summaries.EnumerateHistoryPointsAsync(query, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionHistoryBucketCount>> CountHistoryBucketsAsync(MissionHistoryQuery query, CancellationToken token = default)
+            => _Summaries.CountHistoryBucketsAsync(query, token);
+
+        /// <inheritdoc />
+        public Task<MissionSummary?> ReadSummaryAsync(string tenantId, string id, CancellationToken token = default)
+            => _Summaries.ReadSummaryAsync(tenantId, id, token);
+
+        /// <inheritdoc />
+        public Task<EnumerationResult<MissionSummary>> EnumerateSummariesAsync(string tenantId, EnumerationQuery query, CancellationToken token = default)
+            => _Summaries.EnumerateSummariesAsync(tenantId, query, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionSummary>> EnumerateSummariesByVoyageAsync(string tenantId, string voyageId, CancellationToken token = default)
+            => _Summaries.EnumerateSummariesByVoyageAsync(tenantId, voyageId, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionSummary>> EnumerateSummariesByVesselAsync(string tenantId, string vesselId, CancellationToken token = default)
+            => _Summaries.EnumerateSummariesByVesselAsync(tenantId, vesselId, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionSummary>> EnumerateSummariesByCaptainAsync(string tenantId, string captainId, CancellationToken token = default)
+            => _Summaries.EnumerateSummariesByCaptainAsync(tenantId, captainId, token);
+
+        /// <inheritdoc />
+        public Task<Dictionary<MissionStatusEnum, int>> CountByStatusAsync(string tenantId, CancellationToken token = default)
+            => _Summaries.CountByStatusAsync(tenantId, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionHistoryPoint>> EnumerateHistoryPointsAsync(string tenantId, MissionHistoryQuery query, CancellationToken token = default)
+            => _Summaries.EnumerateHistoryPointsAsync(tenantId, query, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionHistoryBucketCount>> CountHistoryBucketsAsync(string tenantId, MissionHistoryQuery query, CancellationToken token = default)
+            => _Summaries.CountHistoryBucketsAsync(tenantId, query, token);
+
+        /// <inheritdoc />
+        public Task<MissionSummary?> ReadSummaryAsync(string tenantId, string userId, string id, CancellationToken token = default)
+            => _Summaries.ReadSummaryAsync(tenantId, userId, id, token);
+
+        /// <inheritdoc />
+        public Task<EnumerationResult<MissionSummary>> EnumerateSummariesAsync(string tenantId, string userId, EnumerationQuery query, CancellationToken token = default)
+            => _Summaries.EnumerateSummariesAsync(tenantId, userId, query, token);
+
+        /// <inheritdoc />
+        public Task<Dictionary<MissionStatusEnum, int>> CountByStatusAsync(string tenantId, string userId, CancellationToken token = default)
+            => _Summaries.CountByStatusAsync(tenantId, userId, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionHistoryPoint>> EnumerateHistoryPointsAsync(string tenantId, string userId, MissionHistoryQuery query, CancellationToken token = default)
+            => _Summaries.EnumerateHistoryPointsAsync(tenantId, userId, query, token);
+
+        /// <inheritdoc />
+        public Task<List<MissionHistoryBucketCount>> CountHistoryBucketsAsync(string tenantId, string userId, MissionHistoryQuery query, CancellationToken token = default)
+            => _Summaries.CountHistoryBucketsAsync(tenantId, userId, query, token);
+
         #endregion
 
         #region Private-Methods
@@ -1053,8 +1239,8 @@ namespace Armada.Core.Database.Mysql.Implementations
             using (MySqlCommand cmd = conn.CreateCommand())
             {
                 cmd.Transaction = tx;
-                cmd.CommandText = @"INSERT INTO missions (id, tenant_id, user_id, voyage_id, vessel_id, captain_id, requested_captain_id, assigned_harbor_id, title, description, status, mode, priority, stall_recovery_attempts, redispatch_attempts, output_repair_attempts, noop_redispatch_attempts, is_rescue, is_evaluation, worker_envelope_json, rework_round, rework_escalated, tier, parent_mission_id, rescue_of_mission_id, base_branch_name, ready_utc, assigned_utc, owned_paths_json, reads_paths_json, depth, branch_strategy, branch_name, dock_id, process_id, pr_url, commit_hash, diff_snapshot, agent_output, persona, depends_on_mission_id, failure_reason, failure_kind, last_blackbox_entry_id, start_commit, wait_for_voyage_workers, requires_review, review_deny_action, review_comment, reviewed_by_user_id, review_requested_utc, reviewed_utc, review_deadline_utc, total_runtime_ms, created_utc, started_utc, completed_utc, last_update_utc, last_heartbeat_utc)
-                    VALUES (@id, @tenant_id, @user_id, @voyage_id, @vessel_id, @captain_id, @requested_captain_id, @assigned_harbor_id, @title, @description, @status, @mode, @priority, @stall_recovery_attempts, @redispatch_attempts, @output_repair_attempts, @noop_redispatch_attempts, @is_rescue, @is_evaluation, @worker_envelope_json, @rework_round, @rework_escalated, @tier, @parent_mission_id, @rescue_of_mission_id, @base_branch_name, @ready_utc, @assigned_utc, @owned_paths_json, @reads_paths_json, @depth, @branch_strategy, @branch_name, @dock_id, @process_id, @pr_url, @commit_hash, @diff_snapshot, @agent_output, @persona, @depends_on_mission_id, @failure_reason, @failure_kind, @last_blackbox_entry_id, @start_commit, @wait_for_voyage_workers, @requires_review, @review_deny_action, @review_comment, @reviewed_by_user_id, @review_requested_utc, @reviewed_utc, @review_deadline_utc, @total_runtime_ms, @created_utc, @started_utc, @completed_utc, @last_update_utc, @last_heartbeat_utc);";
+                cmd.CommandText = @"INSERT INTO missions (id, tenant_id, user_id, voyage_id, vessel_id, captain_id, requested_captain_id, assigned_harbor_id, title, description, status, mode, priority, stall_recovery_attempts, redispatch_attempts, output_repair_attempts, noop_redispatch_attempts, is_rescue, is_evaluation, worker_envelope_json, rework_round, rework_escalated, tier, parent_mission_id, rescue_of_mission_id, escalation_count, escalated_from_captain_id, escalated_from_model, fan_out_completed_utc, architect_source_mission_id, architect_plan_index, launch_intent_utc, launch_job_id, notes_json, base_branch_name, ready_utc, assigned_utc, owned_paths_json, reads_paths_json, depth, branch_strategy, branch_name, dock_id, process_id, pr_url, commit_hash, diff_snapshot, agent_output, persona, depends_on_mission_id, failure_reason, failure_kind, last_blackbox_entry_id, start_commit, wait_for_voyage_workers, requires_review, review_deny_action, review_comment, reviewed_by_user_id, review_requested_utc, reviewed_utc, review_deadline_utc, total_runtime_ms, created_utc, started_utc, completed_utc, last_update_utc, last_heartbeat_utc)
+                    VALUES (@id, @tenant_id, @user_id, @voyage_id, @vessel_id, @captain_id, @requested_captain_id, @assigned_harbor_id, @title, @description, @status, @mode, @priority, @stall_recovery_attempts, @redispatch_attempts, @output_repair_attempts, @noop_redispatch_attempts, @is_rescue, @is_evaluation, @worker_envelope_json, @rework_round, @rework_escalated, @tier, @parent_mission_id, @rescue_of_mission_id, @escalation_count, @escalated_from_captain_id, @escalated_from_model, @fan_out_completed_utc, @architect_source_mission_id, @architect_plan_index, @launch_intent_utc, @launch_job_id, @notes_json, @base_branch_name, @ready_utc, @assigned_utc, @owned_paths_json, @reads_paths_json, @depth, @branch_strategy, @branch_name, @dock_id, @process_id, @pr_url, @commit_hash, @diff_snapshot, @agent_output, @persona, @depends_on_mission_id, @failure_reason, @failure_kind, @last_blackbox_entry_id, @start_commit, @wait_for_voyage_workers, @requires_review, @review_deny_action, @review_comment, @reviewed_by_user_id, @review_requested_utc, @reviewed_utc, @review_deadline_utc, @total_runtime_ms, @created_utc, @started_utc, @completed_utc, @last_update_utc, @last_heartbeat_utc);";
                 cmd.Parameters.AddWithValue("@id", mission.Id);
                 cmd.Parameters.AddWithValue("@tenant_id", (object?)mission.TenantId ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@user_id", (object?)mission.UserId ?? DBNull.Value);
@@ -1080,6 +1266,15 @@ namespace Armada.Core.Database.Mysql.Implementations
                 cmd.Parameters.AddWithValue("@tier", (object?)mission.Tier?.ToString() ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@parent_mission_id", (object?)mission.ParentMissionId ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@rescue_of_mission_id", (object?)mission.RescueOfMissionId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@escalation_count", mission.EscalationCount);
+                cmd.Parameters.AddWithValue("@escalated_from_captain_id", (object?)mission.EscalatedFromCaptainId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@escalated_from_model", (object?)mission.EscalatedFromModel ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@fan_out_completed_utc", mission.FanOutCompletedUtc.HasValue ? (object)ToIso8601(mission.FanOutCompletedUtc.Value) : DBNull.Value);
+                cmd.Parameters.AddWithValue("@architect_source_mission_id", (object?)mission.ArchitectSourceMissionId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@architect_plan_index", mission.ArchitectPlanIndex.HasValue ? (object)mission.ArchitectPlanIndex.Value : DBNull.Value);
+                cmd.Parameters.AddWithValue("@launch_intent_utc", mission.LaunchIntentUtc.HasValue ? (object)ToIso8601(mission.LaunchIntentUtc.Value) : DBNull.Value);
+                cmd.Parameters.AddWithValue("@launch_job_id", (object?)mission.LaunchJobId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@notes_json", (object?)Armada.Core.Services.MissionNotes.ToJson(mission.Notes) ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@base_branch_name", (object?)mission.BaseBranchName ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@owned_paths_json", (object?)mission.OwnedPathsJson ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@reads_paths_json", (object?)mission.ReadsPathsJson ?? DBNull.Value);
@@ -1125,120 +1320,135 @@ namespace Armada.Core.Database.Mysql.Implementations
         private async Task<bool> UpdateWhereAsync(Mission mission, IReadOnlyCollection<MissionStatusEnum>? expectedStatuses, CancellationToken token, DateTime? expectedLastUpdateUtc = null)
         {
             if (mission == null) throw new ArgumentNullException(nameof(mission));
-            mission.LastUpdateUtc = DateTime.UtcNow;
             int rows = 0;
 
             using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
-                using (MySqlCommand cmd = conn.CreateCommand())
-                {
-                    cmd.CommandText = @"UPDATE missions SET
-                        tenant_id = @tenant_id,
-                            user_id = @user_id,
-                        voyage_id = @voyage_id,
-                        vessel_id = @vessel_id,
-                        captain_id = @captain_id,
-                        requested_captain_id = @requested_captain_id,
-                        assigned_harbor_id = @assigned_harbor_id,
-                        title = @title,
-                        description = @description,
-                        status = @status,
-                        mode = @mode,
-                        priority = @priority,
-                        stall_recovery_attempts = @stall_recovery_attempts, redispatch_attempts = @redispatch_attempts, output_repair_attempts = @output_repair_attempts, noop_redispatch_attempts = @noop_redispatch_attempts, is_rescue = @is_rescue, is_evaluation = @is_evaluation, worker_envelope_json = @worker_envelope_json, rework_round = @rework_round, rework_escalated = @rework_escalated,
-                        tier = @tier,
-                        parent_mission_id = @parent_mission_id, rescue_of_mission_id = @rescue_of_mission_id, base_branch_name = @base_branch_name, ready_utc = @ready_utc, assigned_utc = COALESCE(@assigned_utc, assigned_utc), owned_paths_json = @owned_paths_json, reads_paths_json = @reads_paths_json, depth = @depth, branch_strategy = @branch_strategy,
-                        branch_name = @branch_name,
-                        dock_id = @dock_id,
-                        process_id = @process_id,
-                        pr_url = @pr_url,
-                        commit_hash = @commit_hash,
-                        diff_snapshot = @diff_snapshot,
-                        agent_output = @agent_output,
-                        persona = @persona,
-                        depends_on_mission_id = @depends_on_mission_id,
-                        failure_reason = @failure_reason,
-                        failure_kind = @failure_kind, last_blackbox_entry_id = COALESCE(@last_blackbox_entry_id, last_blackbox_entry_id), start_commit = @start_commit,
-                        wait_for_voyage_workers = @wait_for_voyage_workers,
-                        requires_review = @requires_review,
-                        review_deny_action = @review_deny_action,
-                        review_comment = @review_comment,
-                        reviewed_by_user_id = @reviewed_by_user_id,
-                        review_requested_utc = @review_requested_utc,
-                        reviewed_utc = @reviewed_utc,
-                        review_deadline_utc = @review_deadline_utc,
-                        total_runtime_ms = @total_runtime_ms,
-                        started_utc = @started_utc,
-                        completed_utc = @completed_utc,
-                        last_update_utc = @last_update_utc
-                        WHERE id = @id" + ExpectedStatusClause(cmd, expectedStatuses) + (expectedLastUpdateUtc.HasValue ? " AND last_update_utc = @expected_last_update_utc" : "") + ";";
-                    if (expectedLastUpdateUtc.HasValue) cmd.Parameters.AddWithValue("@expected_last_update_utc", ToIso8601(expectedLastUpdateUtc.Value));
-                    cmd.Parameters.AddWithValue("@id", mission.Id);
-                    cmd.Parameters.AddWithValue("@tenant_id", (object?)mission.TenantId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@user_id", (object?)mission.UserId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@voyage_id", (object?)mission.VoyageId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@vessel_id", (object?)mission.VesselId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@captain_id", (object?)mission.CaptainId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@requested_captain_id", (object?)mission.RequestedCaptainId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@assigned_harbor_id", (object?)mission.AssignedHarborId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@title", mission.Title);
-                    cmd.Parameters.AddWithValue("@description", (object?)mission.Description ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@status", mission.Status.ToString());
-                    cmd.Parameters.AddWithValue("@mode", mission.Mode.ToString());
-                    cmd.Parameters.AddWithValue("@priority", mission.Priority);
-                    cmd.Parameters.AddWithValue("@stall_recovery_attempts", mission.StallRecoveryAttempts);
-                    cmd.Parameters.AddWithValue("@redispatch_attempts", mission.RedispatchAttempts);
-                    cmd.Parameters.AddWithValue("@output_repair_attempts", mission.OutputRepairAttempts);
-                    cmd.Parameters.AddWithValue("@noop_redispatch_attempts", mission.NoOpRedispatchAttempts);
-                    cmd.Parameters.AddWithValue("@is_rescue", (mission.IsRescue ? 1 : 0));
-                    cmd.Parameters.AddWithValue("@is_evaluation", (mission.IsEvaluation ? 1 : 0));
-                    cmd.Parameters.AddWithValue("@worker_envelope_json", (object?)Armada.Core.Services.WorkerEnvelopeRules.ToJson(mission.WorkerEnvelope) ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@rework_round", mission.ReworkRound);
-                    cmd.Parameters.AddWithValue("@rework_escalated", (mission.ReworkEscalated ? 1 : 0));
-                    cmd.Parameters.AddWithValue("@tier", (object?)mission.Tier?.ToString() ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@parent_mission_id", (object?)mission.ParentMissionId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@rescue_of_mission_id", (object?)mission.RescueOfMissionId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@base_branch_name", (object?)mission.BaseBranchName ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@owned_paths_json", (object?)mission.OwnedPathsJson ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@reads_paths_json", (object?)mission.ReadsPathsJson ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@depth", Math.Clamp(mission.Depth, 0, 16));
-                    cmd.Parameters.AddWithValue("@branch_strategy", mission.BranchStrategy.ToString());
-                    cmd.Parameters.AddWithValue("@ready_utc", mission.ReadyUtc.HasValue ? (object)ToIso8601(mission.ReadyUtc.Value) : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@assigned_utc", mission.AssignedUtc.HasValue ? (object)ToIso8601(mission.AssignedUtc.Value) : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@branch_name", (object?)mission.BranchName ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@dock_id", (object?)mission.DockId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@process_id", mission.ProcessId.HasValue ? (object)mission.ProcessId.Value : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@pr_url", (object?)mission.PrUrl ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@commit_hash", (object?)mission.CommitHash ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@diff_snapshot", (object?)mission.DiffSnapshot ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@agent_output", (object?)mission.AgentOutput ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@persona", (object?)mission.Persona ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@depends_on_mission_id", (object?)mission.DependsOnMissionId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@failure_reason", (object?)mission.FailureReason ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@failure_kind", MissionFailureKindColumn.ToDbValue(mission.FailureKind));
-                    cmd.Parameters.AddWithValue("@last_blackbox_entry_id", (object?)mission.LastBlackBoxEntryId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@start_commit", (object?)mission.StartCommit ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@wait_for_voyage_workers", (mission.WaitForVoyageWorkers ? 1 : 0));
-                    cmd.Parameters.AddWithValue("@requires_review", mission.RequiresReview ? 1 : 0);
-                    cmd.Parameters.AddWithValue("@review_deny_action", mission.ReviewDenyAction.ToString());
-                    cmd.Parameters.AddWithValue("@review_comment", (object?)mission.ReviewComment ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@reviewed_by_user_id", (object?)mission.ReviewedByUserId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@review_requested_utc", mission.ReviewRequestedUtc.HasValue ? (object)ToIso8601(mission.ReviewRequestedUtc.Value) : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@reviewed_utc", mission.ReviewedUtc.HasValue ? (object)ToIso8601(mission.ReviewedUtc.Value) : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@review_deadline_utc", mission.ReviewDeadlineUtc.HasValue ? (object)ToIso8601(mission.ReviewDeadlineUtc.Value) : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@total_runtime_ms", mission.TotalRuntimeMs.HasValue ? (object)mission.TotalRuntimeMs.Value : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@started_utc", mission.StartedUtc.HasValue ? (object)ToIso8601(mission.StartedUtc.Value) : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@completed_utc", mission.CompletedUtc.HasValue ? (object)ToIso8601(mission.CompletedUtc.Value) : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@last_update_utc", ToIso8601(mission.LastUpdateUtc));
-                    rows = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                }
+                rows = await UpdateRowAsync(conn, null, mission, expectedStatuses, expectedLastUpdateUtc, token).ConfigureAwait(false);
 
                 if (rows > 0)
                     await TouchVoyageAsync(conn, mission.VoyageId, mission.LastUpdateUtc, token).ConfigureAwait(false);
             }
 
             return rows > 0;
+        }
+
+        private async Task<int> UpdateRowAsync(MySqlConnection conn, MySqlTransaction? tx, Mission mission, IReadOnlyCollection<MissionStatusEnum>? expectedStatuses, DateTime? expectedLastUpdateUtc, CancellationToken token)
+        {
+            mission.LastUpdateUtc = DateTime.UtcNow;
+            using (MySqlCommand cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = @"UPDATE missions SET
+                    tenant_id = @tenant_id,
+                        user_id = @user_id,
+                    voyage_id = @voyage_id,
+                    vessel_id = @vessel_id,
+                    captain_id = @captain_id,
+                    requested_captain_id = @requested_captain_id,
+                    assigned_harbor_id = @assigned_harbor_id,
+                    title = @title,
+                    description = @description,
+                    status = @status,
+                    mode = @mode,
+                    priority = @priority,
+                    stall_recovery_attempts = @stall_recovery_attempts, redispatch_attempts = @redispatch_attempts, output_repair_attempts = @output_repair_attempts, noop_redispatch_attempts = @noop_redispatch_attempts, is_rescue = @is_rescue, is_evaluation = @is_evaluation, worker_envelope_json = @worker_envelope_json, rework_round = @rework_round, rework_escalated = @rework_escalated,
+                    tier = @tier,
+                    parent_mission_id = @parent_mission_id, rescue_of_mission_id = @rescue_of_mission_id, escalation_count = @escalation_count, escalated_from_captain_id = @escalated_from_captain_id, escalated_from_model = @escalated_from_model, fan_out_completed_utc = @fan_out_completed_utc, architect_source_mission_id = @architect_source_mission_id, architect_plan_index = @architect_plan_index, launch_intent_utc = @launch_intent_utc, launch_job_id = @launch_job_id, notes_json = @notes_json, base_branch_name = @base_branch_name, ready_utc = @ready_utc, assigned_utc = COALESCE(@assigned_utc, assigned_utc), owned_paths_json = @owned_paths_json, reads_paths_json = @reads_paths_json, depth = @depth, branch_strategy = @branch_strategy,
+                    branch_name = @branch_name,
+                    dock_id = @dock_id,
+                    process_id = @process_id,
+                    pr_url = @pr_url,
+                    commit_hash = @commit_hash,
+                    diff_snapshot = @diff_snapshot,
+                    agent_output = @agent_output,
+                    persona = @persona,
+                    depends_on_mission_id = @depends_on_mission_id,
+                    failure_reason = @failure_reason,
+                    failure_kind = @failure_kind, last_blackbox_entry_id = COALESCE(@last_blackbox_entry_id, last_blackbox_entry_id), start_commit = @start_commit,
+                    wait_for_voyage_workers = @wait_for_voyage_workers,
+                    requires_review = @requires_review,
+                    review_deny_action = @review_deny_action,
+                    review_comment = @review_comment,
+                    reviewed_by_user_id = @reviewed_by_user_id,
+                    review_requested_utc = @review_requested_utc,
+                    reviewed_utc = @reviewed_utc,
+                    review_deadline_utc = @review_deadline_utc,
+                    total_runtime_ms = @total_runtime_ms,
+                    started_utc = @started_utc,
+                    completed_utc = @completed_utc,
+                    last_update_utc = @last_update_utc
+                    WHERE id = @id" + ExpectedStatusClause(cmd, expectedStatuses) + (expectedLastUpdateUtc.HasValue ? " AND last_update_utc = @expected_last_update_utc" : "") + ";";
+                if (expectedLastUpdateUtc.HasValue) cmd.Parameters.AddWithValue("@expected_last_update_utc", ToIso8601(expectedLastUpdateUtc.Value));
+                cmd.Parameters.AddWithValue("@id", mission.Id);
+                cmd.Parameters.AddWithValue("@tenant_id", (object?)mission.TenantId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@user_id", (object?)mission.UserId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@voyage_id", (object?)mission.VoyageId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@vessel_id", (object?)mission.VesselId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@captain_id", (object?)mission.CaptainId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@requested_captain_id", (object?)mission.RequestedCaptainId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@assigned_harbor_id", (object?)mission.AssignedHarborId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@title", mission.Title);
+                cmd.Parameters.AddWithValue("@description", (object?)mission.Description ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@status", mission.Status.ToString());
+                cmd.Parameters.AddWithValue("@mode", mission.Mode.ToString());
+                cmd.Parameters.AddWithValue("@priority", mission.Priority);
+                cmd.Parameters.AddWithValue("@stall_recovery_attempts", mission.StallRecoveryAttempts);
+                cmd.Parameters.AddWithValue("@redispatch_attempts", mission.RedispatchAttempts);
+                cmd.Parameters.AddWithValue("@output_repair_attempts", mission.OutputRepairAttempts);
+                cmd.Parameters.AddWithValue("@noop_redispatch_attempts", mission.NoOpRedispatchAttempts);
+                cmd.Parameters.AddWithValue("@is_rescue", (mission.IsRescue ? 1 : 0));
+                cmd.Parameters.AddWithValue("@is_evaluation", (mission.IsEvaluation ? 1 : 0));
+                cmd.Parameters.AddWithValue("@worker_envelope_json", (object?)Armada.Core.Services.WorkerEnvelopeRules.ToJson(mission.WorkerEnvelope) ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@rework_round", mission.ReworkRound);
+                cmd.Parameters.AddWithValue("@rework_escalated", (mission.ReworkEscalated ? 1 : 0));
+                cmd.Parameters.AddWithValue("@tier", (object?)mission.Tier?.ToString() ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@parent_mission_id", (object?)mission.ParentMissionId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@rescue_of_mission_id", (object?)mission.RescueOfMissionId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@escalation_count", mission.EscalationCount);
+                cmd.Parameters.AddWithValue("@escalated_from_captain_id", (object?)mission.EscalatedFromCaptainId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@escalated_from_model", (object?)mission.EscalatedFromModel ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@fan_out_completed_utc", mission.FanOutCompletedUtc.HasValue ? (object)ToIso8601(mission.FanOutCompletedUtc.Value) : DBNull.Value);
+                cmd.Parameters.AddWithValue("@architect_source_mission_id", (object?)mission.ArchitectSourceMissionId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@architect_plan_index", mission.ArchitectPlanIndex.HasValue ? (object)mission.ArchitectPlanIndex.Value : DBNull.Value);
+                cmd.Parameters.AddWithValue("@launch_intent_utc", mission.LaunchIntentUtc.HasValue ? (object)ToIso8601(mission.LaunchIntentUtc.Value) : DBNull.Value);
+                cmd.Parameters.AddWithValue("@launch_job_id", (object?)mission.LaunchJobId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@notes_json", (object?)Armada.Core.Services.MissionNotes.ToJson(mission.Notes) ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@base_branch_name", (object?)mission.BaseBranchName ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@owned_paths_json", (object?)mission.OwnedPathsJson ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@reads_paths_json", (object?)mission.ReadsPathsJson ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@depth", Math.Clamp(mission.Depth, 0, 16));
+                cmd.Parameters.AddWithValue("@branch_strategy", mission.BranchStrategy.ToString());
+                cmd.Parameters.AddWithValue("@ready_utc", mission.ReadyUtc.HasValue ? (object)ToIso8601(mission.ReadyUtc.Value) : DBNull.Value);
+                cmd.Parameters.AddWithValue("@assigned_utc", mission.AssignedUtc.HasValue ? (object)ToIso8601(mission.AssignedUtc.Value) : DBNull.Value);
+                cmd.Parameters.AddWithValue("@branch_name", (object?)mission.BranchName ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@dock_id", (object?)mission.DockId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@process_id", mission.ProcessId.HasValue ? (object)mission.ProcessId.Value : DBNull.Value);
+                cmd.Parameters.AddWithValue("@pr_url", (object?)mission.PrUrl ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@commit_hash", (object?)mission.CommitHash ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@diff_snapshot", (object?)mission.DiffSnapshot ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@agent_output", (object?)mission.AgentOutput ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@persona", (object?)mission.Persona ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@depends_on_mission_id", (object?)mission.DependsOnMissionId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@failure_reason", (object?)mission.FailureReason ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@failure_kind", MissionFailureKindColumn.ToDbValue(mission.FailureKind));
+                cmd.Parameters.AddWithValue("@last_blackbox_entry_id", (object?)mission.LastBlackBoxEntryId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@start_commit", (object?)mission.StartCommit ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@wait_for_voyage_workers", (mission.WaitForVoyageWorkers ? 1 : 0));
+                cmd.Parameters.AddWithValue("@requires_review", mission.RequiresReview ? 1 : 0);
+                cmd.Parameters.AddWithValue("@review_deny_action", mission.ReviewDenyAction.ToString());
+                cmd.Parameters.AddWithValue("@review_comment", (object?)mission.ReviewComment ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@reviewed_by_user_id", (object?)mission.ReviewedByUserId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@review_requested_utc", mission.ReviewRequestedUtc.HasValue ? (object)ToIso8601(mission.ReviewRequestedUtc.Value) : DBNull.Value);
+                cmd.Parameters.AddWithValue("@reviewed_utc", mission.ReviewedUtc.HasValue ? (object)ToIso8601(mission.ReviewedUtc.Value) : DBNull.Value);
+                cmd.Parameters.AddWithValue("@review_deadline_utc", mission.ReviewDeadlineUtc.HasValue ? (object)ToIso8601(mission.ReviewDeadlineUtc.Value) : DBNull.Value);
+                cmd.Parameters.AddWithValue("@total_runtime_ms", mission.TotalRuntimeMs.HasValue ? (object)mission.TotalRuntimeMs.Value : DBNull.Value);
+                cmd.Parameters.AddWithValue("@started_utc", mission.StartedUtc.HasValue ? (object)ToIso8601(mission.StartedUtc.Value) : DBNull.Value);
+                cmd.Parameters.AddWithValue("@completed_utc", mission.CompletedUtc.HasValue ? (object)ToIso8601(mission.CompletedUtc.Value) : DBNull.Value);
+                cmd.Parameters.AddWithValue("@last_update_utc", ToIso8601(mission.LastUpdateUtc));
+                return await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+            }
         }
 
         private static string ExpectedStatusClause(MySqlCommand cmd, IReadOnlyCollection<MissionStatusEnum>? expectedStatuses)
@@ -1267,7 +1477,7 @@ namespace Armada.Core.Database.Mysql.Implementations
             return DateTime.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
         }
 
-        private static DateTime? FromIso8601Nullable(object value)
+        internal static DateTime? FromIso8601Nullable(object value)
         {
             if (value == null || value == DBNull.Value) return null;
             if (value is DateTime dt) return DateTime.SpecifyKind(dt, DateTimeKind.Utc);
@@ -1289,7 +1499,7 @@ namespace Armada.Core.Database.Mysql.Implementations
             }
         }
 
-        private static string? NullableString(object value)
+        internal static string? NullableString(object value)
         {
             if (value == null || value == DBNull.Value) return null;
             string str = value.ToString()!;
@@ -1358,6 +1568,15 @@ namespace Armada.Core.Database.Mysql.Implementations
             mission.CreatedUtc = DateTime.SpecifyKind(Convert.ToDateTime(reader["created_utc"]), DateTimeKind.Utc);
             mission.StartedUtc = FromIso8601Nullable(reader["started_utc"]);
             mission.RescueOfMissionId = reader["rescue_of_mission_id"] == DBNull.Value ? null : reader["rescue_of_mission_id"].ToString();
+            mission.EscalationCount = reader["escalation_count"] == DBNull.Value ? 0 : Convert.ToInt32(reader["escalation_count"]);
+            mission.EscalatedFromCaptainId = reader["escalated_from_captain_id"] == DBNull.Value ? null : reader["escalated_from_captain_id"].ToString();
+            mission.EscalatedFromModel = reader["escalated_from_model"] == DBNull.Value ? null : reader["escalated_from_model"].ToString();
+            mission.FanOutCompletedUtc = FromIso8601Nullable(reader["fan_out_completed_utc"]);
+            mission.ArchitectSourceMissionId = reader["architect_source_mission_id"] == DBNull.Value ? null : reader["architect_source_mission_id"].ToString();
+            mission.ArchitectPlanIndex = reader["architect_plan_index"] == DBNull.Value ? null : Convert.ToInt32(reader["architect_plan_index"]);
+            mission.LaunchIntentUtc = FromIso8601Nullable(reader["launch_intent_utc"]);
+            mission.LaunchJobId = reader["launch_job_id"] == DBNull.Value ? null : reader["launch_job_id"].ToString();
+            mission.Notes = Armada.Core.Services.MissionNotes.FromJson(reader["notes_json"] == DBNull.Value ? null : reader["notes_json"].ToString());
             mission.BaseBranchName = reader["base_branch_name"] == DBNull.Value ? null : reader["base_branch_name"].ToString();
             mission.OwnedPathsJson = reader["owned_paths_json"] == DBNull.Value ? null : reader["owned_paths_json"].ToString();
             mission.ReadsPathsJson = reader["reads_paths_json"] == DBNull.Value ? null : reader["reads_paths_json"].ToString();

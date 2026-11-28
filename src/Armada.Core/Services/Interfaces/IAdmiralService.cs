@@ -57,89 +57,15 @@ namespace Armada.Core.Services.Interfaces
         Func<int, bool>? OnIsProcessExitHandled { get; set; }
 
         /// <summary>
-        /// Dispatch a voyage with one or more missions.
-        /// Creates the voyage, creates missions, and auto-assigns available captains.
+        /// Create a voyage and its missions through <see cref="Armada.Core.Services.VoyageCreationService"/>, the one
+        /// voyage creation path for every surface, and try to assign each first stage.
         /// </summary>
-        /// <param name="title">Voyage title.</param>
-        /// <param name="description">Voyage description.</param>
-        /// <param name="vesselId">Target vessel identifier.</param>
-        /// <param name="missionDescriptions">List of mission title/description pairs.</param>
+        /// <param name="caller">Caller, or null when Armada itself dispatches. A caller must see the vessel and
+        /// objective; the voyage belongs to the caller.</param>
+        /// <param name="request">Request.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The created voyage.</returns>
-        Task<Voyage> DispatchVoyageAsync(
-            string title,
-            string description,
-            string vesselId,
-            List<MissionDescription> missionDescriptions,
-            CancellationToken token = default);
-
-        /// <summary>
-        /// Dispatch a voyage with one or more missions and an ordered set of playbooks.
-        /// </summary>
-        /// <param name="title">Voyage title.</param>
-        /// <param name="description">Voyage description.</param>
-        /// <param name="vesselId">Target vessel identifier.</param>
-        /// <param name="missionDescriptions">List of mission title/description pairs.</param>
-        /// <param name="selectedPlaybooks">Ordered playbooks to apply to every mission in the voyage.</param>
-        /// <param name="token">Cancellation token.</param>
-        /// <returns>The created voyage.</returns>
-        Task<Voyage> DispatchVoyageAsync(
-            string title,
-            string description,
-            string vesselId,
-            List<MissionDescription> missionDescriptions,
-            List<SelectedPlaybook>? selectedPlaybooks,
-            CancellationToken token = default);
-
-        /// <summary>
-        /// Dispatch a new voyage with pipeline support.
-        /// When a pipelineId is provided, each mission is wrapped in the pipeline's persona stages.
-        /// </summary>
-        /// <param name="title">Voyage title.</param>
-        /// <param name="description">Voyage description.</param>
-        /// <param name="vesselId">Target vessel identifier.</param>
-        /// <param name="missionDescriptions">List of mission title/description pairs.</param>
-        /// <param name="pipelineId">Optional pipeline ID. Resolved: explicit > vessel default > fleet default > WorkerOnly.</param>
-        /// <param name="token">Cancellation token.</param>
-        /// <returns>The created voyage.</returns>
-        Task<Voyage> DispatchVoyageAsync(
-            string title,
-            string description,
-            string vesselId,
-            List<MissionDescription> missionDescriptions,
-            string? pipelineId,
-            CancellationToken token = default);
-
-        /// <summary>
-        /// Dispatch a new voyage with pipeline support and an ordered set of playbooks.
-        /// </summary>
-        /// <param name="title">Voyage title.</param>
-        /// <param name="description">Voyage description.</param>
-        /// <param name="vesselId">Target vessel identifier.</param>
-        /// <param name="missionDescriptions">List of mission title/description pairs.</param>
-        /// <param name="pipelineId">Optional pipeline ID. Resolved: explicit > vessel default > fleet default > WorkerOnly.</param>
-        /// <param name="selectedPlaybooks">Ordered playbooks to apply to every mission in the voyage.</param>
-        /// <param name="captainOverridesJson">Serialized per-persona captain overrides, persisted on the voyage
-        /// before any mission is created and dispatched so assignment can honor the preferred captain.</param>
-        /// <param name="approvalOptions">Per-run approval snapshot.</param>
-        /// <param name="landingMode">Optional per-voyage landing mode, persisted before any mission is created; null
-        /// inherits the vessel's or the global landing mode.</param>
-        /// <param name="token">Cancellation token.</param>
-        /// <param name="isEvaluation">True for evaluation work (fixture battery, model evaluation): the voyage and every
-        /// mission it creates are flagged IsEvaluation, so their stage outcomes never count as production data.</param>
-        /// <returns>The created voyage.</returns>
-        Task<Voyage> DispatchVoyageAsync(
-            string title,
-            string description,
-            string vesselId,
-            List<MissionDescription> missionDescriptions,
-            string? pipelineId,
-            List<SelectedPlaybook>? selectedPlaybooks,
-            string? captainOverridesJson = null,
-            LandingModeEnum? landingMode = null,
-            CancellationToken token = default,
-            RunApprovalOptions? approvalOptions = null,
-            bool isEvaluation = false);
+        Task<Voyage> CreateVoyageAsync(AuthContext? caller, VoyageCreationRequest request, CancellationToken token = default);
 
         /// <summary>
         /// Dispatch a single mission.
@@ -193,6 +119,11 @@ namespace Armada.Core.Services.Interfaces
         /// <exception cref="InvalidOperationException">Thrown when the agent process could not be stopped or its exit was not
         /// confirmed.</exception>
         Task<Mission> CancelMissionAsync(Mission mission, MissionCancelOptions? options, CancellationToken token = default);
+
+        /// <summary>
+        /// Mission status transitions (RS-3.5): the one path every mission status change takes.
+        /// </summary>
+        MissionTransitions Transitions { get; }
 
         /// <summary>
         /// Stop a specific captain gracefully.

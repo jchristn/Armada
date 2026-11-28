@@ -22,7 +22,7 @@ namespace Armada.Core
         /// <summary>
         /// Product version.
         /// </summary>
-        public static readonly string ProductVersion = "1.4.0";
+        public static readonly string ProductVersion = "1.5.0";
 
         /// <summary>
         /// Version (major.minor) of the client contract reported by GET /api/v1/status/health as ContractVersion. Clients
@@ -318,6 +318,11 @@ namespace Armada.Core
         /// ID prefix for stage outcomes (one stage attempt with its provenance and suspected cause).
         /// </summary>
         public static readonly string StageOutcomeIdPrefix = "sto_";
+
+        /// <summary>
+        /// ID prefix for stage submissions (a plan, verdict or result submitted through a submit tool).
+        /// </summary>
+        public static readonly string StageSubmissionIdPrefix = "sbm_";
 
         /// <summary>
         /// ID prefix for handoff artifacts (the structured, versioned record one stage attempt hands to the next stage).

@@ -29,8 +29,8 @@ namespace Armada.Helm.Commands
             return await RunBlackBoxAsync(settings.Json, async client =>
             {
                 BlackBoxDeleteResult? result = settings.Ids.Length == 1
-                    ? await client.DeleteBlackBoxAsync(settings.Ids[0], cancellationToken).ConfigureAwait(false)
-                    : await client.DeleteBlackBoxEntriesAsync(settings.Ids.Distinct(StringComparer.Ordinal).ToList(), cancellationToken).ConfigureAwait(false);
+                    ? await client.BlackBox.DeleteAsync(settings.Ids[0], cancellationToken).ConfigureAwait(false)
+                    : await client.BlackBox.DeleteEntriesAsync(settings.Ids.Distinct(StringComparer.Ordinal).ToList(), cancellationToken).ConfigureAwait(false);
                 if (settings.Json) WritePureJson(result);
                 else if (result != null)
                     AnsiConsole.MarkupLine("[green]Deleted[/] " + result.Deleted + " of " + result.Requested + (result.Pending > 0 ? " [gold1](" + result.Pending + " pending)[/]" : "") + ", freed " + Markup.Escape(BlackBoxCli.Bytes(result.BytesFreed)) + ".");

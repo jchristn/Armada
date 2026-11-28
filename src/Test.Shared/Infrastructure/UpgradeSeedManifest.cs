@@ -69,6 +69,12 @@ namespace Test.Shared.Infrastructure
         /// </summary>
         public Dictionary<string, MissionStatusEnum> MissionStatuses { get; set; } = new Dictionary<string, MissionStatusEnum>();
 
+        /// <summary>
+        /// Missions seeded with the pre-1.5.0 text markers that migration 133 backfills into typed columns, keyed by
+        /// role: escalated, architect, slice0, slice1, slice2, judge.
+        /// </summary>
+        public Dictionary<string, string> MarkerMissionIds { get; set; } = new Dictionary<string, string>();
+
         /// <summary>Statuses the baseline refused to reach through manual transitions; their missions hold the last status reached.</summary>
         public List<MissionStatusEnum> UnreachableStatuses { get; set; } = new List<MissionStatusEnum>();
 
@@ -229,6 +235,12 @@ namespace Test.Shared.Infrastructure
         /// Events recorded by the baseline.
         /// </summary>
         public long EventCount { get; set; } = 0;
+
+        /// <summary>
+        /// Captain selection decisions the baseline itself recorded for the first seeded mission (0 on a baseline older
+        /// than migration 123, which has no selection tables).
+        /// </summary>
+        public long BaselineSelectionDecisionCount { get; set; } = 0;
 
         /// <summary>
         /// Request history rows recorded by the baseline.

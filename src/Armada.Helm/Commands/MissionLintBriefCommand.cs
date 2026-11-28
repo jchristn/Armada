@@ -41,7 +41,7 @@ namespace Armada.Helm.Commands
                     request.VesselId = vessel.Id;
                 }
 
-                BriefLintResult? result = await client.LintMissionBriefAsync(request, cancellationToken).ConfigureAwait(false);
+                BriefLintResult? result = await client.BlackBoxInsights.LintMissionBriefAsync(request, cancellationToken).ConfigureAwait(false);
                 if (settings.Json)
                 {
                     WritePureJson(result);

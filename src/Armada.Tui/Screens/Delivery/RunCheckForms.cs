@@ -164,7 +164,7 @@ namespace Armada.Tui.Screens.Delivery
                 request.BranchName = EntityUi.Blank(branch.Value);
                 request.CommitHash = EntityUi.Blank(commit.Value);
                 request.CommandOverride = EntityUi.Blank(commandOverride.Value);
-                ran = await context.Client.RunCheckAsync(request, ct).ConfigureAwait(false);
+                ran = await context.Client.CheckRuns.RunAsync(request, ct).ConfigureAwait(false);
                 return null;
             }, () =>
             {
@@ -215,7 +215,7 @@ namespace Armada.Tui.Screens.Delivery
                 WorkflowProfileResolutionPreviewResult? preview = null;
                 try
                 {
-                    preview = await context.Client.PreviewWorkflowProfileForVesselAsync(vesselId, profileId, CancellationToken.None).ConfigureAwait(false);
+                    preview = await context.Client.WorkflowProfiles.PreviewForVesselAsync(vesselId, profileId, CancellationToken.None).ConfigureAwait(false);
                 }
                 catch (Exception)
                 {
@@ -264,7 +264,7 @@ namespace Armada.Tui.Screens.Delivery
                 VesselReadinessResult? readiness = null;
                 try
                 {
-                    readiness = await context.Client.GetVesselReadinessAsync(vesselId, query, CancellationToken.None).ConfigureAwait(false);
+                    readiness = await context.Client.Vessels.GetReadinessAsync(vesselId, query, CancellationToken.None).ConfigureAwait(false);
                 }
                 catch (Exception)
                 {

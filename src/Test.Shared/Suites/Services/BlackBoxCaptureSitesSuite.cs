@@ -31,9 +31,9 @@ namespace Test.Shared.Suites.Services
         #region Private-Members
 
         private const string SuiteId = "Services.BlackBoxCaptureSites";
-        private const string MissionServiceFile = "src/Armada.Core/Services/MissionService.cs";
+        private const string MissionLauncherFile = "src/Armada.Core/Services/MissionLauncher.cs";
         private const string AdmiralFile = "src/Armada.Core/Services/AdmiralService.cs";
-        private const string AdmiralHarborLinkFile = "src/Armada.Core/Services/AdmiralService.HarborLink.cs";
+        private const string CaptainLinkMonitorFile = "src/Armada.Core/Services/CaptainLinkMonitor.cs";
 
         #endregion
 
@@ -88,7 +88,7 @@ namespace Test.Shared.Suites.Services
                 BlackBoxEntry entry = await CurrentAsync(t.Driver, mission.Id).ConfigureAwait(false);
                 AssertEntry(entry, BlackBoxPhaseEnum.Dispatch, BlackBoxStepEnum.VoyageParentNotRunnable, MissionFailureKindEnum.DependencyFailed, "Pending", "Cancelled");
                 BlackBoxRecord record = await bb.Pipeline.LoadRecordAsync(entry).ConfigureAwait(false);
-                AssertEqual(MissionServiceFile, record.Site!.SourceFile);
+                AssertEqual(MissionLauncherFile, record.Site!.SourceFile);
                 AssertEqual("TryAssignAsync", record.Site.Method);
             }));
 
@@ -103,7 +103,7 @@ namespace Test.Shared.Suites.Services
                 Dock dock = await t.Driver.Docks.CreateAsync(new Dock(vessel.Id) { CaptainId = captain.Id, WorktreePath = TestTemp.NewDirectory("bb_assign_dock"), BranchName = "armada/bb/assign", Active = true }).ConfigureAwait(false);
                 Mission mission = await t.Driver.Missions.CreateAsync(new Mission("assignment failure") { VesselId = vessel.Id, CaptainId = captain.Id, DockId = dock.Id, Status = MissionStatusEnum.Assigned, BranchName = "armada/bb/assign" }).ConfigureAwait(false);
 
-                await InvokeAsync(s.Missions, "FailAssignmentAsync", mission, captain, dock, "The captain's runtime is misconfigured.", BlackBoxStepEnum.AssignmentFailed, new MissionLaunchConfigurationException("runtime misconfigured")).ConfigureAwait(false);
+                await InvokeAsync(s.Missions.Context.MissionLauncher, "FailAssignmentAsync", mission, captain, dock, "The captain's runtime is misconfigured.", BlackBoxStepEnum.AssignmentFailed, new MissionLaunchConfigurationException("runtime misconfigured")).ConfigureAwait(false);
                 BlackBoxEntry first = await CurrentAsync(t.Driver, mission.Id).ConfigureAwait(false);
                 AssertEntry(first, BlackBoxPhaseEnum.Dispatch, BlackBoxStepEnum.AssignmentFailed, MissionFailureKindEnum.Infra, "Assigned", "Failed");
                 AssertEqual(captain.Id, first.CaptainId, "captain cleared on the mission is still on the entry");
@@ -114,7 +114,7 @@ namespace Test.Shared.Suites.Services
 
                 // ResetForRestart erases the live failure fields; the entry and the pointer survive.
                 Mission reloaded = (await t.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
-                typeof(MissionService).GetMethod("ResetForRestart", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object?[] { reloaded, reloaded.BranchName });
+                typeof(MissionReviewService).GetMethod("ResetForRestart", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object?[] { reloaded, reloaded.BranchName });
                 await t.Driver.Missions.UpdateAsync(reloaded).ConfigureAwait(false);
                 Mission reset = (await t.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
                 AssertNull(reset.FailureReason, "restart clears the reason");
@@ -125,7 +125,7 @@ namespace Test.Shared.Suites.Services
                 reset.Status = MissionStatusEnum.Assigned; reset.CaptainId = captain.Id; reset.DockId = dock.Id;
                 await t.Driver.Missions.UpdateAsync(reset).ConfigureAwait(false);
                 dock.Active = true; await t.Driver.Docks.UpdateAsync(dock).ConfigureAwait(false);
-                await InvokeAsync(s.Missions, "FailAssignmentAsync", reset, captain, dock, "Harbor dock missing.", BlackBoxStepEnum.HarborUnavailable, new HarborDockNotFoundException("hbr_x", "/tmp/x", "Harbor dock missing.")).ConfigureAwait(false);
+                await InvokeAsync(s.Missions.Context.MissionLauncher, "FailAssignmentAsync", reset, captain, dock, "Harbor dock missing.", BlackBoxStepEnum.HarborUnavailable, new HarborDockNotFoundException("hbr_x", "/tmp/x", "Harbor dock missing.")).ConfigureAwait(false);
                 BlackBoxEntry second = await CurrentAsync(t.Driver, mission.Id).ConfigureAwait(false);
                 AssertEqual(2, second.Attempt);
                 AssertEqual(first.Id, second.SupersedesId);
@@ -187,7 +187,7 @@ namespace Test.Shared.Suites.Services
                 mission.DockId = dock.Id;
                 await t.Driver.Missions.UpdateAsync(mission).ConfigureAwait(false);
                 git.ChangedFilesSinceResult = new List<string> { "src/in.cs", "src/out.cs" };
-                bool failed = await InvokeAsync<bool>(s.Missions, "TryFailMissionForScopeViolationAsync", mission, stored, CancellationToken.None).ConfigureAwait(false);
+                bool failed = await InvokeAsync<bool>(s.Missions.Context.MissionScopeGuard, "TryFailMissionForScopeViolationAsync", mission, stored, CancellationToken.None).ConfigureAwait(false);
                 AssertTrue(failed, "scope check ran from the durable start commit");
                 BlackBoxEntry entry = await CurrentAsync(t.Driver, mission.Id).ConfigureAwait(false);
                 AssertEqual(BlackBoxStepEnum.ScopeViolation, entry.Step);
@@ -241,7 +241,7 @@ namespace Test.Shared.Suites.Services
                     Mission upstream = await t.Driver.Missions.CreateAsync(new Mission("upstream") { VoyageId = voyage.Id, Status = MissionStatusEnum.Failed, FailureKind = MissionFailureKindEnum.Crash, FailureReason = "crashed" }).ConfigureAwait(false);
                     Mission dependent = await t.Driver.Missions.CreateAsync(new Mission("dependent") { VoyageId = voyage.Id, Status = MissionStatusEnum.Pending, DependsOnMissionId = upstream.Id }).ConfigureAwait(false);
 
-                    await InvokeAsync(s.Missions, "CancelDependentPipelineStagesAsync", upstream, CancellationToken.None).ConfigureAwait(false);
+                    await InvokeAsync(s.Missions.Context.MissionHandoffService, "CancelDependentPipelineStagesAsync", upstream, CancellationToken.None).ConfigureAwait(false);
                     BlackBoxEntry entry = await CurrentAsync(t.Driver, dependent.Id).ConfigureAwait(false);
                     AssertEntry(entry, BlackBoxPhaseEnum.Handoff, BlackBoxStepEnum.DependencyCancelled, MissionFailureKindEnum.DependencyFailed, "Pending", block ? "Blocked" : "Cancelled");
                     BlackBoxRecord record = await bb.Pipeline.LoadRecordAsync(entry).ConfigureAwait(false);
@@ -488,30 +488,24 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(mission.FailureReason, (await bb.Pipeline.LoadRecordAsync(entry).ConfigureAwait(false)).Classification!.RawReason, "the erased reason survives in the record");
             }));
 
-            cases.Add(Case("status_changed_on_every_capture", "Each capture whose status changed emits mission.status_changed with PreviousStatus; a same-status entry emits none; it is emitted with the black box disabled", TestTags.Positive, async () =>
+            cases.Add(Case("status_changed_comes_from_the_transition", "The transition emits mission.status_changed once with PreviousStatus; a capture adds none, and the timeline does not depend on the black box", TestTags.Positive, async () =>
             {
                 using TestDatabase t = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
                 ArmadaSettings settings = BlackBoxTestKit.Settings();
                 using BlackBoxRuntime bb = BlackBoxTestKit.Runtime(t.Driver, settings);
-                Mission mission = await BlackBoxTestKit.FailedMissionAsync(t.Driver).ConfigureAwait(false);
+                Mission mission = await t.Driver.Missions.CreateAsync(new Mission("capture", "brief") { Status = MissionStatusEnum.InProgress }).ConfigureAwait(false);
+                MissionTransitions transitions = new MissionTransitions(t.Driver);
+                AssertTrue(await transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.InProgress }, MissionStatusEnum.Failed, m => m.FailureReason = "crash").ConfigureAwait(false));
                 await bb.Capture.RecordMissionFailureAsync(mission, MissionStatusEnum.InProgress, BlackBoxStepEnum.ProcessCrash).ConfigureAwait(false);
                 List<ArmadaEvent> changes = await StatusEventsAsync(t.Driver, mission.Id).ConfigureAwait(false);
-                AssertEqual(1, changes.Count, "one status change");
+                AssertEqual(1, changes.Count, "one status change, from the transition");
                 MissionStatusChangedPayload payload = JsonSerializer.Deserialize<MissionStatusChangedPayload>(changes[0].Payload!, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
                 AssertEqual(MissionStatusEnum.Failed, payload.Status);
                 AssertEqual(MissionStatusEnum.InProgress, payload.PreviousStatus);
 
-                await bb.Capture.RecordMissionFailureAsync(mission, MissionStatusEnum.Failed, BlackBoxStepEnum.UnconfirmedStop).ConfigureAwait(false);
-                AssertEqual(1, (await StatusEventsAsync(t.Driver, mission.Id).ConfigureAwait(false)).Count, "a same-status entry is not a status change");
-
-                List<string> delivered = new List<string>();
-                ((BlackBoxCapture)bb.Capture).MissionStatusChanged = (m, previous, message) => { delivered.Add(m.Id + ":" + previous); return Task.CompletedTask; };
-                await bb.Capture.RecordMissionFailureAsync(mission, MissionStatusEnum.WorkProduced, BlackBoxStepEnum.NoOp).ConfigureAwait(false);
-                AssertEqual(mission.Id + ":WorkProduced", delivered.Single(), "routed through the Admiral's EmitMissionStatusChangedAsync");
-
                 settings.BlackBox.Enabled = false;
-                ((BlackBoxCapture)bb.Capture).MissionStatusChanged = null;
-                Mission other = await BlackBoxTestKit.FailedMissionAsync(t.Driver).ConfigureAwait(false);
+                Mission other = await t.Driver.Missions.CreateAsync(new Mission("disabled", "brief") { Status = MissionStatusEnum.InProgress }).ConfigureAwait(false);
+                AssertTrue(await transitions.TryTransitionAsync(other, new[] { MissionStatusEnum.InProgress }, MissionStatusEnum.Failed).ConfigureAwait(false));
                 AssertNull(await bb.Capture.RecordMissionFailureAsync(other, MissionStatusEnum.InProgress, BlackBoxStepEnum.ProcessCrash).ConfigureAwait(false), "no entry when disabled");
                 AssertEqual(1, (await StatusEventsAsync(t.Driver, other.Id).ConfigureAwait(false)).Count, "the status timeline does not depend on the black box");
             }));
@@ -575,8 +569,8 @@ namespace Test.Shared.Suites.Services
                 Mission a = await t.Driver.Missions.CreateAsync(new Mission("waits a") { Status = MissionStatusEnum.Pending, VesselId = vessel.Id }).ConfigureAwait(false);
                 Mission b = await t.Driver.Missions.CreateAsync(new Mission("waits b") { Status = MissionStatusEnum.Pending, VesselId = vessel.Id }).ConfigureAwait(false);
 
-                await InvokeAsync(s.Admiral, "DispatchPendingMissionsAsync", CancellationToken.None, null).ConfigureAwait(false);
-                await InvokeAsync(s.Admiral, "DispatchPendingMissionsAsync", CancellationToken.None, null).ConfigureAwait(false);
+                await s.Admiral.DispatchOnceAsync().ConfigureAwait(false);
+                await s.Admiral.DispatchOnceAsync().ConfigureAwait(false);
                 foreach (Mission m in new[] { a, b })
                 {
                     EnumerationResult<ArmadaEvent> events = await t.Driver.Events.EnumerateAsync(new EnumerationQuery { MissionId = m.Id, EventType = "mission.dispatch_deferred", PageSize = 10 }).ConfigureAwait(false);
@@ -613,12 +607,13 @@ namespace Test.Shared.Suites.Services
 
         private static IEnumerable<SiteRow> Rows()
         {
-            const string ms = MissionServiceFile;
-            const string msbb = "src/Armada.Core/Services/MissionService.BlackBox.cs";
-            const string completion = "src/Armada.Core/Services/MissionService.Completion.cs";
-            const string review = "src/Armada.Core/Services/MissionService.Review.cs";
-            const string handoff = "src/Armada.Core/Services/MissionService.Handoff.cs";
-            const string barrier = "src/Armada.Core/Services/MissionService.IntegrationBarrier.cs";
+            const string ms = MissionLauncherFile;
+            const string msbb = "src/Armada.Core/Services/MissionFailureCapture.cs";
+            const string scope = "src/Armada.Core/Services/MissionScopeGuard.cs";
+            const string completion = "src/Armada.Core/Services/StageCompletionHandler.cs";
+            const string review = "src/Armada.Core/Services/MissionReviewService.cs";
+            const string handoff = "src/Armada.Core/Services/MissionHandoffService.cs";
+            const string barrier = "src/Armada.Core/Services/IntegrationBarrierService.cs";
             const string facts = "src/Armada.Core/BlackBox/BlackBoxSiteFacts.cs";
             const string dock = "src/Armada.Core/Services/DockService.cs";
             const string captains = "src/Armada.Core/Services/CaptainService.cs";
@@ -651,10 +646,10 @@ namespace Test.Shared.Suites.Services
             yield return M(BlackBoxStepEnum.Unfinished, BlackBoxPhaseEnum.Completion, completion, completion, MissionFailureKindEnum.NoOp, "WorkProduced", "Failed");
             yield return M(BlackBoxStepEnum.CaptainBlocked, BlackBoxPhaseEnum.Completion, completion, completion, MissionFailureKindEnum.Blocked, "WorkProduced", "Failed");
             yield return M(BlackBoxStepEnum.InvalidOutput, BlackBoxPhaseEnum.Completion, facts, adm, MissionFailureKindEnum.InvalidOutput, "InProgress", "Failed");
-            yield return M(BlackBoxStepEnum.ScopeViolation, BlackBoxPhaseEnum.Completion, ms, ms, MissionFailureKindEnum.ScopeViolation, "WorkProduced", "Failed");
+            yield return M(BlackBoxStepEnum.ScopeViolation, BlackBoxPhaseEnum.Completion, scope, scope, MissionFailureKindEnum.ScopeViolation, "WorkProduced", "Failed");
             yield return M(BlackBoxStepEnum.BoundaryViolation, BlackBoxPhaseEnum.Completion, completion, completion, MissionFailureKindEnum.Boundary, "WorkProduced", "Failed");
             yield return M(BlackBoxStepEnum.DefinitionOfDone, BlackBoxPhaseEnum.Completion, completion, completion, MissionFailureKindEnum.TestFail, "WorkProduced", "Failed");
-            yield return M(BlackBoxStepEnum.StageCheck, BlackBoxPhaseEnum.Completion, "src/Armada.Core/Services/AdmiralService.Verification.cs", adm, MissionFailureKindEnum.InvalidOutput, "InProgress", "Failed");
+            yield return M(BlackBoxStepEnum.StageCheck, BlackBoxPhaseEnum.Completion, "src/Armada.Core/Services/AdmiralService.cs", adm, MissionFailureKindEnum.InvalidOutput, "InProgress", "Failed");
             yield return M(BlackBoxStepEnum.JudgeRejected, BlackBoxPhaseEnum.Review, completion, completion, MissionFailureKindEnum.JudgeRejected, "WorkProduced", "Failed");
             yield return M(BlackBoxStepEnum.ReviewDenied, BlackBoxPhaseEnum.Review, review, review, MissionFailureKindEnum.ReviewDenied, "Review", "Failed");
             yield return M(BlackBoxStepEnum.ReviewTimeout, BlackBoxPhaseEnum.Review, review, review, MissionFailureKindEnum.ReviewDenied, "Review", "Failed");
@@ -682,7 +677,7 @@ namespace Test.Shared.Suites.Services
             yield return M(BlackBoxStepEnum.RescueFailed, BlackBoxPhaseEnum.Recovery, recovery, recovery, MissionFailureKindEnum.Crash, "Failed", "Failed");
             yield return M(BlackBoxStepEnum.RedispatchExhausted, BlackBoxPhaseEnum.Recovery, adm, adm, MissionFailureKindEnum.Infra, "InProgress", "Failed");
             yield return M(BlackBoxStepEnum.OrphanedExit, BlackBoxPhaseEnum.Recovery, adm, adm, MissionFailureKindEnum.Infra, "InProgress", "WorkProduced");
-            yield return M(BlackBoxStepEnum.UnconfirmedStop, BlackBoxPhaseEnum.Recovery, AdmiralHarborLinkFile, AdmiralHarborLinkFile, MissionFailureKindEnum.Infra, "InProgress", "InProgress");
+            yield return M(BlackBoxStepEnum.UnconfirmedStop, BlackBoxPhaseEnum.Recovery, CaptainLinkMonitorFile, CaptainLinkMonitorFile, MissionFailureKindEnum.Infra, "InProgress", "InProgress");
             yield return M(BlackBoxStepEnum.MissingMergeHandoff, BlackBoxPhaseEnum.Recovery, adm, adm, MissionFailureKindEnum.Infra, "WorkProduced", "LandingFailed");
             yield return V(BlackBoxStepEnum.SettlementFailed, settlement, "InProgress", "Failed");
             yield return V(BlackBoxStepEnum.Halted, adm, "InProgress", "Cancelled");

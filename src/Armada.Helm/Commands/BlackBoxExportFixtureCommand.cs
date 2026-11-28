@@ -31,7 +31,7 @@ namespace Armada.Helm.Commands
 
             return await RunBlackBoxAsync(settings.Json, async client =>
             {
-                BlackBoxFixture? fixture = await client.ExportBlackBoxFixtureAsync(settings.Id, settings.Name, cancellationToken).ConfigureAwait(false);
+                BlackBoxFixture? fixture = await client.BlackBox.ExportFixtureAsync(settings.Id, settings.Name, cancellationToken).ConfigureAwait(false);
                 if (fixture == null)
                 {
                     Status("Error: the server returned no fixture.");

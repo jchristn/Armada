@@ -33,12 +33,12 @@ namespace Armada.Helm.Commands
                 string id = settings.Id;
                 if (!id.StartsWith("vyg_", StringComparison.Ordinal))
                 {
-                    EnumerationResult<Voyage>? voyages = await client.ListVoyagesAsync(null, cancellationToken).ConfigureAwait(false);
+                    EnumerationResult<Voyage>? voyages = await client.Voyages.ListAsync(null, cancellationToken).ConfigureAwait(false);
                     Voyage? match = voyages?.Objects.FirstOrDefault(v => String.Equals(v.Title, id, StringComparison.OrdinalIgnoreCase));
                     if (match == null) return BlackBoxCli.NotFoundExitCode;
                     id = match.Id;
                 }
-                VoyageTree? tree = await client.GetVoyageTreeAsync(id, cancellationToken).ConfigureAwait(false);
+                VoyageTree? tree = await client.Concurrency.GetVoyageTreeAsync(id, cancellationToken).ConfigureAwait(false);
                 if (settings.Json)
                 {
                     WritePureJson(tree);

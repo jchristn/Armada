@@ -7,8 +7,8 @@ namespace Armada.Core.Models
     /// <summary>
     /// The model as served: a runtime, provider, model and served context shared by every captain and Harbor that runs it
     /// (docs/MODEL_HETEROGENEITY.md, The model profile). The identity is stable; what changes over time (runtime version,
-    /// model digest, sampling) is recorded as immutable <see cref="ModelProfileRevision"/>s. A profile is advisory: it does
-    /// not set a captain's tier or change routing or dispatch.
+    /// model digest, sampling) is recorded as immutable <see cref="ModelProfileRevision"/>s. Routing reads only the tier an
+    /// administrator set in <see cref="Tiering"/> (RS-8.5); a suggested tier never changes routing on its own.
     /// </summary>
     public class ModelProfile
     {
@@ -61,6 +61,57 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
+        /// Recovery policy overrides set by an administrator (RS-5.5); every value is null unless set, and null means the
+        /// global setting applies. Editable.
+        /// </summary>
+        public ModelProfileRecovery Recovery
+        {
+            get => _Recovery;
+            set => _Recovery = value ?? new ModelProfileRecovery();
+        }
+
+        /// <summary>
+        /// The tier an administrator set and the tier the outcome data suggests (RS-8.5). Only <see cref="ModelProfileTiering.Tier"/>
+        /// is editable.
+        /// </summary>
+        public ModelProfileTiering Tiering
+        {
+            get => _Tiering;
+            set => _Tiering = value ?? new ModelProfileTiering();
+        }
+
+        /// <summary>
+        /// The recovery policy in effect for captains linked to this profile: the global settings with
+        /// <see cref="Recovery"/> applied. Filled only by single-profile reads; list pages leave it null. Read-only.
+        /// </summary>
+        public RecoveryPolicy? EffectiveRecovery { get; set; } = null;
+
+        /// <summary>
+        /// Timeout overrides set by an administrator (RS-8.8); every value is null unless set, and null means the
+        /// measured-speed default or the global setting applies. Editable.
+        /// </summary>
+        public ModelProfileTimeouts Timeouts
+        {
+            get => _Timeouts;
+            set => _Timeouts = value ?? new ModelProfileTimeouts();
+        }
+
+        /// <summary>
+        /// The newest speed measurement from a probe run (RS-8.8). Server-owned: a profile update cannot set it.
+        /// </summary>
+        public ModelProfileSpeed Speed
+        {
+            get => _Speed;
+            set => _Speed = value ?? new ModelProfileSpeed();
+        }
+
+        /// <summary>
+        /// The timeouts in effect for captains linked to this profile: the global settings with <see cref="Timeouts"/>
+        /// and <see cref="Speed"/> applied. Filled only by single-profile reads; list pages leave it null. Read-only.
+        /// </summary>
+        public TimeoutPolicy? EffectiveTimeouts { get; set; } = null;
+
+        /// <summary>
         /// Free-text administrator notes, or null. Editable.
         /// </summary>
         public string? Notes { get; set; } = null;
@@ -100,6 +151,10 @@ namespace Armada.Core.Models
         private ModelProfileIdentity _Identity = new ModelProfileIdentity();
         private ModelProfileCapabilities _Capabilities = new ModelProfileCapabilities();
         private ModelProfileRendering _Rendering = new ModelProfileRendering();
+        private ModelProfileRecovery _Recovery = new ModelProfileRecovery();
+        private ModelProfileTimeouts _Timeouts = new ModelProfileTimeouts();
+        private ModelProfileSpeed _Speed = new ModelProfileSpeed();
+        private ModelProfileTiering _Tiering = new ModelProfileTiering();
         private List<ModelProfileRevision> _Revisions = new List<ModelProfileRevision>();
 
         #endregion

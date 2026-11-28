@@ -13,6 +13,17 @@ The dashboard layout owns one breadcrumb position above the routed page. Every s
 
 For example, a captain evaluation uses `Dashboard > Captains > {captain name} > Evaluations > {run}`. The captain and filtered evaluations list are links. A persona uses `Dashboard > Configuration > Personas > {name}`. Vessel history uses `Dashboard > Vessels > {vessel name} > History`.
 
+## The Captains hub in 1.5.0
+
+The Captains hub is where everything about who does the work lives, so the 1.5.0 views for model reliability went
+there rather than into a new top-level section. Its tabs, in order, are Captains, Model Profiles, Reliability, Docks,
+Battery Packs and Battery Runs (`/captains?tab=profiles`, `tab=reliability`, `tab=battery-runs`). Model Profiles lists
+the models as served; a profile opens at `/model-profiles/{id}` with the trail
+`Dashboard > Captains > Model Profiles > {model}`, and the retired `/model-profiles` list URL redirects to the tab.
+Reliability shows completion, failures, repairs, escalations and the `Unclassified` rate per model and persona, with
+the latest gate report, and Battery Runs lists evaluation and gate runs with a Cancel action. The TUI has the same three
+tabs and the mobile app has Model Profiles; their parity manifests track what each surface covers.
+
 ## Adding a page
 
 1. Register its route in `App.tsx` and add its fallback ancestry to `dashboardNavigation.ts`. Every page must be reachable through a route or a mounted hub tab.

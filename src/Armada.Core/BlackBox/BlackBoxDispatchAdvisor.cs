@@ -1,6 +1,7 @@
 namespace Armada.Core.BlackBox
 {
     using System;
+    using System.Collections.Generic;
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
@@ -52,12 +53,35 @@ namespace Armada.Core.BlackBox
         #region Public-Methods
 
         /// <inheritdoc />
-        public async Task<MissionDispatchAdvice?> AdviseAsync(Mission mission, Vessel vessel, CancellationToken token = default)
+        public Task<MissionDispatchAdvice?> AdviseAsync(Mission mission, Vessel vessel, CancellationToken token = default)
+        {
+            return AdviseAsync(mission, vessel, Array.Empty<Mission>(), token);
+        }
+
+        /// <inheritdoc />
+        public Task<MissionDispatchAdvice?> AdviseAsync(Mission mission, Vessel vessel, IReadOnlyList<Mission> planned, CancellationToken token = default)
+        {
+            return AdviseAsync(mission, vessel, planned, new MissionDispatchBatch(), token);
+        }
+
+        /// <inheritdoc />
+        public async Task<MissionDispatchAdvice?> AdviseAsync(Mission mission, Vessel vessel, IReadOnlyList<Mission> planned, MissionDispatchBatch batch, CancellationToken token = default)
         {
             if (mission == null) throw new ArgumentNullException(nameof(mission));
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
-            VesselOverlapContext context = await _Analyzer.LoadAsync(vessel, null, token).ConfigureAwait(false);
-            MissionFileSet likely = MissionOverlapAnalyzer.LikelyFiles(mission.Title, mission.Description, context.Tracked, out _, out _);
+            if (planned == null) throw new ArgumentNullException(nameof(planned));
+            if (batch == null) throw new ArgumentNullException(nameof(batch));
+            // One vessel read per voyage creation; each planned mission joins the context once (RS-10.4).
+            if (!batch.Contexts.TryGetValue(vessel.Id, out VesselOverlapContext? context))
+            {
+                context = await _Analyzer.LoadAsync(vessel, null, token).ConfigureAwait(false);
+                batch.Contexts[vessel.Id] = context;
+            }
+            foreach (Mission earlier in planned)
+            {
+                if (batch.AddedMissionIds.Add(vessel.Id + "\n" + earlier.Id)) MissionOverlapAnalyzer.AddPlannedMission(context, earlier);
+            }
+            MissionFileSet likely = MissionOverlapAnalyzer.LikelyFiles(mission, context.Tracked);
             MissionOverlapPreview preview = MissionOverlapAnalyzer.Compare(context, likely, mission.DependsOnMissionId, null);
             BriefLintResult lint = MissionBriefLinter.Lint(mission.Title, mission.Description, mission.DependsOnMissionId, context.Tracked, mission.Mode);
 

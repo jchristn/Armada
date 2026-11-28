@@ -36,6 +36,7 @@ namespace Armada.Benchmark.Runners
         private readonly string _CaptureScript;
         private readonly int _ArmTimeoutSeconds;
         private readonly int _WarmupMissions;
+        private readonly int _SubmitIntervalMs;
         private readonly Dictionary<string, int> _AccountOfCaptain = new Dictionary<string, int>(StringComparer.Ordinal);
         private readonly List<string> _CaptureCaptains = new List<string>();
         private DateTime? _LastCompletionUtc;
@@ -52,8 +53,9 @@ namespace Armada.Benchmark.Runners
         /// <param name="captureScript">Usage stub script path.</param>
         /// <param name="armTimeoutSeconds">Per-arm completion timeout.</param>
         /// <param name="warmupMissions">Unrecorded Observe missions run first.</param>
+        /// <param name="submitIntervalMs">Pause after each submission in milliseconds; 0 submits as fast as the submit concurrency allows.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required argument is null.</exception>
-        public AdmissionRunner(BenchClient client, BenchmarkScenario scenario, string repoUrl, string captureExecutable, string captureScript, int armTimeoutSeconds, int warmupMissions)
+        public AdmissionRunner(BenchClient client, BenchmarkScenario scenario, string repoUrl, string captureExecutable, string captureScript, int armTimeoutSeconds, int warmupMissions, int submitIntervalMs = 0)
         {
             _Client = client ?? throw new ArgumentNullException(nameof(client));
             _Scenario = scenario ?? throw new ArgumentNullException(nameof(scenario));
@@ -62,6 +64,7 @@ namespace Armada.Benchmark.Runners
             _CaptureScript = captureScript ?? throw new ArgumentNullException(nameof(captureScript));
             _ArmTimeoutSeconds = armTimeoutSeconds;
             _WarmupMissions = warmupMissions;
+            _SubmitIntervalMs = Math.Max(0, submitIntervalMs);
         }
 
         #endregion
@@ -163,6 +166,7 @@ namespace Armada.Benchmark.Runners
                         catch (BenchRequestException ex) { Log("submit failed: " + ex.Message); }
                         finally { gate.Release(); }
                     }, token));
+                    if (_SubmitIntervalMs > 0) await Task.Delay(_SubmitIntervalMs, token).ConfigureAwait(false);
                 }
                 await Task.WhenAll(submits).ConfigureAwait(false);
             }
@@ -210,7 +214,9 @@ namespace Armada.Benchmark.Runners
             ArmResult result = new ArmResult
             {
                 Mode = mode, Strategy = _Scenario.Strategy, Missions = _Scenario.Missions, Admitted = admitted.Count, Incomplete = incomplete, Errors = errors,
-                AdmissionLatency = LatencyStatistics.From(latency), WaitedOverFiveSeconds = latency.Count(v => v > 5000),
+                AdmissionLatency = LatencyStatistics.From(latency),
+                StartLatency = LatencyStatistics.From(missions.Where(m => m.StartedUtc.HasValue).Select(m => Math.Max(0, (m.StartedUtc!.Value - m.CreatedUtc).TotalMilliseconds)).ToList()),
+                WaitedOverFiveSeconds = latency.Count(v => v > 5000),
                 DurationSeconds = Math.Round(duration, 1),
                 FinalStatuses = missions.GroupBy(m => m.Status).ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal)
             };

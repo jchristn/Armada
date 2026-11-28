@@ -1002,12 +1002,10 @@ namespace Armada.Server.Routes
                     }
                     else
                     {
-                        mission.Status = Armada.Core.Enums.MissionStatusEnum.Cancelled;
                         mission.FailureKind = Armada.Core.Enums.MissionFailureKindEnum.OperatorAction;
                         mission.FailureReason = "Vessel deleted";
                         mission.CompletedUtc = DateTime.UtcNow;
-                        mission.LastUpdateUtc = DateTime.UtcNow;
-                        await _database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                        await new Armada.Core.Services.MissionTransitions(_database).TryTransitionAsync(mission, new[] { statusBefore }, Armada.Core.Enums.MissionStatusEnum.Cancelled).ConfigureAwait(false);
                         await BlackBoxOperatorCapture.RecordVesselDeletedAsync(BlackBox, mission, statusBefore, vessel, "REST").ConfigureAwait(false);
                     }
                 }

@@ -119,6 +119,11 @@ namespace Armada.Core.Services.Ask
             // Fixture battery readers
             "list_battery_packs",
             "get_battery_run",
+            "list_battery_runs",
+            "get_mission_attempts",
+            "get_reliability_summary",
+            "list_gate_reports",
+            "get_gate_report",
             "list_battery_results",
 
             // Black box readers (plan 10.1): every BlackBox tool the MCP authorization registry declares as a Read,

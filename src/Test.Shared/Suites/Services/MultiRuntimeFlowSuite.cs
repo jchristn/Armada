@@ -138,7 +138,8 @@ namespace Test.Shared.Suites.Services
                 Mission? repaired = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
                 AssertTrue(repaired!.Status != MissionStatusEnum.Failed, "the first contract violation is repaired, not failed");
                 AssertEqual(1, repaired.OutputRepairAttempts);
-                AssertContains("Affected Case", repaired.Description ?? String.Empty, "the repair note quotes the Judge contract");
+                AssertContains("Output Contract section at the end of these instructions", Armada.Core.Services.MissionNotes.EffectiveDescription(repaired), "RS-6.11: the repair note points at the contract the instructions state once");
+                AssertContains("Affected Case", Armada.Core.Services.StageOutputContract.For(Armada.Core.PersonaCatalog.Judge), "the stated Judge contract names the section");
                 AssertEqual(0, landingCalls);
 
                 // Second violation with the budget spent: the mission fails closed and says why.
@@ -160,6 +161,99 @@ namespace Test.Shared.Suites.Services
 
                 Captain? released = await testDb.Driver.Captains.ReadAsync(judgeCaptain.Id).ConfigureAwait(false);
                 AssertTrue(released!.ActiveMissionIds.SingleOrDefault() != judge.Id, "the captain is released after the terminal failure");
+            }));
+
+            cases.Add(CaseAsync("judge_format_turn_restates_without_rerun", "RS-6.4: a Judge PASS written in prose gets a format-only turn that restates it; the work lands with no rerun and both outputs are kept", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                Harness h = new Harness(testDb, new DirCreatingGitService());
+                CannedModelProbeExecutor executor = new CannedModelProbeExecutor();
+                executor.Answer = _ => new ModelProbeExchange { Output = FormatLenses + "Inspected: src/app/feature.cs\n## Verdict\n[ARMADA:VERDICT] PASS", ExitCode = 0 };
+                h.Missions.FormatRepairExecutor = executor;
+                int landingCalls = 0;
+                h.Missions.OnMissionComplete = (m, d) => { landingCalls++; return Task.CompletedTask; };
+                h.Missions.OnGetMissionOutput = _ => FormatLenses + "I inspected src/app/feature.cs and it is right. Verdict: **PASS**";
+
+                Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
+                Captain judgeCaptain = await CreateCaptainAsync(testDb, "Codex", AgentRuntimeEnum.Codex, CaptainStateEnum.Working).ConfigureAwait(false);
+                Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("judged")).ConfigureAwait(false);
+                Mission judge = await CreateRunningMissionAsync(testDb, h, vessel, voyage, judgeCaptain, "Judge", false).ConfigureAwait(false);
+
+                await h.Missions.HandleCompletionAsync(judgeCaptain, judge.Id).ConfigureAwait(false);
+                Mission? after = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
+                AssertEqual(1, executor.Requests.Count, "one format call");
+                AssertEqual(0, after!.OutputRepairAttempts, "no full rerun");
+                AssertNotEqual(MissionStatusEnum.Failed, after.Status);
+                AssertEqual(1, landingCalls, "the restated PASS lands the work");
+                AssertContains("Verdict: **PASS**", after.AgentOutput ?? "", "the original output is kept");
+                AssertContains("FormatRepairTurn", after.AgentOutput ?? "", "the restatement is appended and marked");
+                executor.Requests.TryPeek(out ModelProbeExchangeRequest? request);
+                AssertContains("Do not do any new work", request!.Prompt);
+            }));
+
+            cases.Add(CaseAsync("judge_pass_without_evidence_reruns", "RS-6.8: a PASS that cites no check and no file is a format failure with nothing to restate, so the Judge runs again without a format call", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                Harness h = new Harness(testDb, new DirCreatingGitService());
+                CannedModelProbeExecutor executor = new CannedModelProbeExecutor();
+                h.Missions.FormatRepairExecutor = executor;
+                int landingCalls = 0;
+                h.Missions.OnMissionComplete = (m, d) => { landingCalls++; return Task.CompletedTask; };
+                h.Missions.OnGetMissionOutput = _ => FormatLenses + "## Verdict\n[ARMADA:VERDICT] PASS";
+
+                Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
+                Captain judgeCaptain = await CreateCaptainAsync(testDb, "Codex", AgentRuntimeEnum.Codex, CaptainStateEnum.Working).ConfigureAwait(false);
+                Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("judged")).ConfigureAwait(false);
+                Mission judge = await CreateRunningMissionAsync(testDb, h, vessel, voyage, judgeCaptain, "Judge", false).ConfigureAwait(false);
+
+                await h.Missions.HandleCompletionAsync(judgeCaptain, judge.Id).ConfigureAwait(false);
+                Mission? after = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
+                AssertEqual(0, executor.Requests.Count, "nothing to restate");
+                AssertEqual(1, after!.OutputRepairAttempts, "the Judge runs again");
+                AssertEqual(0, landingCalls, "an unevidenced PASS never lands");
+                AssertContains("cites no evidence", Armada.Core.Services.MissionNotes.EffectiveDescription(after));
+            }));
+
+            cases.Add(CaseAsync("judge_format_turn_cannot_invent_pass", "RS-6.4: a format turn that turns a prose FAIL into a PASS is rejected, and the Judge runs again", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                Harness h = new Harness(testDb, new DirCreatingGitService());
+                CannedModelProbeExecutor executor = new CannedModelProbeExecutor();
+                executor.Answer = _ => new ModelProbeExchange { Output = FormatLenses + "Inspected: src/app/feature.cs\n[ARMADA:VERDICT] PASS", ExitCode = 0 };
+                h.Missions.FormatRepairExecutor = executor;
+                int landingCalls = 0;
+                h.Missions.OnMissionComplete = (m, d) => { landingCalls++; return Task.CompletedTask; };
+                h.Missions.OnGetMissionOutput = _ => FormatLenses + "I inspected src/app/feature.cs. Whitespace names still save, so this has to FAIL.";
+
+                Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
+                Captain judgeCaptain = await CreateCaptainAsync(testDb, "Codex", AgentRuntimeEnum.Codex, CaptainStateEnum.Working).ConfigureAwait(false);
+                Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("judged")).ConfigureAwait(false);
+                Mission judge = await CreateRunningMissionAsync(testDb, h, vessel, voyage, judgeCaptain, "Judge", false).ConfigureAwait(false);
+
+                await h.Missions.HandleCompletionAsync(judgeCaptain, judge.Id).ConfigureAwait(false);
+                Mission? after = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
+                AssertEqual(1, executor.Requests.Count, "the format call ran");
+                AssertEqual(1, after!.OutputRepairAttempts, "the rejected restatement falls through to the rerun");
+                AssertEqual(0, landingCalls);
+            }));
+
+            cases.Add(CaseAsync("gated_judge_gets_no_format_turn", "RS-6.4: a review-gated Judge is never repaired, not even by a format-only turn", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                Harness h = new Harness(testDb, new DirCreatingGitService());
+                CannedModelProbeExecutor executor = new CannedModelProbeExecutor();
+                h.Missions.FormatRepairExecutor = executor;
+                h.Missions.OnGetMissionOutput = _ => FormatLenses + "I inspected src/app/feature.cs. Verdict: **PASS**";
+
+                Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
+                Captain judgeCaptain = await CreateCaptainAsync(testDb, "Codex", AgentRuntimeEnum.Codex, CaptainStateEnum.Working).ConfigureAwait(false);
+                Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("judged")).ConfigureAwait(false);
+                Mission judge = await CreateRunningMissionAsync(testDb, h, vessel, voyage, judgeCaptain, "Judge", true).ConfigureAwait(false);
+
+                await h.Missions.HandleCompletionAsync(judgeCaptain, judge.Id).ConfigureAwait(false);
+                Mission? after = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
+                AssertEqual(0, executor.Requests.Count, "no format call for a gated stage");
+                AssertEqual(MissionStatusEnum.Review, after!.Status, "a person decides");
             }));
 
             cases.Add(CaseAsync("restart_later_stage_keeps_branch", "Restarting a failed later stage keeps the earlier stage's branch, reopens the voyage, and restores the cancelled stages after it", TestTags.Positive, async () =>
@@ -354,16 +448,16 @@ namespace Test.Shared.Suites.Services
                 }).ConfigureAwait(false);
                 Mission restarted = await h.Missions.RestartAsync(judge, description: "Updated requirements").ConfigureAwait(false);
                 AssertContains("Updated requirements", restarted.Description);
-                AssertContains("Blank-key tool chat sends an unauthenticated request.", restarted.Description);
-                AssertContains("historical", restarted.Description);
-                AssertContains("recheck", restarted.Description);
+                AssertContains("Blank-key tool chat sends an unauthenticated request.", Armada.Core.Services.MissionNotes.EffectiveDescription(restarted));
+                AssertContains("historical", Armada.Core.Services.MissionNotes.EffectiveDescription(restarted));
+                AssertContains("recheck", Armada.Core.Services.MissionNotes.EffectiveDescription(restarted));
                 restarted.Status = MissionStatusEnum.Failed;
                 restarted.FailureKind = MissionFailureKindEnum.JudgeRejected;
                 restarted.AgentOutput = "## Affected Case\nUnknown providers need an explicit unsupported error.\n[ARMADA:VERDICT] NEEDS_REVISION";
                 await testDb.Driver.Missions.UpdateAsync(restarted).ConfigureAwait(false);
                 Mission again = await h.Missions.RestartAsync(restarted).ConfigureAwait(false);
-                AssertContains("Blank-key tool chat sends an unauthenticated request.", again.Description);
-                AssertContains("Unknown providers need an explicit unsupported error.", again.Description);
+                AssertContains("Blank-key tool chat sends an unauthenticated request.", Armada.Core.Services.MissionNotes.EffectiveDescription(again));
+                AssertContains("Unknown providers need an explicit unsupported error.", Armada.Core.Services.MissionNotes.EffectiveDescription(again));
             }));
 
             cases.Add(CaseAsync("restart_pending_starts_with_idle_captain", "Restarting a Pending mission applies the new title and description, resets nothing, and launches it at once on an idle captain", TestTags.Positive, async () =>
@@ -581,7 +675,7 @@ namespace Test.Shared.Suites.Services
 
                 Mission? repaired = await testDb.Driver.Missions.ReadAsync(linter.Id).ConfigureAwait(false);
                 AssertEqual(1, repaired!.OutputRepairAttempts, "the unsubstantiated block gets one repair turn");
-                AssertContains("without a concrete affected case", repaired.Description ?? "");
+                AssertContains("without a concrete affected case", Armada.Core.Services.MissionNotes.EffectiveDescription(repaired));
                 AssertFalse((await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false)).Exists(m => m.DependsOnMissionId == linter.Id && m.Persona == "Worker"), "no rework on an unsubstantiated block");
                 AssertTrue(VerifierContract.IsBlocked("x\n  " + VerifierContract.BlockedMarker + "  \n"));
                 AssertFalse(VerifierContract.IsBlocked("The text mentions " + VerifierContract.BlockedMarker + " inline"));
@@ -647,10 +741,22 @@ namespace Test.Shared.Suites.Services
                 finalJudge.DependsOnMissionId = alternative.Id;
                 await testDb.Driver.Missions.UpdateAsync(finalJudge).ConfigureAwait(false);
                 await h.Missions.HandleCompletionAsync(finalReviewer, finalJudge.Id).ConfigureAwait(false);
-                Mission stopped = (await testDb.Driver.Missions.ReadAsync(finalJudge.Id).ConfigureAwait(false))!;
+                // RS-5.6: a rejected escalated attempt takes the next hop, up to MaxEscalations (2 by default).
+                all = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
+                Mission? secondHop = all.Find(m => m.DependsOnMissionId == finalJudge.Id && m.Persona == "Worker");
+                AssertNotNull(secondHop, "a rejected escalated attempt escalates once more");
+                AssertContains("(escalated)", secondHop!.Title);
+                secondHop.Status = MissionStatusEnum.WorkProduced;
+                await testDb.Driver.Missions.UpdateAsync(secondHop).ConfigureAwait(false);
+                Captain lastReviewer = await CreateCaptainAsync(testDb, "Last reviewer", AgentRuntimeEnum.ClaudeCode, CaptainStateEnum.Working).ConfigureAwait(false);
+                Mission lastHopJudge = await CreateRunningMissionAsync(testDb, h, vessel, voyage, lastReviewer, "Judge", false).ConfigureAwait(false);
+                lastHopJudge.DependsOnMissionId = secondHop.Id;
+                await testDb.Driver.Missions.UpdateAsync(lastHopJudge).ConfigureAwait(false);
+                await h.Missions.HandleCompletionAsync(lastReviewer, lastHopJudge.Id).ConfigureAwait(false);
+                Mission stopped = (await testDb.Driver.Missions.ReadAsync(lastHopJudge.Id).ConfigureAwait(false))!;
                 AssertEqual(MissionStatusEnum.Failed, stopped.Status, "A rejected escalated attempt cannot create an infinite recovery chain");
                 AssertContains("Judge rework limit reached", stopped.FailureReason);
-                AssertContains("escalated attempt", stopped.FailureReason);
+                AssertContains("including 2 escalation(s)", stopped.FailureReason);
                 AssertContains("Remediation:", stopped.FailureReason);
                 AssertContains("independent Judge", stopped.FailureReason);
             }));
@@ -806,7 +912,7 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(await h.Missions.TryAssignAsync(integration, vessel).ConfigureAwait(false), "integration starts once the slices settle");
                 AssertEqual("aaa111@armada/a,bbb222@armada/b", String.Join(",", merges.Calls), "each kept slice's commit is merged, oldest first; the dropped slice is not");
                 Mission? started = await testDb.Driver.Missions.ReadAsync(integration.Id).ConfigureAwait(false);
-                string description = started!.Description ?? "";
+                string description = Armada.Core.Services.MissionNotes.EffectiveDescription(started);
                 AssertContains("Slice A [Worker]", description);
                 AssertContains(": merged", description);
                 AssertContains("`git merge bbb222` conflicts in `src/shared.cs`", description);
@@ -861,7 +967,7 @@ namespace Test.Shared.Suites.Services
                     h.Missions.OnGetMissionOutput = _ => "## Affected Case\nFile: " + (sameCase ? "src/a.py:42" : "src/b.py:3") + "\nThe null input still throws.\n[ARMADA:VERDICT] NEEDS_REVISION";
                     Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
                     Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("repeated case") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
-                    Captain deepseek = await CreateCaptainAsync(testDb, "Deepseek", AgentRuntimeEnum.ApiEndpoint).ConfigureAwait(false);
+                    Captain deepseek = await CreateCaptainAsync(testDb, "Deepseek", AgentRuntimeEnum.ApiEndpoint, CaptainStateEnum.Idle, CaptainTierEnum.Economy).ConfigureAwait(false);
                     Mission initial = await testDb.Driver.Missions.CreateAsync(new Mission("Implement", "Implement it") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Worker", Status = MissionStatusEnum.WorkProduced, CaptainId = deepseek.Id, CommitHash = "commit-one", BranchName = "b" }).ConfigureAwait(false);
                     Mission firstReview = await testDb.Driver.Missions.CreateAsync(new Mission("Review", "Review it") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Judge", Status = MissionStatusEnum.WorkProduced, DependsOnMissionId = initial.Id,
                         AgentOutput = "## Affected Case\nFile: src/a.py:17\nThe null input throws.\n[ARMADA:VERDICT] NEEDS_REVISION" }).ConfigureAwait(false);
@@ -887,7 +993,7 @@ namespace Test.Shared.Suites.Services
                 h.Missions.OnGetMissionOutput = _ => "## Affected Case\nFile: a.py:1\nThe implementation is still missing.\n[ARMADA:VERDICT] NEEDS_REVISION";
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
                 Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("stagnation") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
-                Captain deepseek = await CreateCaptainAsync(testDb, "Deepseek", AgentRuntimeEnum.ApiEndpoint).ConfigureAwait(false);
+                Captain deepseek = await CreateCaptainAsync(testDb, "Deepseek", AgentRuntimeEnum.ApiEndpoint, CaptainStateEnum.Idle, CaptainTierEnum.Economy).ConfigureAwait(false);
                 Mission initial = await testDb.Driver.Missions.CreateAsync(new Mission("Implement", "Implement it") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Worker", Status = MissionStatusEnum.WorkProduced, CaptainId = deepseek.Id, CommitHash = "same-commit", BranchName = "b" }).ConfigureAwait(false);
                 Mission rework = await testDb.Driver.Missions.CreateAsync(new Mission("[Worker] Rework 1: Implement", "Implement it") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Worker", Status = MissionStatusEnum.WorkProduced, CaptainId = deepseek.Id, CommitHash = "same-commit", BranchName = "b", DependsOnMissionId = initial.Id }).ConfigureAwait(false);
                 Captain codex = await CreateCaptainAsync(testDb, "Reviewer", AgentRuntimeEnum.Codex, CaptainStateEnum.Working).ConfigureAwait(false);
@@ -1016,7 +1122,7 @@ namespace Test.Shared.Suites.Services
                 await h.Missions.HandleCompletionAsync(reviewer, judge.Id).ConfigureAwait(false);
                 Mission failed = (await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false))!;
                 AssertEqual(MissionStatusEnum.Failed, failed.Status);
-                AssertContains("No alternate eligible Worker captain", failed.FailureReason);
+                AssertContains("No eligible Worker captain is available", failed.FailureReason);
                 AssertContains("persona priorities", failed.FailureReason);
                 AssertContains("Remediation:", failed.FailureReason);
             }));
@@ -1024,7 +1130,7 @@ namespace Test.Shared.Suites.Services
             cases.Add(CaseAsync("escalation_respects_scope_and_availability", "Recovery excludes failed, quarantined, wrong-owner, disallowed and insufficient-tier captains and honors alternative Worker priorities", TestTags.Negative, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
-                Captain failed = await CreateCaptainAsync(testDb, "Failed", AgentRuntimeEnum.ApiEndpoint).ConfigureAwait(false);
+                Captain failed = await CreateCaptainAsync(testDb, "Failed", AgentRuntimeEnum.ApiEndpoint, CaptainStateEnum.Idle, CaptainTierEnum.Economy).ConfigureAwait(false);
                 Captain quarantined = await CreateCaptainAsync(testDb, "Quarantined", AgentRuntimeEnum.Codex, CaptainStateEnum.Quarantined).ConfigureAwait(false);
                 Captain disallowed = await CreateCaptainAsync(testDb, "Judge only", AgentRuntimeEnum.ClaudeCode).ConfigureAwait(false);
                 disallowed.AllowedPersonas = "[\"Judge\"]";
@@ -1055,6 +1161,10 @@ namespace Test.Shared.Suites.Services
                 await testDb.Driver.Personas.CreateAsync(new Persona("Judge", "persona.judge") { DefaultCaptainId = alternative.Id }).ConfigureAwait(false);
                 selected = await CaptainEscalationSelector.SelectAsync(testDb.Driver, mission, failed.Id, new List<Mission> { pendingJudge }).ConfigureAwait(false);
                 AssertEqual(alternative.Id, selected!.Id, "The pending Judge's configured default can also recover an early worker failure");
+                failed.Tier = CaptainTierEnum.Standard;
+                await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, failed).ConfigureAwait(false);
+                AssertNull(await CaptainEscalationSelector.SelectAsync(testDb.Driver, mission, failed.Id, new List<Mission> { pendingJudge }).ConfigureAwait(false),
+                    "Without a ladder a same-tier captain is not an escalation (G12)");
             }));
 
             cases.Add(CaseAsync("finished_voyage_settles_intermediate_stages", "When a voyage completes, handed-off intermediate stages become Complete; a final WorkProduced result is left alone", TestTags.Positive, async () =>
@@ -1079,10 +1189,11 @@ namespace Test.Shared.Suites.Services
 
         #region Private-Methods
 
-        private static async Task<Captain> CreateCaptainAsync(TestDatabase testDb, string name, AgentRuntimeEnum runtime, CaptainStateEnum state = CaptainStateEnum.Idle)
+        private static async Task<Captain> CreateCaptainAsync(TestDatabase testDb, string name, AgentRuntimeEnum runtime, CaptainStateEnum state = CaptainStateEnum.Idle, CaptainTierEnum? tier = null)
         {
             Captain captain = new Captain(name, runtime);
             captain.State = state;
+            captain.Tier = tier;
             return await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
         }
 
@@ -1171,6 +1282,11 @@ namespace Test.Shared.Suites.Services
                 return Task.FromResult(new GitCommitMergeResult(GitCommitMergeOutcomeEnum.Merged));
             }
         }
+
+        private const string FormatLenses =
+            "## Correctness\nThe validator rejects empty names before saving, and the save path is unchanged for valid names.\n"
+            + "## Blast Radius\nOnly the widget create route calls the validator; no other caller changes.\n"
+            + "## Source Fidelity\nThe change matches the requested 400 response and adds nothing else.\n";
 
         private sealed class Harness
         {

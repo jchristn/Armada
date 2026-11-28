@@ -207,7 +207,7 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Whether a PASS verdict is substantiated: it must contain all three lenses and enough narrative to
-        /// justify approval.
+        /// justify approval, and it must cite at least one check it ran or one file it inspected (RS-6.8).
         /// </summary>
         /// <param name="output">Judge agent output.</param>
         /// <param name="narrative">The substantive review narrative (telemetry and verdict lines removed).</param>
@@ -235,53 +235,14 @@ namespace Armada.Core.Services
                 return false;
             }
 
+            // RS-6.8: a PASS names the checks it ran or at least one file it inspected.
+            if (!JudgeEvidence.HasPassEvidence(output))
+            {
+                failureReason = JudgeEvidence.MissingEvidenceReason;
+                return false;
+            }
+
             return true;
-        }
-
-        /// <summary>
-        /// The required-output-contract text appended to a Judge captain's instructions.
-        /// </summary>
-        /// <returns>Contract text.</returns>
-        public static string OutputContract()
-        {
-            return
-                "Review cumulative changes against original acceptance criteria and every prior finding. " +
-                "Use current source and relevant checks; distinguish executed evidence from upstream claims and unverified delivery. " +
-                "Use `## Correctness`, `## Blast Radius`, `## Source Fidelity`, and `## Verdict`. " +
-                "Report all concrete blocking defects; label optional improvements separately. " +
-                "To block, add `## Affected Case` with `File: <path>[:line]` or `Scenario: <inputs and wrong result>`, " +
-                "the violated requirement, expected/actual behavior, and required correction. " +
-                "Mark prior findings resolved, superseded (why), or unresolved. " +
-                "If an acceptance criterion cannot be satisfied as written (it contradicts another requirement or a dependency's verified behavior), do not request rework: add `## Spec Conflict` quoting the criterion and the evidence, and use `[ARMADA:VERDICT] SPEC_CONFLICT`; a person decides. " +
-                "End with exactly one standalone `[ARMADA:VERDICT] PASS`, `[ARMADA:VERDICT] FAIL`, `[ARMADA:VERDICT] NEEDS_REVISION`, or `[ARMADA:VERDICT] SPEC_CONFLICT` line.";
-        }
-
-        /// <summary>
-        /// The fallback persona prompt used when no template is available.
-        /// </summary>
-        /// <returns>Persona prompt text.</returns>
-        public static string PersonaPromptFallback()
-        {
-            return
-                "You are an Armada judge agent. Review the completed work through three lenses -- correctness, " +
-                "blast radius, and source fidelity -- and assume there may be a hidden defect. " +
-                "Use `## Correctness`, `## Blast Radius`, `## Source Fidelity`, and `## Verdict` sections. " +
-                "To block, add a `## Affected Case` section exhibiting one concrete affected case as a `File: <path>[:line]` or `Scenario: <inputs and wrong result>` line. " +
-                "End with exactly one standalone [ARMADA:VERDICT] PASS, [ARMADA:VERDICT] FAIL, or [ARMADA:VERDICT] NEEDS_REVISION line.";
-        }
-
-        /// <summary>
-        /// The one-line role summary used in launch prompts.
-        /// </summary>
-        /// <returns>Role summary text.</returns>
-        public static string RoleSummary()
-        {
-            return
-                "You are an Armada judge agent. Review through `## Correctness`, `## Blast Radius`, and `## Source Fidelity` sections, " +
-                "add a `## Affected Case` section with a `File:` or `Scenario:` line if you block, and end with exactly one standalone " +
-                "[ARMADA:VERDICT] PASS, [ARMADA:VERDICT] FAIL, or [ARMADA:VERDICT] NEEDS_REVISION line. " +
-                "Restore dependencies before validation in a fresh worktree. For .NET omit --no-restore until restore succeeds. " +
-                "Missing project.assets.json means the check is unverified, not that the source is broken.";
         }
 
         #endregion

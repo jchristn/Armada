@@ -7,7 +7,7 @@ namespace Armada.Client.Models
     /// <summary>
     /// A vessel create or update body that can carry the write-only GitHub token override (the dashboard's
     /// <c>gitHubTokenOverride</c> field): null leaves the stored override alone, an empty string clears it, and a value
-    /// replaces it. Pass it to <see cref="ArmadaClient.CreateVesselAsync"/> or <see cref="ArmadaClient.UpdateVesselAsync"/>.
+    /// replaces it. Pass it to <see cref="VesselsClient.CreateAsync"/> or <see cref="VesselsClient.UpdateAsync"/>.
     /// </summary>
     public class VesselUpsertRequest : Vessel
     {

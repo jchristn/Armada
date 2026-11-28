@@ -159,7 +159,7 @@ namespace Armada.Tui.Screens.Build
         {
             Loading = true;
             Error = null;
-            _Screen.Call((c, t) => c.GetVesselBranchesAsync(_VesselId, t), r =>
+            _Screen.Call((c, t) => c.Vessels.GetBranchesAsync(_VesselId, t), r =>
             {
                 Loading = false;
                 Branches = r?.Branches ?? new List<BranchInfo>();
@@ -187,7 +187,7 @@ namespace Armada.Tui.Screens.Build
         {
             if (String.IsNullOrEmpty(branch) || Busy.Length > 0) return;
             Busy = "push:" + branch;
-            _Screen.Call((c, t) => c.PushVesselBranchAsync(_VesselId, branch, t), r =>
+            _Screen.Call((c, t) => c.Vessels.PushBranchAsync(_VesselId, branch, t), r =>
             {
                 Busy = "";
                 _Screen.Toast(NotificationSeverityEnum.Success, _Screen.Tr("Pushed {{branch}}", LocalizationArgs.Of("branch", branch)));
@@ -221,7 +221,7 @@ namespace Armada.Tui.Screens.Build
 
             bool push = PushAfterMerge.Checked;
             Busy = "merge";
-            _Screen.Call((c, t) => c.MergeVesselBranchAsync(_VesselId, source, target, push, t), r =>
+            _Screen.Call((c, t) => c.Vessels.MergeBranchAsync(_VesselId, source, target, push, t), r =>
             {
                 Busy = "";
                 _Screen.Toast(NotificationSeverityEnum.Success, _Screen.Tr("Merged {{source}} into {{target}}", LocalizationArgs.Of("source", source, "target", target)));

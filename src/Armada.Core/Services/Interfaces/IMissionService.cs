@@ -34,9 +34,6 @@ namespace Armada.Core.Services.Interfaces
         /// </summary>
         Func<string, string?>? OnGetMissionOutput { get; set; }
 
-        /// <summary>Read-only full preflight for observing a dispatch opportunity; never claims or launches work.</summary>
-        Task<bool> IsAdmissionReadyForMonitoringAsync(Mission mission, CancellationToken token = default);
-
         /// <summary>Readmit a verified repair through current safety/capacity gates before relaunch.</summary>
         Task<bool> TryAdmitVerificationResumeAsync(Mission mission, Captain captain, CancellationToken token = default);
 
@@ -148,12 +145,37 @@ namespace Armada.Core.Services.Interfaces
         Task RecordEndpointOutcomeAsync(Captain captain, bool healthy, CancellationToken token = default);
 
         /// <summary>
-        /// Why a Pending mission's dock could not be placed on the last dispatch attempt, or null when placement was not
-        /// the obstacle.
+        /// Whether the circuit breaker of the captain's managed endpoint is open (no new missions go to it).
+        /// </summary>
+        /// <param name="captain">Captain.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the breaker is open; false for a captain with no managed endpoint.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when captain is null.</exception>
+        Task<bool> IsEndpointBreakerOpenAsync(Captain captain, CancellationToken token = default);
+
+        /// <summary>
+        /// The typed result of the last dispatch attempt for a Pending mission (RS-4.6), or null when it has not been
+        /// attempted since it last changed status. Dispatch logging and the stuck-admission monitor read this result.
         /// </summary>
         /// <param name="missionId">Mission ID.</param>
-        /// <returns>The placement wait reason, or null.</returns>
-        string? GetPlacementWaitReason(string missionId);
+        /// <returns>The recorded result, or null.</returns>
+        MissionAdmissionResult? GetAdmissionResult(string missionId);
+
+        /// <summary>
+        /// Start a dispatch pass on the calling flow: until the returned scope is disposed, admission reads the shared
+        /// tables (captains, running missions, voyages, vessels, personas, endpoints) once and evaluates every pending
+        /// mission against that snapshot. A claim drops the state it can change so later missions read it again.
+        /// </summary>
+        /// <returns>The pass scope; dispose it when the pass ends.</returns>
+        IDisposable BeginDispatchPass();
+
+        /// <summary>
+        /// Read the one capacity model (RS-4.8): whether the global mission limit is full and whether any captain has
+        /// room under its own, its runtime's and its endpoint's caps. Inside a dispatch pass this reads the pass snapshot.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The global and per-captain answers.</returns>
+        Task<DispatchCapacity> ReadDispatchCapacityAsync(CancellationToken token = default);
 
         /// <summary>
         /// Whether the mission's voyage binds its persona to one captain strictly ("wait for selected captain"), so no
@@ -164,6 +186,33 @@ namespace Armada.Core.Services.Interfaces
         /// <returns>True for a strict assignment.</returns>
         /// <exception cref="ArgumentNullException">Thrown when mission is null.</exception>
         Task<bool> HasStrictCaptainAssignmentAsync(Mission mission, CancellationToken token = default);
+
+        /// <summary>
+        /// Choose the captain a work stage escalates to after its captain could not finish (RS-5.6): the next rung of the
+        /// persona's escalation ladder, or a captain with a strictly higher effective tier. Null when the stage is not a
+        /// work stage, its escalations reached MaxEscalations, its assignment is strict, or no captain qualifies.
+        /// </summary>
+        /// <param name="mission">Mission.</param>
+        /// <param name="failedCaptainId">The captain that could not finish, or null.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The choice, or null.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when mission is null.</exception>
+        Task<EscalationChoice?> ChooseEscalationAsync(Mission mission, string? failedCaptainId, CancellationToken token = default);
+
+        /// <summary>
+        /// Return the mission to Pending pinned to the chosen captain, with an escalation note and the escalation columns
+        /// updated. The note carries the previous attempt's memory (RS-5.7): failure kind, black box rule hint, changed
+        /// files and output tail, which this method reads from the mission and its dock before clearing them. The caller
+        /// commits the dock's work first and releases the dock and the failed captain after.
+        /// </summary>
+        /// <param name="mission">Mission.</param>
+        /// <param name="failedCaptain">The captain that could not finish.</param>
+        /// <param name="choice">The chosen captain.</param>
+        /// <param name="memory">The trigger: reason, failure kinds and black box step. Filled in by this method.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the mission moved to Pending; false when another writer changed it first.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when mission, failed captain, choice or memory is null.</exception>
+        Task<bool> ApplyEscalationAsync(Mission mission, Captain failedCaptain, EscalationChoice choice, EscalationMemory memory, CancellationToken token = default);
 
         /// <summary>
         /// Re-drive pipeline handoffs that dangled: WorkProduced missions whose Pending downstream

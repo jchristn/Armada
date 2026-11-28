@@ -36,6 +36,11 @@ namespace Armada.Server
         /// </summary>
         public IBlackBoxCapture? BlackBox { get; set; } = null;
 
+        /// <summary>
+        /// Mission status transitions (RS-3.5); the server replaces this with the instance shared across services.
+        /// </summary>
+        public MissionTransitions Transitions { get; set; }
+
         #region Private-Members
 
         private string _Header = "[MissionLanding] ";
@@ -83,6 +88,7 @@ namespace Armada.Server
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _Database = database ?? throw new ArgumentNullException(nameof(database));
+            Transitions = new MissionTransitions(database, logging);
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Git = git ?? throw new ArgumentNullException(nameof(git));
             _MergeQueue = mergeQueue ?? throw new ArgumentNullException(nameof(mergeQueue));
@@ -218,7 +224,7 @@ namespace Armada.Server
             bool landingSucceeded = false;
             bool landingAttempted = false;
             string? landingFailureReason = null;
-            // Only a merge conflict git reports is a LandingConflict (LandingFailureClassifier); everything else is Infra.
+            // Only a merge conflict git reports is a LandingConflict (FailureKindMapper); everything else is Infra.
             MissionFailureKindEnum landingFailureKind = MissionFailureKindEnum.Infra;
             GitDirtyCheckoutException? dirtyCheckout = null;
             // Black box facts of the failing step, read while the merge lock is held (the target can move after it).
@@ -264,7 +270,7 @@ namespace Armada.Server
                     {
                         synchronizationFailed = true;
                         landingAttempted = true;
-                        landingFailureKind = LandingFailureClassifier.Classify(ex);
+                        landingFailureKind = FailureKindMapper.FromLandingException(ex);
                         landingFailureReason = "Current-target integration failed: " + ex.Message;
                         landingStep = BlackBoxStepEnum.TargetIntegration;
                         landingException = ex;
@@ -298,7 +304,7 @@ namespace Armada.Server
                         synchronizationFailed = true;
                         landingAttempted = true;
                         landingFailureReason = "Current-target integration failed: " + ex.Message;
-                        landingFailureKind = LandingFailureClassifier.Classify(ex);
+                        landingFailureKind = FailureKindMapper.FromLandingException(ex);
                         landingStep = BlackBoxSiteFacts.LandingStepOf(ex, BlackBoxStepEnum.TargetIntegration);
                         landingException = ex;
                     }
@@ -374,9 +380,9 @@ namespace Armada.Server
 
                         // PR created -- transition to PullRequestOpen (not Complete).
                         // Complete is reserved for when the PR is actually merged.
-                        mission.Status = MissionStatusEnum.PullRequestOpen;
-                        mission.LastUpdateUtc = DateTime.UtcNow;
-                        if (!await _Database.Missions.TryUpdateIfUnchangedAsync(mission, landingVersion, new[] { MissionStatusEnum.WorkProduced }).ConfigureAwait(false)) return;
+                        MissionTransitionRequest prOpen = new MissionTransitionRequest { To = MissionStatusEnum.PullRequestOpen, ExpectedLastUpdateUtc = landingVersion };
+                        prOpen.AllowedFrom.Add(MissionStatusEnum.WorkProduced);
+                        if (!await Transitions.TryTransitionAsync(mission, prOpen, CancellationToken.None).ConfigureAwait(false)) return;
                         _Logging.Info(_Header + "mission " + mission.Id + " PR created, status set to PullRequestOpen");
 
                         // Emit mission.pull_request_open event
@@ -441,7 +447,7 @@ namespace Armada.Server
                         _Logging.Warn(_Header + "error pushing/creating PR for mission " + mission.Id + ": " + ex.ToString());
                         landingSucceeded = false;
                         landingFailureReason = "Error pushing/creating PR: " + ex.Message;
-                        landingFailureKind = LandingFailureClassifier.Classify(ex);
+                        landingFailureKind = FailureKindMapper.FromLandingException(ex);
                         landingStep = prStep;
                         landingException = ex;
                     }
@@ -485,14 +491,12 @@ namespace Armada.Server
                         // Missing diff/branch information is not proof that the work landed. In particular,
                         // a stale completion racing a resume can arrive before a diff is available.
                         // Keep the branch and the mission recoverable instead of reporting a successful merge.
-                        mission.Status = MissionStatusEnum.WorkProduced;
                         mission.CompletedUtc = null;
                         mission.FailureKind = MissionFailureKindEnum.Infra;
                         mission.FailureReason = !branchExists
                             ? "Landing was not attempted: the source branch could not be confirmed. Work remains unlanded."
                             : "Landing was not attempted: the mission diff snapshot is unavailable. Work remains unlanded.";
-                        mission.LastUpdateUtc = DateTime.UtcNow;
-                        await _Database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                        await Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.WorkProduced }, MissionStatusEnum.WorkProduced, null, CancellationToken.None).ConfigureAwait(false);
                         _Logging.Warn(_Header + "mission " + mission.Id + " remains WorkProduced: " + mission.FailureReason);
                         // Non-terminal: the mission stays WorkProduced with its branch kept.
                         await BlackBox.RecordMissionFailureAsync(mission, MissionStatusEnum.WorkProduced, BlackBoxStepEnum.LocalMerge, context =>
@@ -554,7 +558,7 @@ namespace Armada.Server
 
                         // A dirty checkout or unpushed target commits are the operator's to resolve; a rescue mission cannot
                         // fix them, so record them as an environment failure rather than a landing conflict.
-                        landingFailureKind = LandingFailureClassifier.Classify(ex);
+                        landingFailureKind = FailureKindMapper.FromLandingException(ex);
                         landingStep = BlackBoxSiteFacts.LandingStepOf(ex, mergeStep);
                         landingException = ex;
                         if (ex is GitDirtyCheckoutException dirty)
@@ -632,12 +636,12 @@ namespace Armada.Server
             {
                 if (landingSucceeded)
                 {
-                    mission.Status = MissionStatusEnum.Complete;
                     mission.FailureKind = null;
                     mission.FailureReason = null;
                     mission.CompletedUtc = DateTime.UtcNow;
-                    mission.LastUpdateUtc = DateTime.UtcNow;
-                    if (!await _Database.Missions.TryUpdateIfUnchangedAsync(mission, landingVersion, new[] { MissionStatusEnum.WorkProduced }).ConfigureAwait(false)) return;
+                    MissionTransitionRequest landed = new MissionTransitionRequest { To = MissionStatusEnum.Complete, ExpectedLastUpdateUtc = landingVersion };
+                    landed.AllowedFrom.Add(MissionStatusEnum.WorkProduced);
+                    if (!await Transitions.TryTransitionAsync(mission, landed, CancellationToken.None).ConfigureAwait(false)) return;
                     _Logging.Info(_Header + "mission " + mission.Id + " landed successfully, status set to Complete");
 
                     // Emit mission.completed event
@@ -659,11 +663,11 @@ namespace Armada.Server
                 }
                 else
                 {
-                    mission.Status = MissionStatusEnum.LandingFailed;
                     mission.FailureReason = landingFailureReason;
                     mission.FailureKind = landingFailureKind;
-                    mission.LastUpdateUtc = DateTime.UtcNow;
-                    if (!await _Database.Missions.TryUpdateIfUnchangedAsync(mission, landingVersion, new[] { MissionStatusEnum.WorkProduced }).ConfigureAwait(false)) return;
+                    MissionTransitionRequest landingFailed = new MissionTransitionRequest { To = MissionStatusEnum.LandingFailed, ExpectedLastUpdateUtc = landingVersion };
+                    landingFailed.AllowedFrom.Add(MissionStatusEnum.WorkProduced);
+                    if (!await Transitions.TryTransitionAsync(mission, landingFailed, CancellationToken.None).ConfigureAwait(false)) return;
                     _Logging.Warn(_Header + "mission " + mission.Id + " landing failed, status set to LandingFailed");
 
                     // Emit mission.landing_failed event
@@ -798,10 +802,8 @@ namespace Armada.Server
                 bool merged = await git.IsPrMergedAsync(workingDir, mission.PrUrl).ConfigureAwait(false);
                 if (merged)
                 {
-                    mission.Status = MissionStatusEnum.Complete;
                     mission.CompletedUtc = DateTime.UtcNow;
-                    mission.LastUpdateUtc = DateTime.UtcNow;
-                    await _Database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                    if (!await Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.PullRequestOpen }, MissionStatusEnum.Complete, null, CancellationToken.None).ConfigureAwait(false)) return false;
                     _Logging.Info(_Header + "PR reconciler: mission " + mission.Id + " PR merged, status set to Complete");
 
                     // Bring the checkout up to date without disturbing the user's work there: fetch, and fast-forward
@@ -857,10 +859,8 @@ namespace Armada.Server
                             Mission? mission = await _Database.Missions.ReadAsync(missionId).ConfigureAwait(false);
                             if (mission != null && mission.Status == MissionStatusEnum.PullRequestOpen)
                             {
-                                mission.Status = MissionStatusEnum.Complete;
                                 mission.CompletedUtc = DateTime.UtcNow;
-                                mission.LastUpdateUtc = DateTime.UtcNow;
-                                await _Database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                                if (!await Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.PullRequestOpen }, MissionStatusEnum.Complete, null, CancellationToken.None).ConfigureAwait(false)) return;
                                 _Logging.Info(_Header + "mission " + missionId + " PR merged, status set to Complete");
 
                                 // Emit mission.completed event

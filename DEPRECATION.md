@@ -19,6 +19,15 @@ The `Client.RouteSurface` and `Docs.Deprecation` test suites keep this file hone
 
 The owner-approved [concurrency plan](archive/CONCURRENCY_IMPROVEMENTS.md) removes `Captain.CurrentMissionId`, `Captain.CurrentDockId`, `Vessel.AllowConcurrentMissions` and Helm `--allow-concurrent` in v1.3.0, with no aliases. This is the explicit exception to the usual major-release removal policy in [compatibility](docs/COMPATIBILITY.md#v130-concurrency-exception). Use `ActiveMissionIds` and each mission’s dock/process, plus the two numeric vessel limits. Old vessel inputs and the old CLI flag fail with migration guidance. First-party Dashboard, Mobile, TUI, Helm and SDK models use the new fields. These are field/option removals, not retired routes in the route registry below.
 
+## v1.5.0 changes outside the route registry
+
+Two 1.5.0 changes are not REST routes or MCP tools, so they are not in the tables below. The flat methods of the .NET
+SDK (`Armada.Client`, for example `client.GetMissionAsync(id)`) were removed in 1.5.0 without a deprecation period, by
+owner decision, when the client was split into sub-clients (`client.Missions.GetAsync(id)`); every old method and its
+new call is in [docs/SDK_MIGRATION_1.5.md](docs/SDK_MIGRATION_1.5.md). A model endpoint's `ApiVersion` is still
+accepted and stored but ignored, because Azure OpenAI now uses the v1 route. The legacy `[ARMADA:MISSION]` plan
+markers are D-027 below.
+
 ## Active deprecations
 
 The whole-list APIs that were deprecated here were retired; see [Removed](#removed). Two v1.3.0 concurrency items remain readable for stored data and older plans.
@@ -26,6 +35,7 @@ The whole-list APIs that were deprecated here were retired; see [Removed](#remov
 | ID | Surface | Item | Replacement | Deprecated in | Removed in | First-party clients |
 |---|---|---|---|---|---|---|
 | D-025 | Model | `VesselConcurrencyLimit` | `VesselVoyageLimit` and `VoyageMissionLimit` (the reason is kept only so stored events and waits still read) | 1.3.0 | 2.0 | Migrated (no client produces it) |
+| D-027 | Contract | `[ARMADA:MISSION]` markers | One `armada-plan` block, contract version 4 (markers are read only while `AcceptLegacyMissionMarkers` is on, the default, and each use logs a warning) | 1.5.0 | 2.0 | Migrated (built-in Architect prompts emit `armada-plan`) |
 | D-026 | Contract | `dependsOn` | `parent` in `armada-plan` contract version 4 (`dependsOn` is read as `parent` with a warning) | 1.3.0 | 2.0 | Migrated (built-in Architect prompts emit `parent`) |
 
 ## Bounded, not retired

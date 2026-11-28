@@ -149,6 +149,12 @@ namespace Armada.Tui.Screens.Admin
         /// <summary>Agent: mark stages after a failed one Blocked instead of Cancelled.</summary>
         public ToggleField BlockDependentsOfFailedStages { get; } = new ToggleField();
 
+        /// <summary>Agent: accept legacy [ARMADA:MISSION] Architect plans (deprecated).</summary>
+        public ToggleField AcceptLegacyMissionMarkers { get; } = new ToggleField();
+
+        /// <summary>Agent: captain that runs the format-only repair turn (blank: the stage's own captain).</summary>
+        public InputField OutputRepairNormalizer { get; } = new InputField();
+
         /// <summary>Planning idle timeout.</summary>
         public InputField PlanningInactivity { get; } = new InputField();
 
@@ -493,9 +499,9 @@ namespace Armada.Tui.Screens.Admin
                 HealthResult? health = null;
                 SettingsData? settings = null;
                 ProxySessionContext? proxy = null;
-                try { health = await Context.Client.GetHealthAsync().ConfigureAwait(false); } catch (Exception) { }
-                try { settings = await Context.Client.GetSettingsAsync().ConfigureAwait(false); } catch (Exception) { }
-                try { proxy = await Context.Client.GetProxySessionContextAsync().ConfigureAwait(false); } catch (Exception) { }
+                try { health = await Context.Client.Status.GetHealthAsync().ConfigureAwait(false); } catch (Exception) { }
+                try { settings = await Context.Client.Server.GetSettingsAsync().ConfigureAwait(false); } catch (Exception) { }
+                try { proxy = await Context.Client.Auth.GetProxySessionContextAsync().ConfigureAwait(false); } catch (Exception) { }
                 Context.Dispatcher.Post(() =>
                 {
                     if (health != null) Health = health;
@@ -516,7 +522,7 @@ namespace Armada.Tui.Screens.Admin
                     LoadBranches();
                 });
             });
-            ScreenOps.Quiet(Context, () => Context.Client.ListVesselsAsync(new ArmadaPageQuery(1, 9999)), r =>
+            ScreenOps.Quiet(Context, () => Context.Client.Vessels.ListAsync(new ArmadaPageQuery(1, 9999)), r =>
             {
                 string current = SelfVessel.Value ?? "";
                 List<SelectOption<string>> options = new List<SelectOption<string>> { new SelectOption<string>("", Context.Loc.T("-- none --")) };
@@ -650,6 +656,11 @@ namespace Armada.Tui.Screens.Admin
             BlockDependentsOfFailedStages.Caption = "Block Stages After a Failure";
             BlockDependentsOfFailedStages.Visible = false;
             AddTracked(agent, "Failure blocking", BlockDependentsOfFailedStages, "When on, the stages after a failed stage show Blocked and the voyage stays open until you restart the failed stage. Off (the default): they are cancelled and the voyage ends Failed; restarting the failed stage still restores them.");
+            AcceptLegacyMissionMarkers.Caption = "Accept Legacy Mission Markers";
+            AcceptLegacyMissionMarkers.Visible = false;
+            AddTracked(agent, "Legacy plans", AcceptLegacyMissionMarkers, "Deprecated, removed in 2.0. When on (the default), an Architect plan written as [ARMADA:MISSION] markers is still accepted and logs a warning. Off: such output gets the format repair turn and must use an armada-plan block.");
+            OutputRepairNormalizer.Visible = false;
+            AddTracked(agent, "Format Repair Captain", OutputRepairNormalizer, "Captain ID that restates a stage's report in its contract's format when the work is done but the format is wrong. Blank uses the stage's own captain.");
             AddButtons(agent);
 
             // Planning Session Settings.
@@ -1260,6 +1271,10 @@ namespace Armada.Tui.Screens.Admin
                 RequireHarborForLaunch.SetValue(s.RequireHarborForLaunch ?? false, false);
                 BlockDependentsOfFailedStages.Visible = s.BlockDependentsOfFailedStages.HasValue;
                 BlockDependentsOfFailedStages.SetValue(s.BlockDependentsOfFailedStages ?? false, false);
+                AcceptLegacyMissionMarkers.Visible = s.AcceptLegacyMissionMarkers.HasValue;
+                AcceptLegacyMissionMarkers.SetValue(s.AcceptLegacyMissionMarkers ?? true, false);
+                OutputRepairNormalizer.Visible = s.OutputRepairNormalizerCaptainId != null;
+                OutputRepairNormalizer.Value = s.OutputRepairNormalizerCaptainId ?? "";
             });
             Apply("planning", force, () =>
             {
@@ -1502,7 +1517,7 @@ namespace Armada.Tui.Screens.Admin
                 return;
             }
 
-            ScreenOps.Quiet(Context, () => Context.Client.GetVesselBranchesAsync(self), r =>
+            ScreenOps.Quiet(Context, () => Context.Client.Vessels.GetBranchesAsync(self), r =>
             {
                 List<SelectOption<string>> options = new List<SelectOption<string>>(head);
                 foreach (BranchInfo b in r?.Branches ?? new List<BranchInfo>())
@@ -1546,7 +1561,7 @@ namespace Armada.Tui.Screens.Admin
                 string? error = null;
                 try
                 {
-                    updated = await Context.Client.UpdateSettingsAsync(body).ConfigureAwait(false);
+                    updated = await Context.Client.Server.UpdateSettingsAsync(body).ConfigureAwait(false);
                 }
                 catch (ArmadaApiException ex)
                 {
@@ -1630,6 +1645,8 @@ namespace Armada.Tui.Screens.Admin
                 d.LandingMode = Enum.TryParse<LandingModeEnum>(DefaultLandingMode.Value ?? "", out LandingModeEnum landingMode) ? landingMode : (LandingModeEnum?)null;
                 d.RequireHarborForLaunch = RequireHarborForLaunch.Visible ? RequireHarborForLaunch.Value : (bool?)null;
                 d.BlockDependentsOfFailedStages = BlockDependentsOfFailedStages.Visible ? BlockDependentsOfFailedStages.Value : (bool?)null;
+                d.AcceptLegacyMissionMarkers = AcceptLegacyMissionMarkers.Visible ? AcceptLegacyMissionMarkers.Value : (bool?)null;
+                d.OutputRepairNormalizerCaptainId = OutputRepairNormalizer.Visible ? (OutputRepairNormalizer.Value ?? "").Trim() : null;
                 return d;
             }, "Agent settings saved");
         }
@@ -1801,7 +1818,7 @@ namespace Armada.Tui.Screens.Admin
                 return d;
             }, "Remote control settings saved", () =>
             {
-                ScreenOps.Quiet(Context, () => Context.Client.GetHealthAsync(), h =>
+                ScreenOps.Quiet(Context, () => Context.Client.Status.GetHealthAsync(), h =>
                 {
                     if (h != null) Health = h;
                     UpdateValues();
@@ -1833,7 +1850,7 @@ namespace Armada.Tui.Screens.Admin
 
         private void HealthCheck()
         {
-            ScreenOps.Run(Context, () => Context.Client.GetHealthAsync(), h =>
+            ScreenOps.Run(Context, () => Context.Client.Status.GetHealthAsync(), h =>
             {
                 if (h == null) return;
                 Health = h;
@@ -1859,7 +1876,7 @@ namespace Armada.Tui.Screens.Admin
                 string? error = null;
                 try
                 {
-                    file = await Context.Client.DownloadBackupAsync().ConfigureAwait(false);
+                    file = await Context.Client.Server.DownloadBackupAsync().ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -1916,7 +1933,7 @@ namespace Armada.Tui.Screens.Admin
                         string? error = null;
                         try
                         {
-                            await Context.Client.RestoreBackupAsync(content, name).ConfigureAwait(false);
+                            await Context.Client.Server.RestoreBackupAsync(content, name).ConfigureAwait(false);
                         }
                         catch (Exception ex)
                         {
@@ -1944,7 +1961,7 @@ namespace Armada.Tui.Screens.Admin
             if (!IsAdmin || ProxyMode) return;
             Context.Confirm("Stop Server", Context.Loc.T("Stop the Admiral server? This will shut down everything."), () =>
             {
-                ScreenOps.RunVoid(Context, () => Context.Client.StopServerAsync(), () =>
+                ScreenOps.RunVoid(Context, () => Context.Client.Server.StopAsync(), () =>
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Server shutting down..."), "Failed");
             }, "Stop Server");
         }
@@ -1954,7 +1971,7 @@ namespace Armada.Tui.Screens.Admin
             if (!IsAdmin || ProxyMode) return;
             Context.Confirm("Restart Server", Context.Loc.T("Restart the Admiral server? A replacement process starts and this instance shuts down; the dashboard will be briefly unavailable while it comes back up."), () =>
             {
-                ScreenOps.RunVoid(Context, () => Context.Client.RestartServerAsync(), () =>
+                ScreenOps.RunVoid(Context, () => Context.Client.Server.RestartAsync(), () =>
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Server restarting... the dashboard will reconnect shortly."), "Failed");
             }, "Restart Server");
         }
@@ -1964,7 +1981,7 @@ namespace Armada.Tui.Screens.Admin
             if (!IsAdmin || ProxyMode) return;
             ConfirmDialog dialog = Context.Confirm("Factory Reset", Context.Loc.T("WARNING: Factory reset will delete ALL data including the database, logs, docks, and repos. Settings will be preserved. This cannot be undone. Continue?"), () =>
             {
-                ScreenOps.RunVoid(Context, () => Context.Client.ResetServerAsync(), () =>
+                ScreenOps.RunVoid(Context, () => Context.Client.Server.ResetAsync(), () =>
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Success, "Factory reset complete"), "Factory reset failed");
             }, "Factory Reset");
             dialog.Destructive = true;
@@ -1985,7 +2002,7 @@ namespace Armada.Tui.Screens.Admin
                     string? error = null;
                     try
                     {
-                        started = await Context.Client.RebuildServerAsync(request).ConfigureAwait(false);
+                        started = await Context.Client.Server.RebuildAsync(request).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -2045,7 +2062,7 @@ namespace Armada.Tui.Screens.Admin
 
         private void RefreshRebuildOnce()
         {
-            ScreenOps.Quiet(Context, () => Context.Client.GetRebuildStatusAsync(), s =>
+            ScreenOps.Quiet(Context, () => Context.Client.Server.GetRebuildStatusAsync(), s =>
             {
                 if (s == null) return;
                 Rebuild = s;
@@ -2076,7 +2093,7 @@ namespace Armada.Tui.Screens.Admin
                     RebuildStatus? status = null;
                     try
                     {
-                        status = await Context.Client.GetRebuildStatusAsync(cts.Token).ConfigureAwait(false);
+                        status = await Context.Client.Server.GetRebuildStatusAsync(cts.Token).ConfigureAwait(false);
                     }
                     catch (Exception)
                     {
@@ -2118,7 +2135,7 @@ namespace Armada.Tui.Screens.Admin
             string slot = !String.IsNullOrEmpty(Rebuild.PreviousSlot) ? Rebuild.PreviousSlot! : Context.Loc.T("previous slot");
             Context.Confirm("Roll Back Rebuild", Context.Loc.T("Roll back to the previous build ({{slot}})? If the last rebuild changed the database schema, the pre-rebuild backup is restored and any data written since the cutover is permanently lost. The server then restarts on the previous build.", LocalizationArgs.Of("slot", slot)), () =>
             {
-                ScreenOps.Run(Context, () => Context.Client.RollbackServerAsync(), s =>
+                ScreenOps.Run(Context, () => Context.Client.Server.RollbackAsync(), s =>
                 {
                     if (s != null) Rebuild = s;
                     string target = s != null && !String.IsNullOrEmpty(s.PreviousSlot) ? s.PreviousSlot! : Context.Loc.T("previous slot");

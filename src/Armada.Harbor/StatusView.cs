@@ -219,7 +219,7 @@ namespace Armada.Harbor
                     HealthResult? health = null;
                     try
                     {
-                        health = await client.GetHealthAsync().ConfigureAwait(true);
+                        health = await client.Status.GetHealthAsync().ConfigureAwait(true);
                     }
                     catch (ArmadaApiException ex)
                     {
@@ -237,7 +237,7 @@ namespace Armada.Harbor
 
                     try
                     {
-                        ArmadaStatus? status = await client.GetStatusAsync().ConfigureAwait(true);
+                        ArmadaStatus? status = await client.Status.GetAsync().ConfigureAwait(true);
                         if (status == null) return;
                         _CaptainsValue.Text = status.TotalCaptains + " total: " + status.WorkingCaptains + " working, " + status.IdleCaptains + " idle, " + status.StalledCaptains + " stalled";
                         _MissionsValue.Text = status.MissionsByStatus == null || status.MissionsByStatus.Count == 0

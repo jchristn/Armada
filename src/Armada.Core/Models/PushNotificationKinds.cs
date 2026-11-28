@@ -2,7 +2,7 @@ namespace Armada.Core.Models
 {
     /// <summary>
     /// Wire values of <see cref="PushMessageData.Kind"/>: the inbox kinds (<see cref="InboxItemKinds"/>) a push can
-    /// announce, plus voyage_finished and test.
+    /// announce, plus voyage_finished, escalated, recovery_exhausted, and test.
     /// </summary>
     public static class PushNotificationKinds
     {
@@ -34,6 +34,12 @@ namespace Armada.Core.Models
 
         /// <summary>A model scorecard alert was raised or reopened.</summary>
         public const string ModelAlert = InboxItemKinds.ModelAlert;
+
+        /// <summary>A mission moved to another captain up its persona escalation ladder.</summary>
+        public const string Escalated = "escalated";
+
+        /// <summary>A failed mission used up its autonomous rescue budget.</summary>
+        public const string RecoveryExhausted = "recovery_exhausted";
 
         /// <summary>A test push sent from POST /api/v1/push/devices/{id}/test.</summary>
         public const string Test = "test";

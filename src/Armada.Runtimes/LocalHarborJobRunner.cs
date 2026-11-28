@@ -45,6 +45,12 @@ namespace Armada.Runtimes
         /// </summary>
         public HarborProcessLedger? ProcessLedger { get; set; } = null;
 
+        /// <summary>
+        /// Where the context windows discovered for local endpoints are recorded for the Harbor app (RS-12.19); null to
+        /// record none.
+        /// </summary>
+        public HarborDiscoveredContextLog? DiscoveredContexts { get; set; } = null;
+
         /// <inheritdoc />
         public event Action<string, Armada.Core.Models.RuntimeActivity>? ActivityReported;
 
@@ -119,7 +125,10 @@ namespace Armada.Runtimes
                 {
                     // A Harbor must enforce the same resolved shell policy as the Admiral.
                     // Approval without a prompt bridge fails closed in ApiAgentRuntime.
-                    ShellPolicy = request.CliPermissionPolicy ?? Armada.Core.Enums.CliPermissionPolicyEnum.Refuse
+                    ShellPolicy = request.CliPermissionPolicy ?? Armada.Core.Enums.CliPermissionPolicyEnum.Refuse,
+                    // RS-7.8: read the window from the model server on this host, and keep it on the launch so the exit
+                    // reports it to the Admiral.
+                    ContextDiscovery = (snapshot, model, ct) => DiscoverContextAsync(request.InferenceEndpoint, snapshot, model, ct)
                 };
             }
             else
@@ -385,6 +394,28 @@ namespace Armada.Runtimes
         #endregion
 
         #region Private-Methods
+
+        private async System.Threading.Tasks.Task DiscoverContextAsync(HarborInferenceEndpoint? shipped, Armada.Core.Models.ModelEndpoint snapshot, string? model, System.Threading.CancellationToken token)
+        {
+            if (snapshot.InferenceOptions.ContextLength.HasValue || !ModelContextDiscovery.Applies(snapshot)) return;
+            Armada.Core.Models.ModelContextDiscoveryResult found = await ModelContextDiscovery.DiscoverAsync(snapshot, model, token).ConfigureAwait(false);
+            if (!found.Found)
+            {
+                // A window the Admiral shipped still applies; it is not reported back as this Harbor's own.
+                if (shipped != null) shipped.DiscoveredContextLength = null;
+                DiscoveredContexts?.Record(new HarborDiscoveredContext { EndpointName = snapshot.Name, Model = model, Reason = found.Reason });
+                _Logging.Debug("[LocalHarborJobRunner] no context window for " + snapshot.Name + ": " + found.Reason);
+                return;
+            }
+
+            ModelContextDiscovery.Apply(snapshot, found, DateTime.UtcNow);
+            DiscoveredContexts?.Record(new HarborDiscoveredContext { EndpointName = snapshot.Name, Model = model, ContextLength = found.ContextLength, Source = found.Source });
+            if (shipped != null)
+            {
+                shipped.DiscoveredContextLength = found.ContextLength;
+                shipped.DiscoveredContextSource = found.Source;
+            }
+        }
 
         /// <summary>
         /// Whether a launch runs in a per-job scratch directory: the request allows one and names no directory that

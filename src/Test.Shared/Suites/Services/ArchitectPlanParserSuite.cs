@@ -6,6 +6,7 @@ namespace Test.Shared.Suites.Services
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Test.Shared.Infrastructure;
@@ -46,6 +47,32 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("C", plan.Missions[2].Description, "a missing description falls back to the title");
             }));
 
+            cases.Add(Case("parse_reports_status_and_error_detail", "Parse returns a status instead of a null error, and a JSON error names the path, line and position", TestTags.Negative, () =>
+            {
+                AssertEqual(ArchitectPlanParseStatusEnum.NoPlanFound, ArchitectPlanParser.Parse("No plan here.", 5).Status);
+                AssertEqual(ArchitectPlanParseStatusEnum.Parsed, ArchitectPlanParser.Parse("~~~armada-plan\n{\"missions\":[{\"title\":\"A\"}]}\n~~~\n", 5).Status, "a tilde fence is a plan block");
+
+                ArchitectPlanParseResult invalid = ArchitectPlanParser.Parse("```armada-plan\n{\"missions\":[{\"title\":\"A\",\n\"parent\":\"x\"}]}\n```\n", 5);
+                AssertEqual(ArchitectPlanParseStatusEnum.InvalidJson, invalid.Status);
+                AssertContains("$.missions[0].parent", invalid.Error!);
+                AssertContains("(line 2, position", invalid.Error!);
+                AssertContains("wrong type", invalid.Error!);
+
+                ArchitectPlanParseResult rejected = ArchitectPlanParser.Parse("```armada-plan\n{\"contractVersion\":4,\"missions\":[{\"title\":\"A\",\"description\":\"do a\",\"kind\":\"Implementation\"}]}\n```\n", 5);
+                AssertEqual(ArchitectPlanParseStatusEnum.Rejected, rejected.Status, "kind stays case-sensitive (R6)");
+                AssertTrue(rejected.Errors.Count > 1, "every contract error is listed in order");
+                AssertTrue(rejected.Errors.Count <= ArchitectPlanParseResult.MaxErrors + 1, "the list is capped");
+            }));
+
+            cases.Add(Case("error_list_is_capped", "More than the error cap keeps the first errors in order and counts the rest", TestTags.Negative, () =>
+            {
+                List<string> errors = Enumerable.Range(1, ArchitectPlanParseResult.MaxErrors + 5).Select(i => "e" + i).ToList();
+                List<string> capped = ArchitectPlanParseResult.Cap(errors);
+                AssertEqual(ArchitectPlanParseResult.MaxErrors + 1, capped.Count);
+                AssertEqual("e1", capped[0]);
+                AssertEqual("... and 5 more", capped[capped.Count - 1]);
+            }));
+
             cases.Add(Case("last_plan_wins", "When the plan is revised, the last valid block wins", TestTags.Positive, () =>
             {
                 string output =
@@ -68,17 +95,62 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(1, plan.Missions[1].Parent, "original mission 2 (Core) is now mission 1");
             }));
 
-            cases.Add(Case("invalid_dependencies_are_cleared", "Self, forward, and out-of-range dependencies are cleared", TestTags.Negative, () =>
+            cases.Add(Case("invalid_dependencies_are_rejected", "An unversioned plan with a self, forward, zero, dropped-mission or too-deep parent is rejected with each mission named (R12)", TestTags.Negative, () =>
             {
                 string output =
                     "```armada-plan\n" +
-                    "{\"missions\":[{\"title\":\"A\",\"dependsOn\":1},{\"title\":\"B\",\"dependsOn\":3},{\"title\":\"C\",\"dependsOn\":0},{\"title\":\"A\",\"dependsOn\":1}]}\n" +
+                    "{\"missions\":[{\"title\":\"A\",\"dependsOn\":1},{\"title\":\"B\",\"dependsOn\":3},{\"title\":\"C\",\"dependsOn\":0},{\"title\":\"\"},{\"title\":\"E\",\"parent\":4}]}\n" +
                     "```";
-                AssertTrue(ArchitectPlanParser.TryParse(output, out ArchitectPlan? plan));
-                AssertEqual(3, plan!.Missions.Count, "a repeated title is dropped");
-                AssertNull(plan.Missions[0].Parent, "self dependency");
-                AssertNull(plan.Missions[1].Parent, "forward dependency");
-                AssertNull(plan.Missions[2].Parent, "zero index");
+                AssertFalse(ArchitectPlanParser.TryParse(output, out ArchitectPlan? plan, out string? error), "rejected, not flattened");
+                AssertNull(plan);
+                AssertContains("mission 1: parent cannot refer to the mission itself", error!);
+                AssertContains("mission 2: parent must name an earlier mission", error!);
+                AssertContains("mission 3: parent must name an earlier mission", error!);
+                AssertContains("mission 5: parent 'mission 4 (untitled", error!);
+
+                string deep = "```armada-plan\n{\"missions\":[{\"title\":\"A\"},{\"title\":\"B\",\"parent\":1},{\"title\":\"C\",\"parent\":2}]}\n```";
+                AssertFalse(ArchitectPlanParser.TryParse(deep, out _, out string? deepError, 1), "a chain deeper than the limit is rejected, not flattened");
+                AssertContains("parent chain is 2 deep; the maximum is 1", deepError!);
+                AssertTrue(ArchitectPlanParser.TryParse(deep, out ArchitectPlan? ok, out _, 2), "the same chain within the limit is accepted");
+                AssertEqual(2, ok!.Missions[2].Parent);
+            }));
+
+            cases.Add(Case("validator_rules_have_typed_codes", "Every dispatch path's hierarchy and ownership rule reports a typed code; overlap rejects only when asked", TestTags.Negative, () =>
+            {
+                List<PlanNode> nodes = new List<PlanNode>
+                {
+                    new PlanNode { Key = "a", OwnedPaths = new List<string> { "src/A.cs" } },
+                    new PlanNode { Key = "a", ParentKey = "a" },
+                    new PlanNode { ParentKey = "missing" },
+                    new PlanNode { UnresolvedParent = "Nonexistent mission" },
+                    new PlanNode { Parent = 1, DependsOn = 2 },
+                    new PlanNode { BranchStrategy = "fork" },
+                    new PlanNode { Parent = 1, BranchStrategy = "sideways" }
+                };
+                PlanValidationResult result = MissionPlanValidator.Validate(nodes, 4, false);
+                AssertFalse(result.IsValid);
+                List<PlanFindingCodeEnum> codes = result.Errors.Select(e => e.Code).ToList();
+                foreach (PlanFindingCodeEnum expected in new[] { PlanFindingCodeEnum.DuplicateKey, PlanFindingCodeEnum.UnknownParentKey, PlanFindingCodeEnum.UnresolvedParent,
+                    PlanFindingCodeEnum.ParentDependsOnConflict, PlanFindingCodeEnum.BranchStrategyNeedsParent, PlanFindingCodeEnum.BranchStrategyInvalid })
+                    AssertTrue(codes.Contains(expected), "reports " + expected);
+                AssertEqual(2, result.Errors.Single(e => e.Code == PlanFindingCodeEnum.DuplicateKey).Position);
+
+                List<PlanNode> siblings = new List<PlanNode>
+                {
+                    new PlanNode { OwnedPaths = new List<string> { "src/" } },
+                    new PlanNode { OwnedPaths = new List<string> { "src/A.cs" } },
+                    new PlanNode { Parent = 1, OwnedPaths = new List<string> { "src/A.cs" } },
+                    new PlanNode { DependsOn = 3 }
+                };
+                PlanValidationResult warned = MissionPlanValidator.Validate(siblings, 4, false);
+                AssertTrue(warned.IsValid, "an overlap only warns by default (R11)");
+                AssertTrue(warned.Warnings.Any(w => w.Code == PlanFindingCodeEnum.OwnershipOverlap && w.Message.StartsWith("Missions 1 and 2")), "parallel siblings overlap");
+                AssertFalse(warned.Warnings.Any(w => w.Message.StartsWith("Missions 1 and 3")), "a parent and its child may share a path");
+                AssertTrue(warned.Warnings.Any(w => w.Code == PlanFindingCodeEnum.DependsOnReadAsParent), "dependsOn alone is read as the parent");
+                AssertEqual(3, warned.ParentOf(4));
+                AssertEqual(2, warned.DepthOf(4));
+                AssertFalse(MissionPlanValidator.Validate(siblings, 4, true).IsValid, "contract v4 rejects the overlap");
+                AssertFalse(MissionPlanValidator.Validate(siblings, 1, false).IsValid, "depth is checked against the limit");
             }));
 
             cases.Add(Case("no_plan_without_valid_block", "Malformed JSON, unfenced JSON, other fences, and placeholder-only examples yield no plan", TestTags.Negative, () =>
@@ -94,10 +166,10 @@ namespace Test.Shared.Suites.Services
 
             cases.Add(Case("format_instructions_name_the_fence", "The prompt contract names the fence and the fields", TestTags.Positive, () =>
             {
-                string text = ArchitectPlanParser.FormatInstructions();
+                string text = StageOutputContract.For("Architect");
                 AssertContains("armada-plan", text);
-                AssertContains("contractVersion:4", text);
-                AssertContains("parent:earlier 1-based index", text);
+                AssertContains("\"contractVersion\": 4", text);
+                AssertContains("| missions[].parent |", text);
                 AssertContains("ownedPaths", text);
                 AssertContains("waitForOtherMissions", text);
             }));
@@ -117,8 +189,8 @@ namespace Test.Shared.Suites.Services
                 AssertContains("unknown objective requirement ID \"REQ-READ\"", error!);
                 AssertContains("requirements contains IDs only", error!);
                 AssertEqual(1, error!.Split("unknown objective requirement ID \"REQ-READ\"").Length - 1, "Repeated references need one actionable ID diagnostic.");
-                AssertContains("requirements:[\"REQ-1\"]", ArchitectPlanParser.FormatInstructions());
-                AssertContains("match exactly", ArchitectPlanParser.FormatInstructions());
+                AssertContains("never \"REQ-1: text\"", StageOutputContract.For("Architect"));
+                AssertContains("matched exactly including case", StageOutputContract.For("Architect"));
                 AssertEqual("REQ-READ: handle HTTP errors", input.Requirements[0], "Never silently rewrite a rejected plan.");
             }));
 

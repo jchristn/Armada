@@ -5,8 +5,8 @@ namespace Armada.Runtimes.Tools.Tasks
 
     /// <summary>
     /// Validates the shape of a proposed task plan before it is applied: unique non-empty ids and titles,
-    /// dependencies that reference known tasks, no self-dependency, and — most importantly for parallel
-    /// execution — no dependency cycles. The validator is stateless and thread-safe.
+    /// dependencies that reference known tasks, no self-dependency, and, most importantly for parallel
+    /// execution, no dependency cycles. The validator is stateless and thread-safe.
     /// </summary>
     public static class TaskPlanValidator
     {

@@ -250,10 +250,10 @@ namespace Armada.Tui.Screens.Build
             {
                 ArmadaPageQuery missions = new ArmadaPageQuery(1, 1000);
                 missions.With("vesselId", VesselId);
-                Task<EnumerationResult<Vessel>?> vessels = c.ListVesselsAsync(new ArmadaPageQuery(1, 9999), t);
-                Task<EnumerationResult<Fleet>?> fleets = c.ListFleetsAsync(new ArmadaPageQuery(1, 9999), t);
-                Task<EnumerationResult<MissionSummary>?> mlist = c.ListMissionSummariesAsync(missions, t);
-                Task<List<Pipeline>> pipelines = ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => c.ListPipelinesAsync(new ArmadaPageQuery(p, 1000), ct), ArmadaPaging.DefaultMaxPages, t);
+                Task<EnumerationResult<Vessel>?> vessels = c.Vessels.ListAsync(new ArmadaPageQuery(1, 9999), t);
+                Task<EnumerationResult<Fleet>?> fleets = c.Fleets.ListAsync(new ArmadaPageQuery(1, 9999), t);
+                Task<EnumerationResult<MissionSummary>?> mlist = c.Missions.ListSummariesAsync(missions, t);
+                Task<List<Pipeline>> pipelines = ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => c.Pipelines.ListAsync(new ArmadaPageQuery(p, 1000), ct), ArmadaPaging.DefaultMaxPages, t);
                 await Task.WhenAll(vessels, fleets, mlist, pipelines).ConfigureAwait(false);
                 VesselLoad result = new VesselLoad();
                 result.Vessel = (vessels.Result?.Objects ?? new List<Vessel>()).FirstOrDefault(v => v.Id == VesselId);
@@ -319,7 +319,7 @@ namespace Armada.Tui.Screens.Build
             BlackBoxRecommendationApplyRequest dry = new BlackBoxRecommendationApplyRequest();
             dry.DryRun = true;
             dry.AuthorKind = BlackBoxNoteAuthorKindEnum.Operator;
-            Call((c, t) => c.ApplyBlackBoxRecommendationAsync(entryId, recommendationId, dry, t), r =>
+            Call((c, t) => c.BlackBox.ApplyRecommendationAsync(entryId, recommendationId, dry, t), r =>
             {
                 if (r == null) return;
                 string plan = Tr("Dry run: nothing has changed yet.") + "\n\n" + FindingText(finding)
@@ -338,7 +338,7 @@ namespace Armada.Tui.Screens.Build
                     run.DryRun = false;
                     run.ConfirmToken = token;
                     run.AuthorKind = BlackBoxNoteAuthorKindEnum.Operator;
-                    Call((c, t) => c.ApplyBlackBoxRecommendationAsync(entryId, recommendationId, run, t), done =>
+                    Call((c, t) => c.BlackBox.ApplyRecommendationAsync(entryId, recommendationId, run, t), done =>
                     {
                         bool ok = done != null && done.Succeeded;
                         Toast(ok ? NotificationSeverityEnum.Success : NotificationSeverityEnum.Error, ok
@@ -380,7 +380,7 @@ namespace Armada.Tui.Screens.Build
             VesselUpsertRequest body = VesselUpsertRequest.From(Vessel);
             body.SerializeOverlappingMissions = on;
             string name = Vessel.Name;
-            Call((c, t) => c.UpdateVesselAsync(VesselId, body, t), r =>
+            Call((c, t) => c.Vessels.UpdateAsync(VesselId, body, t), r =>
             {
                 Toast(NotificationSeverityEnum.Success, on
                     ? Tr("Vessel \"{{name}}\" now chains overlapping missions.", LocalizationArgs.Of("name", name))
@@ -394,7 +394,7 @@ namespace Armada.Tui.Screens.Build
             EnumerationQuery q = new EnumerationQuery();
             q.PageNumber = Math.Max(1, query.PageNumber);
             q.PageSize = Math.Max(1, query.PageSize);
-            VesselReservationPage? page = await Context.Client.ListVesselReservationsAsync(VesselId, q, token).ConfigureAwait(false);
+            VesselReservationPage? page = await Context.Client.BlackBoxInsights.ListVesselReservationsAsync(VesselId, q, token).ConfigureAwait(false);
             ReservationPage = page;
             List<VesselReservation> rows = page?.Objects ?? new List<VesselReservation>();
             return new GridPage<VesselReservation>(rows, page?.TotalRecords ?? rows.Count);
@@ -405,7 +405,7 @@ namespace Armada.Tui.Screens.Build
             BlackBoxDoctorRequest q = new BlackBoxDoctorRequest();
             q.PageNumber = Math.Max(1, query.PageNumber);
             q.PageSize = Math.Max(1, query.PageSize);
-            BlackBoxDoctorPage? page = await Context.Client.GetVesselBlackBoxDoctorAsync(VesselId, q, token).ConfigureAwait(false);
+            BlackBoxDoctorPage? page = await Context.Client.BlackBoxInsights.GetVesselDoctorAsync(VesselId, q, token).ConfigureAwait(false);
             DoctorPage = page;
             List<BlackBoxDoctorFinding> rows = page?.Objects ?? new List<BlackBoxDoctorFinding>();
             return new GridPage<BlackBoxDoctorFinding>(rows, page?.TotalRecords ?? rows.Count);
@@ -416,7 +416,7 @@ namespace Armada.Tui.Screens.Build
             if (Vessel == null) return;
             string branch = String.IsNullOrEmpty(Vessel.DefaultBranch) ? "" : Vessel.DefaultBranch;
             _LoadingReadiness = true;
-            Call((c, t) => c.GetVesselReadinessAsync(VesselId, null, t), r =>
+            Call((c, t) => c.Vessels.GetReadinessAsync(VesselId, null, t), r =>
             {
                 _LoadingReadiness = false;
                 Readiness = r;
@@ -428,7 +428,7 @@ namespace Armada.Tui.Screens.Build
                 Overview.Invalidate();
             });
             _LoadingPreview = true;
-            Call((c, t) => c.GetVesselLandingPreviewAsync(VesselId, branch.Length > 0 ? branch : null, t), r =>
+            Call((c, t) => c.Vessels.GetLandingPreviewAsync(VesselId, branch.Length > 0 ? branch : null, t), r =>
             {
                 _LoadingPreview = false;
                 LandingPreview = r;
@@ -475,7 +475,7 @@ namespace Armada.Tui.Screens.Build
         private void Duplicate()
         {
             if (Vessel == null) return;
-            Call((c, t) => c.CreateVesselAsync(VesselForm.DuplicatePayload(Vessel), t), created =>
+            Call((c, t) => c.Vessels.CreateAsync(VesselForm.DuplicatePayload(Vessel), t), created =>
             {
                 if (created == null) return;
                 Toast(NotificationSeverityEnum.Success, Tr("Vessel \"{{name}}\" duplicated.", LocalizationArgs.Of("name", created.Name)));
@@ -489,7 +489,7 @@ namespace Armada.Tui.Screens.Build
             string name = Vessel.Name;
             Confirm("Delete Vessel", Tr("Delete vessel \"{{name}}\"? This cannot be undone.", LocalizationArgs.Of("name", name)), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting vessel", t => Context.Client.DeleteVesselAsync(VesselId, t), () =>
+                DeleteProgress.RunVoid(Context, "Deleting vessel", t => Context.Client.Vessels.DeleteAsync(VesselId, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Vessel \"{{name}}\" deleted.", LocalizationArgs.Of("name", name)));
                     Context.Navigate("/vessels");
@@ -499,7 +499,7 @@ namespace Armada.Tui.Screens.Build
 
         private void LoadConcurrency()
         {
-            Call((c, t) => c.GetVesselConcurrencyAsync(VesselId, t), r => { Concurrency = r; Overview.Invalidate(); }, null, ex => { });
+            Call((c, t) => c.Concurrency.GetVesselAsync(VesselId, t), r => { Concurrency = r; Overview.Invalidate(); }, null, ex => { });
         }
 
         // Slots in use, slot wait and the missions waiting, like the dashboard's vessel Concurrency card.

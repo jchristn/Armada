@@ -44,6 +44,24 @@ namespace Test.Shared.Suites.Services
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
+            cases.Add(CaseAsync("severity_words_match_whole_words", "Severity text is read by whole words: High, Blocking, and Critical stay blocking even when the sentence contains low, info, or minor inside other words", TestTags.Negative, () =>
+            {
+                string output = "## Findings\n"
+                    + "1. File: src/A.cs:1 Severity: High - follows from the missing guard.\n"
+                    + "2. File: src/B.cs:2 Severity: Blocking: allows invalid input through.\n"
+                    + "3. File: src/C.cs:3 Severity: Critical, no information is logged.\n"
+                    + "4. File: src/D.cs:4 Severity: Low, a naming nit.\n"
+                    + "5. File: src/E.cs:5 Severity: Non-blocking cleanup.\n";
+                List<HandoffFinding> findings = HandoffArtifactBuilder.ExtractFindings(output, true);
+                AssertEqual(5, findings.Count, String.Join(" || ", findings.Select(f => f.Summary)));
+                AssertEqual(HandoffFindingSeverityEnum.Blocking, findings[0].Severity, "High - follows (contains low)");
+                AssertEqual(HandoffFindingSeverityEnum.Blocking, findings[1].Severity, "Blocking: allows (contains low)");
+                AssertEqual(HandoffFindingSeverityEnum.Blocking, findings[2].Severity, "Critical, no information (contains info)");
+                AssertEqual(HandoffFindingSeverityEnum.NonBlocking, findings[3].Severity, "Low");
+                AssertEqual(HandoffFindingSeverityEnum.NonBlocking, findings[4].Severity, "Non-blocking");
+                return Task.CompletedTask;
+            }));
+
             cases.Add(CaseAsync("builder_parses_judge_findings", "A Judge NEEDS_REVISION yields numbered findings with file, line, severity and required fix, plus verdict, protocol lines, commits, criteria and actions", TestTags.Positive, () =>
             {
                 Mission judge = JudgeMission(JudgeOutput(0));
@@ -298,39 +316,116 @@ namespace Test.Shared.Suites.Services
                 return Task.CompletedTask;
             }));
 
-            cases.Add(CaseAsync("outcome_links_artifact_without_duplicates", "Recording a stage outcome stores the attempt's artifact with the check result, completing an artifact a launch stored first instead of duplicating it", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("outcome_links_handed_on_artifact", "RS-6.9: the artifact handed on at completion is stored once per attempt; the stage outcome recorded afterwards links to that row by attempt id, and a new attempt gets its own", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
                 Captain captain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, new Captain("judge-cpt", AgentRuntimeEnum.ClaudeCode)).ConfigureAwait(false);
                 Mission judge = JudgeMission(JudgeOutput(0));
                 judge.CaptainId = captain.Id;
                 judge.Status = MissionStatusEnum.WorkProduced;
+                judge.StartedUtc = new DateTime(2026, 11, 26, 9, 0, 0, 123, DateTimeKind.Utc);
                 judge = await testDb.Driver.Missions.CreateAsync(judge).ConfigureAwait(false);
 
                 HandoffArtifactService artifacts = new HandoffArtifactService(testDb.Driver, CreateLogging());
-                HandoffArtifact launched = await artifacts.GetOrCreateForStageAsync(judge).ConfigureAwait(false);
-                AssertNull(launched.StageOutcomeId, "a launch stores an artifact without an outcome");
-                HandoffArtifact again = await artifacts.GetOrCreateForStageAsync(judge).ConfigureAwait(false);
-                AssertEqual(launched.Id, again.Id, "a second launch reuses it");
+                await artifacts.StoreForHandoffAsync(judge).ConfigureAwait(false);
+                await artifacts.StoreForHandoffAsync(judge).ConfigureAwait(false);
+                AssertNull(await artifacts.PrepareForHandoffAsync(judge).ConfigureAwait(false), "nothing left to hand on for a stored attempt");
+                EnumerationResult<HandoffArtifact> all = await testDb.Driver.HandoffArtifacts.EnumerateAsync(new HandoffArtifactQuery { MissionId = judge.Id }).ConfigureAwait(false);
+                HandoffArtifact handedOn = all.Objects.Single();
+                AssertEqual(HandoffArtifact.AttemptIdFor(judge.Id, judge.StartedUtc), handedOn.AttemptId, "keyed by attempt");
+                AssertNull(handedOn.StageOutcomeId, "no outcome yet");
+                AssertEqual("judge-cpt", handedOn.CaptainName, "captain name read at handoff");
 
                 StageOutcomeService outcomes = new StageOutcomeService(testDb.Driver, CreateLogging());
                 StageCheckResult check = StageCheckResult.Skip(StageCheckReasonEnum.ReviewPersona);
-                StageOutcome? outcome = await outcomes.RecordAttemptAsync(new StageAttemptCapture { Claimed = true, MissionId = judge.Id, Captain = captain, StageCheck = check }).ConfigureAwait(false);
+                StageOutcome? outcome = await outcomes.RecordAttemptAsync(new StageAttemptCapture { Claimed = true, MissionId = judge.Id, Captain = captain, StageCheck = check, StartedUtc = judge.StartedUtc }).ConfigureAwait(false);
                 AssertNotNull(outcome, "outcome recorded");
-
-                EnumerationResult<HandoffArtifact> all = await testDb.Driver.HandoffArtifacts.EnumerateAsync(new HandoffArtifactQuery { MissionId = judge.Id }).ConfigureAwait(false);
+                all = await testDb.Driver.HandoffArtifacts.EnumerateAsync(new HandoffArtifactQuery { MissionId = judge.Id }).ConfigureAwait(false);
                 HandoffArtifact linked = all.Objects.Single();
-                AssertEqual(launched.Id, linked.Id, "same artifact completed");
+                AssertEqual(handedOn.Id, linked.Id, "same artifact linked");
                 AssertEqual(outcome!.Id, linked.StageOutcomeId, "linked to the outcome");
-                AssertEqual(StageCheckReasonEnum.ReviewPersona, linked.CheckResults.Single().Reason, "skip reason kept");
-                AssertEqual(captain.Id, linked.CaptainId);
+                AssertEqual(StageCheckReasonEnum.ReviewPersona, linked.CheckResults.Single().Reason, "check added");
 
-                judge.AgentOutput = judge.AgentOutput + "\nSecond attempt.";
+                // Same output length and commit, different attempt: the old length comparison would have merged these.
+                judge.StartedUtc = judge.StartedUtc!.Value.AddMinutes(5);
                 await testDb.Driver.Missions.UpdateAsync(judge).ConfigureAwait(false);
-                await outcomes.RecordAttemptAsync(new StageAttemptCapture { Claimed = true, MissionId = judge.Id, Captain = captain }).ConfigureAwait(false);
+                await outcomes.RecordAttemptAsync(new StageAttemptCapture { Claimed = true, MissionId = judge.Id, Captain = captain, StartedUtc = judge.StartedUtc }).ConfigureAwait(false);
                 all = await testDb.Driver.HandoffArtifacts.EnumerateAsync(new HandoffArtifactQuery { MissionId = judge.Id }).ConfigureAwait(false);
                 AssertEqual(2, (int)all.TotalRecords, "a new attempt gets its own artifact");
                 AssertEqual(2, all.Objects[0].Attempt, "attempt numbered from the outcome");
+                AssertEqual(HandoffArtifact.AttemptIdFor(judge.Id, judge.StartedUtc), all.Objects[0].AttemptId, "second attempt id");
+            }));
+
+            cases.Add(CaseAsync("launch_reads_without_storing", "RS-6.9: a launch reads the stored artifact of the prior stage's latest attempt and never stores one; a stage with none (completed before attempt ids) gets a legacy rendering built from the stage", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                Mission judge = JudgeMission(JudgeOutput(0));
+                judge.StartedUtc = new DateTime(2026, 11, 26, 9, 0, 0, DateTimeKind.Utc);
+                judge = await testDb.Driver.Missions.CreateAsync(judge).ConfigureAwait(false);
+                HandoffArtifactService artifacts = new HandoffArtifactService(testDb.Driver, CreateLogging());
+
+                HandoffArtifact legacy = await artifacts.ReadForLaunchAsync(judge).ConfigureAwait(false);
+                AssertEqual("NEEDS_REVISION", legacy.Verdict, "legacy rendering built from the stage");
+                AssertEqual(0, (int)(await testDb.Driver.HandoffArtifacts.EnumerateAsync(new HandoffArtifactQuery { MissionId = judge.Id }).ConfigureAwait(false)).TotalRecords, "a launch stores nothing");
+
+                await artifacts.StoreForHandoffAsync(judge).ConfigureAwait(false);
+                HandoffArtifact stored = (await testDb.Driver.HandoffArtifacts.ReadLatestByMissionAsync(judge.Id).ConfigureAwait(false))!;
+                AssertEqual(stored.Id, (await artifacts.ReadForLaunchAsync(judge).ConfigureAwait(false)).Id, "the stored artifact is read");
+            }));
+
+            cases.Add(CaseAsync("handoff_batch_writes_artifact_atomically", "RS-6.9: the handoff artifact is written in the same transaction as the stages it prepares; a refused batch stores no artifact", TestTags.Reliability, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                Mission judge = await testDb.Driver.Missions.CreateAsync(JudgeMission(JudgeOutput(0))).ConfigureAwait(false);
+                Mission next = await testDb.Driver.Missions.CreateAsync(new Mission("[Recorder] R", "R") { DependsOnMissionId = judge.Id }).ConfigureAwait(false);
+
+                MissionWriteBatch refused = new MissionWriteBatch();
+                refused.Updated.Add(new MissionGuardedWrite(next, new[] { MissionStatusEnum.InProgress }));
+                refused.HandoffArtifacts.Add(HandoffArtifactBuilder.Build(judge));
+                AssertFalse(await testDb.Driver.Missions.WriteBatchAsync(refused).ConfigureAwait(false), "guard refuses the batch");
+                AssertNull(await testDb.Driver.HandoffArtifacts.ReadLatestByMissionAsync(judge.Id).ConfigureAwait(false), "no artifact without the prepared stage");
+
+                MissionWriteBatch written = new MissionWriteBatch();
+                written.Updated.Add(new MissionGuardedWrite(next, new[] { MissionStatusEnum.Pending }));
+                HandoffArtifact artifact = HandoffArtifactBuilder.Build(judge);
+                artifact.AttemptId = HandoffArtifact.AttemptIdFor(judge.Id, judge.StartedUtc);
+                written.HandoffArtifacts.Add(artifact);
+                AssertTrue(await testDb.Driver.Missions.WriteBatchAsync(written).ConfigureAwait(false), "batch written");
+                HandoffArtifact? stored = await testDb.Driver.HandoffArtifacts.ReadByAttemptAsync(judge.Id, artifact.AttemptId!).ConfigureAwait(false);
+                AssertNotNull(stored, "artifact stored with the prepared stage");
+                AssertEqual(artifact.Id, stored!.Id);
+            }));
+
+            cases.Add(CaseAsync("judge_sees_whole_chain", "RS-6.10: a Judge behind a Test Engineer sees the Test Engineer's artifact and, below it, the Worker's report and the Architect's, newest first, within one budget", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("chain")).ConfigureAwait(false);
+                Mission architect = await testDb.Driver.Missions.CreateAsync(new Mission("[Architect] Plan", "Plan") { VoyageId = voyage.Id, Persona = "Architect", AgentOutput = "Plan written." }).ConfigureAwait(false);
+                Mission worker = await testDb.Driver.Missions.CreateAsync(new Mission("[Worker] Build", "Build") { VoyageId = voyage.Id, Persona = "Worker", DependsOnMissionId = architect.Id, AgentOutput = "Implemented the parser fix in src/Parser.cs.\n[ARMADA:RESULT] COMPLETE" }).ConfigureAwait(false);
+                Mission tester = await testDb.Driver.Missions.CreateAsync(new Mission("[TestEngineer] Test", "Test") { VoyageId = voyage.Id, Persona = "TestEngineer", DependsOnMissionId = worker.Id, AgentOutput = "Added tests.\n[ARMADA:RESULT] COMPLETE" }).ConfigureAwait(false);
+                HandoffArtifactService artifacts = new HandoffArtifactService(testDb.Driver, CreateLogging());
+                foreach (Mission stage in new[] { architect, worker, tester }) await artifacts.StoreForHandoffAsync(stage).ConfigureAwait(false);
+
+                List<HandoffArtifact> earlier = await artifacts.ReadEarlierChainAsync(tester).ConfigureAwait(false);
+                AssertEqual(2, earlier.Count, "Worker and Architect behind the Test Engineer");
+                AssertEqual(worker.Id, earlier[0].MissionId, "newest first");
+                AssertEqual(architect.Id, earlier[1].MissionId);
+
+                HandoffArtifact prior = await artifacts.ReadForLaunchAsync(tester).ConfigureAwait(false);
+                HandoffRendering rendering = HandoffRenderer.RenderChainWithBudget(prior, earlier, null, 4000);
+                AssertContains("Added tests.", rendering.Evidence, "prior stage first");
+                AssertContains("#### Earlier stages (newest first)", rendering.Evidence);
+                AssertContains("Implemented the parser fix in src/Parser.cs.", rendering.Evidence, "the Judge sees the Worker's report");
+                AssertTrue(rendering.Evidence.IndexOf(worker.Id, StringComparison.Ordinal) < rendering.Evidence.IndexOf(architect.Id, StringComparison.Ordinal), "Worker before Architect");
+                AssertTrue(rendering.EstimatedTokens <= 4000, "within the budget: " + rendering.EstimatedTokens);
+
+                HandoffRendering tight = HandoffRenderer.RenderChainWithBudget(prior, earlier, null, 330);
+                AssertContains("Output (69 characters) did not fit.", tight.Evidence, "an output that does not fit is said to be left out");
+                AssertTrue(tight.EstimatedTokens <= 330, "tight rendering within the budget: " + tight.EstimatedTokens);
+
+                HandoffRendering tighter = HandoffRenderer.RenderChainWithBudget(prior, earlier, null, 240);
+                AssertContains("Did not fit (read them with get_handoff_artifact):", tighter.Evidence, "earlier stages that do not fit are named");
+                AssertContains("(artifact " + earlier[1].Id + ")", tighter.Evidence, "by artifact id");
             }));
 
             cases.Add(CaseAsync("captain_session_scope", "A captain session reads artifacts of its own voyage and dependency, not another voyage's; an Ask session is refused", TestTags.Negative, async () =>
@@ -384,12 +479,17 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(brief.IndexOf("### Findings to fix", StringComparison.Ordinal) < brief.IndexOf(parserFinding, StringComparison.Ordinal), "finding in the rework section");
                 AssertContains("### Rework demands\n1. Resolve every reported finding.\n2. ", brief, "numbered demands, one per line");
                 AssertFalse(brief.Contains(ReworkPromptBuilder.FindingsPlaceholder, StringComparison.Ordinal), "findings placeholder filled");
-                AssertTrue(brief.IndexOf("#### Did not fit", StringComparison.Ordinal) < brief.LastIndexOf(ReworkPromptBuilder.OutputContract, StringComparison.Ordinal), "output contract repeated after the handoff");
+                AssertTrue(brief.IndexOf("#### Did not fit", StringComparison.Ordinal) < brief.LastIndexOf(StageOutputContract.Heading, StringComparison.Ordinal), "output contract after the handoff");
+                AssertEqual(1, StageOutputContract.CountContracts(brief), "RS-6.11: the rework brief states the contract once");
+                AssertTrue(brief.TrimEnd().EndsWith(StageOutputContract.For(Armada.Core.PersonaCatalog.Worker).TrimEnd(), StringComparison.Ordinal), "the contract closes the brief");
 
                 HandoffArtifact stored = (await testDb.Driver.HandoffArtifacts.ReadLatestByMissionAsync(flow.Judge.Id).ConfigureAwait(false))!;
                 AssertNotNull(stored, "the artifact the pointer names is stored");
                 AssertContains(stored.Id, brief, "brief names the stored artifact");
                 AssertEqual(output.TrimEnd(), stored.Output!.TrimEnd(), "the complete review is in the artifact");
+                EnumerationResult<HandoffArtifact> judgeArtifacts = await testDb.Driver.HandoffArtifacts.EnumerateAsync(new HandoffArtifactQuery { MissionId = flow.Judge.Id }).ConfigureAwait(false);
+                AssertEqual(1, (int)judgeArtifacts.TotalRecords, "RS-6.9: one artifact for the review, stored before the rework was written");
+                AssertNotNull(judgeArtifacts.Objects[0].AttemptId, "keyed by attempt");
             }));
 
             cases.Add(CaseAsync("file_only_reader_gets_worktree_file", "A rework Worker that can only read files gets the complete artifact as a git-excluded file in its worktree and a pointer to it", TestTags.Positive, async () =>
@@ -580,7 +680,7 @@ namespace Test.Shared.Suites.Services
                 Mission? rework = all.FirstOrDefault(m => m.DependsOnMissionId == judge.Id && m.Persona == "Worker");
                 AssertNotNull(rework, "the Judge's NEEDS_REVISION scheduled a rework Worker");
                 flow.Rework = rework!;
-                AssertContains(PipelineHandoffContext.ArtifactPlaceholder, flow.Rework.Description, "the persisted handoff carries the placeholder, not an excerpt");
+                AssertContains(PipelineHandoffContext.ArtifactPlaceholder, Armada.Core.Services.MissionNotes.EffectiveDescription(flow.Rework), "the persisted handoff carries the placeholder, not an excerpt");
                 AssertFalse(flow.Rework.Description!.Contains("src/Parser.cs:42", StringComparison.Ordinal), "no excerpt persisted on the description");
 
                 flow.Reader = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, new Captain("rework-cpt", readerRuntime)).ConfigureAwait(false);

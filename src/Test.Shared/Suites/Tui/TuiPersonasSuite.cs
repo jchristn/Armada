@@ -152,6 +152,29 @@ namespace Test.Shared.Suites.Tui
                 host.Press("esc");
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "escalation_ladder_rung_added", "The persona form edits the escalation ladder with the same rung picker, apart from the priorities (RS-5.6)", () =>
+            {
+                StubHttpHandler stub = Server();
+                stub.Page("/api/v1/model-endpoints/enumerate", "[]");
+                using TuiTestHost host = TuiEntityFixtures.Open(stub, "/configuration?tab=personas");
+                PersonasScreen screen = TuiEntityFixtures.Screen<PersonasScreen>(host);
+                TuiEntityFixtures.WaitFor(host, () => screen.Grid.Rows.Count == 2, "rows");
+                host.Press("n");
+                FormDialog form = TuiConfigTestHelpers.Dialog(host, "Create Persona");
+                RecordListField<Armada.Core.Models.PersonaCaptainPriority> ladder = TuiConfigTestHelpers.Field<RecordListField<Armada.Core.Models.PersonaCaptainPriority>>(form, "Escalation ladder");
+                RecordListField<Armada.Core.Models.PersonaCaptainPriority> priorities = TuiConfigTestHelpers.Field<RecordListField<Armada.Core.Models.PersonaCaptainPriority>>(form, "Captain priorities");
+                ladder.AddNew();
+                TuiEntityFixtures.WaitFor(host, () => host.App.Modals.Top is FormDialog top && top != form, "rung picker");
+                FormDialog picker = (FormDialog)host.App.Modals.Top!;
+                SelectField<string> runtime = TuiConfigTestHelpers.Field<SelectField<string>>(picker, "Runtime");
+                runtime.Choose(runtime.Options.First(o => o.Value == "Codex"));
+                host.Press("ctrl+s");
+                TuiEntityFixtures.WaitFor(host, () => ladder.Items.Count == 1, "rung added");
+                AssertEqual(Armada.Core.Enums.AgentRuntimeEnum.Codex, ladder.Items[0].Runtime);
+                AssertEqual(0, priorities.Items.Count, "the priorities are a separate list");
+                host.Press("esc");
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "detail_builtin_prompt_save_and_reset", "Built-in persona detail: no Delete; Save Prompt and Reset to Default with confirmation", () =>
             {
                 StubHttpHandler stub = Server();

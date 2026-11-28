@@ -61,7 +61,7 @@ namespace Armada.Tui.Screens.Operations
                         MissionOverlapPreviewRequest request = new MissionOverlapPreviewRequest();
                         request.Title = Blank(m.Key);
                         request.Description = Blank(m.Value);
-                        MissionOverlapPreview? preview = await c.PreviewMissionOverlapAsync(vessel, request, t).ConfigureAwait(false);
+                        MissionOverlapPreview? preview = await c.BlackBoxInsights.PreviewMissionOverlapAsync(vessel, request, t).ConfigureAwait(false);
                         BriefLintResult? lint = preview?.BriefLint;
                         if (lint == null) lint = await LintAsync(c, m, vessel, t).ConfigureAwait(false);
                         text = BlackBoxInsightText.Preview(preview, lint);
@@ -108,7 +108,7 @@ namespace Armada.Tui.Screens.Operations
             request.Title = Blank(m.Key);
             request.Description = Blank(m.Value);
             request.VesselId = vesselId;
-            return c.LintMissionBriefAsync(request, t);
+            return c.BlackBoxInsights.LintMissionBriefAsync(request, t);
         }
 
         private static string? Blank(string? value)

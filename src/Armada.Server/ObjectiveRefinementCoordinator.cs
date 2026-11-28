@@ -662,7 +662,7 @@ namespace Armada.Server
                     prompt = CaptainLaunchRouter.InlinePromptFile(prompt, promptFilePath);
                 TaskCompletionSource<int?> exitSource = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
                 object outputLock = new object();
-                StringBuilder output = new StringBuilder();
+                BoundedTextBuffer output = new BoundedTextBuffer(_MaxRefinementOutputChars);
                 string? providerFailure = null;
                 bool isOpenCode = captain.Runtime == AgentRuntimeEnum.OpenCode;
 
@@ -683,7 +683,7 @@ namespace Armada.Server
                     string updatedContent;
                     lock (outputLock)
                     {
-                        BoundedTextBuffer.AppendLine(output, line, _MaxRefinementOutputChars);
+                        output.AppendLine(line);
                         updatedContent = output.ToString();
                     }
 
@@ -967,7 +967,7 @@ namespace Armada.Server
             if (runtime is RemoteAgentRuntime)
                 prompt = CaptainLaunchRouter.InlinePromptFile(prompt, promptFilePath);
             TaskCompletionSource<int?> exitSource = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            StringBuilder output = new StringBuilder();
+            BoundedTextBuffer output = new BoundedTextBuffer(_MaxRefinementOutputChars);
             object outputLock = new object();
             int? processId = null;
             string? providerFailure = null;
@@ -988,7 +988,7 @@ namespace Armada.Server
 
                 lock (outputLock)
                 {
-                    BoundedTextBuffer.AppendLine(output, line, _MaxRefinementOutputChars);
+                    output.AppendLine(line);
                 }
             };
             runtime.OnProcessExited += (runtimeProcessId, exitCode) => exitSource.TrySetResult(exitCode);

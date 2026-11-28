@@ -4,6 +4,7 @@
  */
 
 import type { Captain, MergeEntry, Mission, MissionSummary, VoyageProgress } from '@dashboard/types/models';
+import type { MissionAttempt, MissionAttemptHistory } from '../../transport/hostClient';
 import { formatAge } from '../../util/format';
 import { DetailAction, DetailListItem, DetailPage, DetailSection, Tone } from './detailHtml';
 import { ACTIVE_MISSION_STATUSES, FINISHED_MISSION_STATUSES, OpsStore, QUEUED_MISSION_STATUSES } from './opsStore';
@@ -24,8 +25,75 @@ function stamp(iso: string | null | undefined, now: Date): string {
   return `${new Date(iso).toLocaleString()}${age ? ` (${age})` : ''}`;
 }
 
-/** The mission page. logTail is the end of the log for a running mission. */
-export function missionPage(mission: Mission, store: OpsStore, logTail: string | undefined, now: Date = new Date()): DetailPage {
+/** Tone for a stage attempt's disposition (StageDispositionEnum). */
+export function dispositionTone(disposition: string | null | undefined): Tone {
+  if (disposition === 'Completed') return 'ok';
+  if (disposition === 'Failed') return 'error';
+  if (disposition === 'Escalated' || disposition === 'Relaunched' || disposition === 'OutputRepair' || disposition === 'Interrupted') return 'warn';
+  if (disposition === 'Cancelled' || disposition === 'Pending') return 'muted';
+  return 'info';
+}
+
+function seconds(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined || !Number.isFinite(ms) || ms < 0) return '';
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  const total = Math.round(ms / 1000);
+  if (total < 60) return `${total}s`;
+  return `${Math.floor(total / 60)}m ${total % 60}s`;
+}
+
+/** One attempt as a list row: model and captain, then failure kind, repair, escalation, Judge verdict and duration. */
+export function attemptRow(attempt: MissionAttempt): DetailListItem {
+  const who = [attempt.model, attempt.captainName ?? attempt.captainId].filter(Boolean).join(' on ');
+  const repair = attempt.isRepair ? `repair${attempt.contractRepairKind && attempt.contractRepairKind !== 'None' ? ` (${humanize(attempt.contractRepairKind)})` : ''}` : '';
+  const failure = attempt.failureKind && attempt.failureKind !== 'None' ? humanize(attempt.failureKind) : '';
+  const runtimeFailure = attempt.runtimeFailureKind && attempt.runtimeFailureKind !== 'None' ? `runtime ${humanize(attempt.runtimeFailureKind)}` : '';
+  const parts = [
+    failure,
+    runtimeFailure,
+    repair,
+    attempt.escalated ? 'escalated' : '',
+    attempt.judgeVerdict ? `Judge ${humanize(attempt.judgeVerdict)}` : '',
+    seconds(attempt.durationMs),
+  ].filter(Boolean);
+  const round = attempt.reworkRound > 0 ? `, rework ${attempt.reworkRound}` : '';
+  return {
+    label: `Attempt ${attempt.attempt}${round}${who ? `: ${who}` : ''}`,
+    description: [parts.join(' · '), attempt.failureReason ?? ''].filter(Boolean).join(' · '),
+    status: { label: humanize(attempt.disposition ?? 'Unknown'), tone: dispositionTone(attempt.disposition) },
+    link: attempt.captainId ? { command: 'armada.captain.open', args: [attempt.captainId] } : undefined,
+  };
+}
+
+/** The attempts and escalation sections of a mission page (empty when the Admiral has no history for it). */
+export function attemptSections(history: MissionAttemptHistory | undefined): DetailSection[] {
+  if (!history) return [];
+  const sections: DetailSection[] = [];
+  const rows = [
+    { label: 'Tier', value: history.tier ?? '' },
+    { label: 'Escalations', value: history.escalationCount ? `${history.escalationCount}${history.escalatedFromModel ? ` (from ${history.escalatedFromModel})` : ''}` : '' },
+    { label: 'Rework escalated', value: history.reworkEscalated ? 'Yes' : '' },
+    { label: 'Redispatches', value: history.redispatchAttempts ? String(history.redispatchAttempts) : '' },
+    { label: 'Output repairs', value: history.outputRepairAttempts ? String(history.outputRepairAttempts) : '' },
+    { label: 'No-op redispatches', value: history.noOpRedispatchAttempts ? String(history.noOpRedispatchAttempts) : '' },
+    { label: 'Stall recoveries', value: history.stallRecoveryAttempts ? String(history.stallRecoveryAttempts) : '' },
+  ].filter((row) => row.value);
+  if (rows.length) sections.push({ kind: 'fields', title: 'Recovery', rows });
+  sections.push({ kind: 'list', title: `Attempts (${history.attempts.length})`, items: history.attempts.map(attemptRow), empty: 'No stage attempts recorded yet.' });
+  return sections;
+}
+
+/** The section that says why a Pending mission is waiting, with its typed reason and the advice that clears it. */
+export function blockerSection(mission: Mission): DetailSection | undefined {
+  const blocker = mission.assignmentBlocker;
+  if (!blocker || !QUEUED_MISSION_STATUSES.includes(mission.status)) return undefined;
+  const advice = (blocker.advice ?? []).map((a) => `- ${a.text}`).join('\n');
+  const text = [blocker.summary, advice].filter(Boolean).join('\n');
+  return { kind: 'text', title: humanize(blocker.reason), text: text || humanize(blocker.reason), tone: 'warn' };
+}
+
+/** The mission page. logTail is the end of the log for a running mission; history is its attempt history. */
+export function missionPage(mission: Mission, store: OpsStore, logTail: string | undefined, now: Date = new Date(), history?: MissionAttemptHistory): DetailPage {
   const active = ACTIVE_MISSION_STATUSES.includes(mission.status);
   const finished = FINISHED_MISSION_STATUSES.includes(mission.status);
   const actions: DetailAction[] = [
@@ -53,6 +121,7 @@ export function missionPage(mission: Mission, store: OpsStore, logTail: string |
         { label: 'Voyage', value: mission.voyageId ? store.voyages.find((v) => v.voyage.id === mission.voyageId)?.voyage.title ?? mission.voyageId : '', link: mission.voyageId ? { command: 'armada.voyage.open', args: [mission.voyageId] } : undefined },
         { label: 'Parent', value: mission.parentMissionId ?? '', code: true, link: mission.parentMissionId ? { command: 'armada.mission.open', args: [mission.parentMissionId] } : undefined },
         { label: 'Persona', value: mission.persona ?? '' },
+        { label: 'Mode', value: mission.mode ? humanize(mission.mode) : '' },
         { label: 'Branch', value: mission.branchName ?? '', code: true },
         { label: 'Commit', value: mission.commitHash ?? '', code: true },
         { label: 'Pull request', value: mission.prUrl ?? '', link: mission.prUrl ? { command: 'armada.openUrl', args: [mission.prUrl] } : undefined },
@@ -64,7 +133,10 @@ export function missionPage(mission: Mission, store: OpsStore, logTail: string |
       ],
     },
   ];
+  const blocker = blockerSection(mission);
+  if (blocker) sections.push(blocker);
   if (mission.failureReason) sections.push({ kind: 'text', title: humanize(mission.failureKind) || 'Failure', text: mission.failureReason, tone: 'error' });
+  sections.push(...attemptSections(history));
   if (mission.status === 'Review' && mission.reviewComment) sections.push({ kind: 'text', title: 'Review', text: mission.reviewComment });
   if (mission.description) sections.push({ kind: 'text', title: 'Brief', text: mission.description });
   if (logTail !== undefined) sections.push({ kind: 'pre', title: 'Live log', note: 'last lines, updating', text: logTail || '(no output yet)' });

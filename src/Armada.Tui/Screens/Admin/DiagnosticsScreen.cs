@@ -98,7 +98,7 @@ namespace Armada.Tui.Screens.Admin
             {
                 try
                 {
-                    return await Context.Client.GetDoctorAsync().ConfigureAwait(false) ?? new List<DoctorCheck>();
+                    return await Context.Client.Status.GetDoctorAsync().ConfigureAwait(false) ?? new List<DoctorCheck>();
                 }
                 catch (Armada.Client.ArmadaApiException ex)
                 {

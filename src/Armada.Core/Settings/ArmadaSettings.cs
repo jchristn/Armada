@@ -206,6 +206,22 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
+        /// Output rate, in tokens per second, at or above which a model keeps the global timeouts (RS-8.8). A model
+        /// profile measured slower gets its stall threshold, tool-wait hard limit and maximum runtime scaled up by this
+        /// rate divided by its own, at most four times, unless the profile sets the value itself. 0 turns the scaling off.
+        /// 0 to 1000. Default: 30.
+        /// </summary>
+        public int TimeoutScaleReferenceTokensPerSecond
+        {
+            get => _TimeoutScaleReferenceTokensPerSecond;
+            set
+            {
+                if (value < 0 || value > 1000) throw new ArgumentOutOfRangeException(nameof(TimeoutScaleReferenceTokensPerSecond), "Must be between 0 and 1000");
+                _TimeoutScaleReferenceTokensPerSecond = value;
+            }
+        }
+
+        /// <summary>
         /// Token budget for the prior stage's handoff delivered to a captain whose served context is not known (CLI
         /// runtimes, endpoints without a context length). A reader with a known served context gets one eighth of it
         /// instead. Findings and required actions are delivered first, then relevant diff sections, then a pointer to
@@ -216,6 +232,37 @@ namespace Armada.Core.Settings
         {
             get => _HandoffBudgetTokens;
             set => _HandoffBudgetTokens = value < 0 ? 0 : (value > 1000000 ? 1000000 : value);
+        }
+
+        /// <summary>
+        /// Served context, in tokens, at or below which a mission renders the Compact persona prompt variant when nothing
+        /// else chooses one (no voyage override, captain <c>promptVariant</c> option, or model profile rendering template).
+        /// The served context is the captain's endpoint context (configured, else discovered), else its model profile's.
+        /// Default 32768; 0 turns the automatic Compact choice off. Must be in range [0, 2097152].
+        /// </summary>
+        public int PromptVariantCompactMaxContextTokens
+        {
+            get => _PromptVariantCompactMaxContextTokens;
+            set
+            {
+                if (value < 0 || value > 2097152) throw new ArgumentOutOfRangeException(nameof(PromptVariantCompactMaxContextTokens), "Must be between 0 and 2097152");
+                _PromptVariantCompactMaxContextTokens = value;
+            }
+        }
+
+        /// <summary>
+        /// Served context, in tokens, at or below which a mission renders the Lean persona prompt variant when nothing
+        /// else chooses one and the Compact threshold (<see cref="PromptVariantCompactMaxContextTokens"/>) does not apply.
+        /// Default 65536; 0 turns the automatic Lean choice off. Must be in range [0, 2097152].
+        /// </summary>
+        public int PromptVariantLeanMaxContextTokens
+        {
+            get => _PromptVariantLeanMaxContextTokens;
+            set
+            {
+                if (value < 0 || value > 2097152) throw new ArgumentOutOfRangeException(nameof(PromptVariantLeanMaxContextTokens), "Must be between 0 and 2097152");
+                _PromptVariantLeanMaxContextTokens = value;
+            }
         }
 
         /// <summary>
@@ -243,7 +290,63 @@ namespace Armada.Core.Settings
             set => _StageCheckConcurrencyPerHarbor = value >= 1 && value <= 64 ? value : throw new ArgumentOutOfRangeException(nameof(StageCheckConcurrencyPerHarbor));
         }
 
+        private int _MergeQueueLeaseSeconds = 900;
+        private int _MergeQueueRequeueLimit = 3;
+        private int _MergeQueueBatchSize = 1;
         private int _StageCheckConcurrencyPerHarbor = 1;
+
+        /// <summary>
+        /// How many times landing work is requeued before it fails: a merge queue push the remote refuses because the
+        /// target branch moved (not a fast-forward) is retried from a fresh fetch up to this many times per processing
+        /// run, and a WorkProduced merge-queue mission whose landing handoff was lost is enqueued again up to this many
+        /// times before it is flagged LandingFailed. Default 3. 0 fails at once, as before 1.5.0. Values outside [0, 10]
+        /// are clamped.
+        /// </summary>
+        public int MergeQueueRequeueLimit
+        {
+            get => _MergeQueueRequeueLimit;
+            set
+            {
+                if (value < 0) value = 0;
+                if (value > 10) value = 10;
+                _MergeQueueRequeueLimit = value;
+            }
+        }
+
+        /// <summary>
+        /// Batched landing: the merge queue merges up to this many queued entries of one vessel and target branch into
+        /// one integration worktree, verifies the result once, and publishes it with one push. A batch whose
+        /// verification fails is split in half and each half is retried, down to single entries, so a failing entry is
+        /// found without failing the others. Default 1 (off: each entry is merged, verified, and landed on its own).
+        /// Values outside [1, 20] are clamped.
+        /// </summary>
+        public int MergeQueueBatchSize
+        {
+            get => _MergeQueueBatchSize;
+            set
+            {
+                if (value < 1) value = 1;
+                if (value > 20) value = 20;
+                _MergeQueueBatchSize = value;
+            }
+        }
+
+        /// <summary>
+        /// Lifetime in seconds of the merge queue's processing lease. The Admiral that holds it renews it before every
+        /// entry, so a long pass is never taken over while it is working; a crashed holder's lease expires after this
+        /// long, after which another instance takes over and re-processes entries left in Testing. Default 900 (15
+        /// minutes). Values outside [5, 14400] are clamped.
+        /// </summary>
+        public int MergeQueueLeaseSeconds
+        {
+            get => _MergeQueueLeaseSeconds;
+            set
+            {
+                if (value < 5) value = 5;
+                if (value > 14400) value = 14400;
+                _MergeQueueLeaseSeconds = value;
+            }
+        }
 
         /// <summary>
         /// Maximum number of automatic landing retries per deferred landing: a LocalMerge landing refused because the
@@ -280,10 +383,26 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
-        /// Maximum number of output-contract repair turns per mission. When a Judge or Architect finishes with output
-        /// that breaks its contract (no verdict, conflicting verdicts, an unsubstantiated PASS, a block without an
-        /// affected case, or an invalid or missing plan), the same stage runs again with the exact errors quoted, up to
-        /// this many times, before the mission fails. Set to 0 to fail on the first contract violation. Must be in
+        /// Whether an Architect plan written as legacy <c>[ARMADA:MISSION]</c> markers is still accepted when the output
+        /// has no <c>armada-plan</c> block. Deprecated (D-027): each use logs a warning, and the marker format is removed
+        /// in 2.0. When false, marker output is treated like a missing plan and gets the output repair turn. Defaults to
+        /// true.
+        /// </summary>
+        public bool AcceptLegacyMissionMarkers { get; set; } = true;
+
+        /// <summary>
+        /// Captain that runs the format-only repair turn (RS-6.4): a tool-less call that restates a stage's own output in
+        /// its contract's format when the work is done but the report broke the contract. Null (the default) uses the
+        /// captain that wrote the output. An unknown captain id falls back to that captain.
+        /// </summary>
+        public string? OutputRepairNormalizerCaptainId { get; set; } = null;
+
+        /// <summary>
+        /// Maximum number of output-contract repair turns per mission. When a Judge, Architect or verifier finishes with
+        /// output that breaks its contract (no verdict, conflicting verdicts, an unsubstantiated PASS, a block without an
+        /// affected case, or an invalid or missing plan), a format-only turn first restates the existing output; when that
+        /// is not possible or is rejected, the same stage runs again with the exact errors quoted, up to this many times,
+        /// before the mission fails. Set to 0 to fail on the first contract violation (no format turn either). Must be in
         /// range [0, 3].
         /// </summary>
         public int MaxOutputRepairAttempts
@@ -418,6 +537,60 @@ namespace Armada.Core.Settings
                 _TransientOutageGraceMinutes = value;
             }
         }
+
+        /// <summary>
+        /// In-place resumes a captain gets after an Unclassified exit (non-zero, no provider error Armada recognizes, not
+        /// an abnormal death) before the mission goes to escalation. Never more than MaxRecoveryAttempts. A model profile's
+        /// recovery policy can override it. Must be in range [0, 3].
+        /// </summary>
+        public int UnclassifiedResumeLimit
+        {
+            get => _UnclassifiedResumeLimit;
+            set
+            {
+                if (value < 0) value = 0;
+                if (value > 3) value = 3;
+                _UnclassifiedResumeLimit = value;
+            }
+        }
+
+        /// <summary>
+        /// Automatic Judge rework rounds for one implementation slice before Armada tries a different Worker captain and
+        /// then stops. A model profile's recovery policy can raise it for the Worker's model but never lower it. Must be in
+        /// range [1, 5].
+        /// </summary>
+        public int JudgeReworkRounds
+        {
+            get => _JudgeReworkRounds;
+            set
+            {
+                if (value < 1) value = 1;
+                if (value > 5) value = 5;
+                _JudgeReworkRounds = value;
+            }
+        }
+
+        /// <summary>
+        /// Escalation hops one mission may take up its persona's escalation ladder (or, with no ladder, to a captain with a
+        /// strictly higher effective tier) after its captain could not finish (RS-5.6). 0 turns automatic escalation off.
+        /// Must be in range [0, 5].
+        /// </summary>
+        public int MaxEscalations
+        {
+            get => _MaxEscalations;
+            set
+            {
+                if (value < 0) value = 0;
+                if (value > 5) value = 5;
+                _MaxEscalations = value;
+            }
+        }
+
+        /// <summary>
+        /// When true, a transient failure on a captain whose managed endpoint's circuit breaker is open escalates right
+        /// away (when an escalation captain exists) instead of riding out the outage on resumes (RS-5.6). Default false.
+        /// </summary>
+        public bool EscalateOnOpenEndpointBreaker { get; set; } = false;
 
         /// <summary>
         /// How long, in minutes, a captain whose process runs on a Harbor that lost its link to the Admiral is held as
@@ -920,6 +1093,16 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
+        /// Routing from outcome data (RS-8.5, RS-8.6): ranking within a tier and profile tier suggestions. Both off by
+        /// default. Never null; setting null restores the defaults.
+        /// </summary>
+        public RoutingDataSettings RoutingData
+        {
+            get => _RoutingData;
+            set => _RoutingData = value ?? new RoutingDataSettings();
+        }
+
+        /// <summary>
         /// Vessel health evaluation settings (schedule, concurrency, freshness, scored criteria, thresholds).
         /// Never null; setting null restores the defaults.
         /// </summary>
@@ -1094,8 +1277,11 @@ namespace Armada.Core.Settings
         private int _HeartbeatIntervalSeconds = Constants.DefaultHeartbeatIntervalSeconds;
         private int _StallThresholdMinutes = Constants.DefaultStallThresholdMinutes;
         private int _ToolWaitHardLimitMinutes = 60;
+        private int _TimeoutScaleReferenceTokensPerSecond = 30;
         private int _StageCheckTimeoutMinutes = Constants.DefaultStageCheckTimeoutMinutes;
         private int _HandoffBudgetTokens = Constants.DefaultHandoffBudgetTokens;
+        private int _PromptVariantCompactMaxContextTokens = PromptVariantResolver.DefaultCompactMaxContextTokens;
+        private int _PromptVariantLeanMaxContextTokens = PromptVariantResolver.DefaultLeanMaxContextTokens;
         private int _MaxRecoveryAttempts = Constants.DefaultMaxRecoveryAttempts;
         private int _MaxMissionRuntimeMinutes = Constants.DefaultMaxMissionRuntimeMinutes;
         private int _ReviewTimeoutMinutes = Constants.DefaultReviewTimeoutMinutes;
@@ -1113,6 +1299,9 @@ namespace Armada.Core.Settings
         private int _MaxMissionRecoveryAttempts = 2;
         private int _TransientResumeDelaySeconds = 5;
         private int _TransientOutageGraceMinutes = 10;
+        private int _UnclassifiedResumeLimit = 1;
+        private int _JudgeReworkRounds = 2;
+        private int _MaxEscalations = 2;
         private int _HarborDisconnectGraceMinutes = 60;
         private int _LandingDeferralDeadlineHours = 24;
         private int _MinIdleCaptains = 0;
@@ -1128,6 +1317,7 @@ namespace Armada.Core.Settings
         private FleetActionSettings _FleetActions = new FleetActionSettings();
         private EvaluationSettings _Evaluation = new EvaluationSettings();
         private ModelAlertSettings _ModelAlerts = new ModelAlertSettings();
+        private RoutingDataSettings _RoutingData = new RoutingDataSettings();
         private AskSettings _Ask = new AskSettings();
         private CliPermissionSettings _Permissions = new CliPermissionSettings();
         private RepositoryHealthSettings _RepositoryHealth = new RepositoryHealthSettings();

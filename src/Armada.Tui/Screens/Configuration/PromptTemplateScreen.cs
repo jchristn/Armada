@@ -137,7 +137,7 @@ namespace Armada.Tui.Screens.Configuration
                 request.Content = ContentField.Value;
                 request.Description = description.Length > 0 ? description : null;
                 request.Active = true;
-                EntityUi.Run<PromptTemplate?>(Context, ct => Context.Client.CreatePromptTemplateAsync(request, ct), result =>
+                EntityUi.Run<PromptTemplate?>(Context, ct => Context.Client.PromptTemplates.CreateAsync(request, ct), result =>
                 {
                     _Saving = false;
                     Form.MarkClean();
@@ -158,7 +158,7 @@ namespace Armada.Tui.Screens.Configuration
             PromptTemplateUpdateRequest update = new PromptTemplateUpdateRequest();
             update.Content = ContentField.Value;
             update.Description = description.Length > 0 ? description : null;
-            EntityUi.Run<PromptTemplate?>(Context, ct => Context.Client.UpdatePromptTemplateAsync(template.Name, update, ct), result =>
+            EntityUi.Run<PromptTemplate?>(Context, ct => Context.Client.PromptTemplates.UpdateAsync(template.Name, update, ct), result =>
             {
                 _Saving = false;
                 if (result != null)
@@ -184,7 +184,7 @@ namespace Armada.Tui.Screens.Configuration
         /// <inheritdoc />
         protected override Task<PromptTemplate?> FetchAsync(CancellationToken token)
         {
-            return Context.Client.GetPromptTemplateAsync(EntityId, token);
+            return Context.Client.PromptTemplates.GetAsync(EntityId, token);
         }
 
         /// <inheritdoc />

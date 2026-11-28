@@ -16,6 +16,20 @@ namespace Armada.Runtimes.Tools
         private const int _DefaultPageLines = 200;
         private const int _DefaultPageCharacters = 24_000;
         private const int _PaginationFooterReserve = 512;
+        private readonly ToolLimits _Limits;
+
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Initializes the tool with output limits.
+        /// </summary>
+        /// <param name="limits">The output limits for this run, or null for the limits of an unknown context window.</param>
+        public ReadFileTool(ToolLimits? limits = null)
+        {
+            _Limits = limits ?? new ToolLimits();
+        }
+
+        #endregion
 
         #region Public-Members
 
@@ -27,8 +41,8 @@ namespace Armada.Runtimes.Tools
         /// <summary>
         /// A human-readable description of what this tool does.
         /// </summary>
-        public string Description => "Reads a file from the filesystem and returns its contents with line numbers (like cat -n). "
-            + "Defaults to pages of at most 200 lines and 24,000 characters with continuation instructions. CLAUDE.md and AGENTS.md are read completely by default. Explicit limit requests retain full/range behavior.";
+        public string Description => "Reads a file from the filesystem and returns its contents with line numbers (like cat -n); the numbers are for display, so leave them out of edits. "
+            + "Defaults to pages of at most 200 lines and 24,000 characters with continuation instructions. Instruction files (CLAUDE.md, AGENTS.md, AGENTS.override.md, ARMADA.md) are read completely by default. Explicit limit requests retain full/range behavior up to a size limit set by the context window, then page with continuation instructions.";
 
         /// <summary>
         /// The JSON Schema object describing the tool's input parameters.
@@ -51,7 +65,7 @@ namespace Armada.Runtimes.Tools
                 limit = new
                 {
                     type = "integer",
-                    description = "The maximum number of lines to read. Omit for a bounded 200-line page (24,000 characters), except CLAUDE.md/AGENTS.md, which default to complete instructions. Explicit zero or negative reads the remaining file within the file-size limit."
+                    description = "The maximum number of lines to read. Omit for a bounded 200-line page (24,000 characters), except instruction files (CLAUDE.md, AGENTS.md, AGENTS.override.md, ARMADA.md), which default to complete instructions. Explicit zero or negative reads the remaining file, paged at the context-window size limit."
                 }
             },
             required = new[] { "file_path" }
@@ -96,7 +110,7 @@ namespace Armada.Runtimes.Tools
                 }
 
                 FileInfo fileInfo = new FileInfo(resolvedPath);
-                if (fileInfo.Length > ToolSafetyLimits.MaxReadFileBytes)
+                if (fileInfo.Length > _Limits.MaxReadFileBytes)
                 {
                     return new ToolResult
                     {
@@ -105,39 +119,72 @@ namespace Armada.Runtimes.Tools
                         Content = JsonSerializer.Serialize(new
                         {
                             error = "file_too_large",
-                            message = $"File size ({fileInfo.Length} bytes) exceeds maximum allowed ({ToolSafetyLimits.MaxReadFileBytes} bytes): {resolvedPath}"
+                            message = $"File size ({fileInfo.Length} bytes) exceeds maximum allowed ({_Limits.MaxReadFileBytes} bytes): {resolvedPath}. Use grep, or run_process with head or tail, for a smaller result."
                         })
                     };
                 }
 
-                string[] lines = await File.ReadAllLinesAsync(resolvedPath, cancellationToken).ConfigureAwait(false);
-
+                int budget = (boundedDefault ? _DefaultPageCharacters : _Limits.MaxReadCharacters) - _PaginationFooterReserve;
                 int startIndex = offset <= 1 ? 0 : offset - 1;
-                int endIndex = limit > 0 ? (int)Math.Min(lines.Length, (long)startIndex + limit) : lines.Length;
+                long endIndex = limit > 0 ? (long)startIndex + limit : Int64.MaxValue;
                 StringBuilder sb = new StringBuilder();
                 int nextIndex = startIndex;
+                int totalLines = 0;
+                bool stopped = false;
                 bool oversizedLine = false;
+                bool truncatedLine = false;
 
-                for (int i = startIndex; i < endIndex; i++)
+                using (StreamReader reader = new StreamReader(resolvedPath, Encoding.UTF8, true))
                 {
-                    string lineContent = lines[i].Replace("\r", string.Empty);
-                    string numberedLine = $"{i + 1,6}\t{lineContent}\n";
-                    if (boundedDefault && sb.Length + numberedLine.Length > _DefaultPageCharacters - _PaginationFooterReserve)
+                    string? line;
+                    while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) != null)
                     {
-                        oversizedLine = numberedLine.Length > _DefaultPageCharacters - _PaginationFooterReserve;
-                        break;
+                        int i = totalLines;
+                        totalLines++;
+                        if (stopped || i < startIndex || i >= endIndex) continue;
+
+                        string numberedLine = $"{i + 1,6}\t{line.Replace("\r", string.Empty)}\n";
+                        if (sb.Length + numberedLine.Length > budget)
+                        {
+                            stopped = true;
+                            oversizedLine = numberedLine.Length > budget;
+                            if (!boundedDefault && sb.Length == 0)
+                            {
+                                sb.Append(numberedLine, 0, budget).Append('\n');
+                                truncatedLine = true;
+                                nextIndex = i + 1;
+                            }
+
+                            continue;
+                        }
+
+                        sb.Append(numberedLine);
+                        nextIndex = i + 1;
                     }
-                    sb.Append(numberedLine);
-                    nextIndex = i + 1;
                 }
 
-                if (boundedDefault && nextIndex < lines.Length)
+                if (boundedDefault && nextIndex < totalLines)
                 {
-                    sb.Append($"[read_file: output paged; {lines.Length} total lines. Continue with offset={nextIndex + 1}. ");
+                    sb.Append($"[read_file: output paged; {totalLines} total lines. Continue with offset={nextIndex + 1}. ");
                     sb.Append(oversizedLine
                         ? "The next line exceeds the default character budget; request an explicit limit=1 to read it, or use grep for a smaller result."
                         : "Omitted limit defaults to at most 200 lines and 24,000 characters; an explicit limit selects a range.");
                     sb.Append("]\n");
+                }
+                else if (!boundedDefault && stopped)
+                {
+                    if (truncatedLine)
+                    {
+                        sb.Append($"[read_file: line {nextIndex} is longer than the {_Limits.MaxReadCharacters}-character read limit for this context window and was cut. Use grep for a smaller result.");
+                    }
+                    else
+                    {
+                        sb.Append($"[read_file: output paged at the {_Limits.MaxReadCharacters}-character read limit for this context window");
+                    }
+
+                    sb.Append(nextIndex < totalLines && nextIndex < endIndex
+                        ? $"; {totalLines} total lines. Continue with offset={nextIndex + 1}.]\n"
+                        : "]\n");
                 }
 
                 return new ToolResult
@@ -175,7 +222,9 @@ namespace Armada.Runtimes.Tools
         {
             string name = Path.GetFileName(filePath);
             return String.Equals(name, "CLAUDE.md", StringComparison.OrdinalIgnoreCase)
-                || String.Equals(name, "AGENTS.md", StringComparison.OrdinalIgnoreCase);
+                || String.Equals(name, "AGENTS.md", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(name, "AGENTS.override.md", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(name, "ARMADA.md", StringComparison.OrdinalIgnoreCase);
         }
 
         private string ResolvePath(string filePath, string workingDirectory)

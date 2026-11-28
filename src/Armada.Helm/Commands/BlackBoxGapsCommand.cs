@@ -38,7 +38,7 @@ namespace Armada.Helm.Commands
                 request.Resolution = BlackBoxCli.ParseEnum<BlackBoxResolutionEnum>("--resolution", settings.Resolution);
                 request.Phase = BlackBoxCli.ParseEnum<BlackBoxPhaseEnum>("--phase", settings.Phase);
                 if (!String.IsNullOrWhiteSpace(settings.Since)) request.CreatedAfter = BlackBoxCli.ParseSince(settings.Since, DateTime.UtcNow);
-                EnumerationResult<BlackBoxResilienceGap>? page = await client.EnumerateBlackBoxResilienceGapsAsync(request, cancellationToken).ConfigureAwait(false);
+                EnumerationResult<BlackBoxResilienceGap>? page = await client.BlackBox.EnumerateResilienceGapsAsync(request, cancellationToken).ConfigureAwait(false);
                 if (settings.Json)
                 {
                     WritePureJson(page);

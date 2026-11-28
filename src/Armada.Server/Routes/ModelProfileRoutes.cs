@@ -172,9 +172,9 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("ModelProfiles")
                 .WithSummary("Update a model profile")
-                .WithDescription("Updates the mutable parts of a profile: Capabilities, Rendering (explicit overrides; null values mean no override) and Notes. A section the body omits keeps its value; a section it carries replaces it whole; an empty Notes clears the notes. The identity and the revisions never change. Global admins and tenant admins of the profile's tenant only (403 otherwise).")
+                .WithDescription("Updates the mutable parts of a profile: Capabilities, Rendering (explicit overrides; null values mean no override), Recovery (per-model recovery policy: MaxResumes 0-10, UnclassifiedResumes 0-3, TransientGraceMinutes 0-120, JudgeReworkRounds 1-5 which can raise but never lower the global value, OutputRepairAttempts 0-3, EscalateAfterResumes 0-10 which hands a task failure to the persona escalation ladder after that many resumes; null values use the global setting) and Notes. A section the body omits keeps its value; a section it carries replaces it whole; an empty Notes clears the notes. The identity and the revisions never change. Global admins and tenant admins of the profile's tenant only (403 otherwise).")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Model profile ID (mdl_ prefix)"))
-                .WithRequestBody(OpenApiJson.BodyFor<ModelProfileUpdateRequest>("Capabilities, Rendering and Notes"))
+                .WithRequestBody(OpenApiJson.BodyFor<ModelProfileUpdateRequest>("Capabilities, Rendering, Recovery, Tiering (tier only) and Notes"))
                 .WithResponse(200, OpenApiJson.For<ModelProfile>("The updated profile with its revisions"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Not an admin"))

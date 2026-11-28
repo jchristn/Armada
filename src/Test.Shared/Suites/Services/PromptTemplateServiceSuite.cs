@@ -102,11 +102,17 @@ namespace Test.Shared.Suites.Services
                 await service.SeedDefaultsAsync().ConfigureAwait(false);
                 PromptTemplate template = (await testDb.Driver.PromptTemplates.ReadByNameAsync("mission.progress_signals").ConfigureAwait(false))!;
                 AssertContains(CaptainBlockedContract.SignalLine, template.Content, "seeded with the blocked line");
-                template.Content = template.Content.Replace(CaptainBlockedContract.SignalLine, String.Empty);
-                await testDb.Driver.PromptTemplates.UpdateAsync(template).ConfigureAwait(false);
-                await service.SeedDefaultsAsync().ConfigureAwait(false);
-                template = (await testDb.Driver.PromptTemplates.ReadByNameAsync(template.Name).ConfigureAwait(false))!;
-                AssertContains(CaptainBlockedContract.SignalLine, template.Content, "the previous shipped default is upgraded");
+                AssertFalse(template.Content.Contains(StageOutputContract.ResultMarker, StringComparison.Ordinal), "result lines live in the output contract");
+                string current = template.Content;
+                string withContract = PersonaPromptImprovements.PreviousTemplates["mission.progress_signals.v1"];
+                foreach (string previous in new[] { withContract, withContract.Replace(CaptainBlockedContract.SignalLine, String.Empty) })
+                {
+                    template.Content = previous;
+                    await testDb.Driver.PromptTemplates.UpdateAsync(template).ConfigureAwait(false);
+                    await service.SeedDefaultsAsync().ConfigureAwait(false);
+                    template = (await testDb.Driver.PromptTemplates.ReadByNameAsync(template.Name).ConfigureAwait(false))!;
+                    AssertEqual(current, template.Content, "the previous shipped default is upgraded");
+                }
                 template.Content = template.Content.Replace(CaptainBlockedContract.SignalLine, String.Empty) + "Operator customization";
                 await testDb.Driver.PromptTemplates.UpdateAsync(template).ConfigureAwait(false);
                 await service.SeedDefaultsAsync().ConfigureAwait(false);
@@ -176,26 +182,28 @@ namespace Test.Shared.Suites.Services
 
                     PromptTemplate? judge = await service.ResolveAsync("persona.judge").ConfigureAwait(false);
                     AssertNotNull(judge, "Judge template should resolve");
-                    AssertContains("## Correctness", judge!.Content, "Judge template should require a Correctness lens section");
-                    AssertContains("## Blast Radius", judge.Content, "Judge template should require a Blast Radius lens section");
-                    AssertContains("## Source Fidelity", judge.Content, "Judge template should require a Source Fidelity lens section");
-                    AssertContains("## Affected Case", judge.Content, "Judge template should require a concrete affected case to block");
+                    string judgeContract = StageOutputContract.For("Judge");
+                    AssertFalse(judge!.Content.Contains("[ARMADA:", StringComparison.Ordinal), "Judge template leaves the verdict to the output contract");
+                    AssertContains("## Correctness", judgeContract, "Judge contract should require a Correctness lens section");
+                    AssertContains("## Blast Radius", judgeContract, "Judge contract should require a Blast Radius lens section");
+                    AssertContains("## Source Fidelity", judgeContract, "Judge contract should require a Source Fidelity lens section");
+                    AssertContains("## Affected Case", judgeContract, "Judge contract should require a concrete affected case to block");
 
                     PromptTemplate? testEngineer = await service.ResolveAsync("persona.test_engineer").ConfigureAwait(false);
                     AssertNotNull(testEngineer, "Test engineer template should resolve");
                     AssertContains("negative or edge-path test", testEngineer!.Content, "Test engineer template should require negative-path coverage");
-                    AssertContains("## Coverage Added", testEngineer.Content, "Test engineer template should request a coverage summary section");
+                    AssertContains("## Coverage Added", StageOutputContract.For("Test Engineer"), "Test engineer contract should request a coverage summary section");
                     AssertContains("residual risk", testEngineer.Content, "Test engineer template should require residual risk notes");
 
                     PromptTemplate? productManager = await service.ResolveAsync("persona.product_manager").ConfigureAwait(false);
                     AssertNotNull(productManager, "Product manager template should resolve");
-                    AssertContains("## Product Vision", productManager!.Content, "Product manager template should require a Product Vision section");
-                    AssertContains("## Future Readiness", productManager.Content, "Product manager template should require a Future Readiness section");
+                    AssertContains("## Product Vision", StageOutputContract.For("Product Manager"), "Product manager contract should require a Product Vision section");
+                    AssertContains("## Future Readiness", StageOutputContract.For("Product Manager"), "Product manager contract should require a Future Readiness section");
 
                     PromptTemplate? usabilityEngineer = await service.ResolveAsync("persona.usability_engineer").ConfigureAwait(false);
                     AssertNotNull(usabilityEngineer, "Usability engineer template should resolve");
-                    AssertContains("## Usability", usabilityEngineer!.Content, "Usability engineer template should require a Usability section");
-                    AssertContains("## Consistency", usabilityEngineer.Content, "Usability engineer template should require a Consistency section");
+                    AssertContains("## Usability", StageOutputContract.For("Usability Engineer"), "Usability engineer contract should require a Usability section");
+                    AssertContains("## Consistency", StageOutputContract.For("Usability Engineer"), "Usability engineer contract should require a Consistency section");
                 }
             }));
 
@@ -633,7 +641,7 @@ namespace Test.Shared.Suites.Services
                         await service.SeedDefaultsAsync().ConfigureAwait(false);
                         stored = (await testDb.Driver.PromptTemplates.ReadByNameAsync(variantName).ConfigureAwait(false))!;
                         AssertEqual(PersonaPromptVariants.GetContent("persona.architect", variant), stored.Content, variantName + " untouched previous variant upgraded");
-                        AssertContains("contractVersion:4", stored.Content);
+                        AssertFalse(stored.Content.Contains("contractVersion", StringComparison.Ordinal), variantName + " leaves the plan format to the output contract");
                         stored.Content = PersonaPromptVariants.GetPreviousContents("persona.architect", variant)[0] + "\nKeep mine.";
                         await testDb.Driver.PromptTemplates.UpdateAsync(stored).ConfigureAwait(false);
                         await service.SeedDefaultsAsync().ConfigureAwait(false);
@@ -641,7 +649,8 @@ namespace Test.Shared.Suites.Services
                         AssertTrue(stored.Content.EndsWith("Keep mine."), variantName + " edited variant kept");
                     }
                     string architect = service.GetEmbeddedDefault("persona.architect")!;
-                    AssertContains("contractVersion:4", architect);
+                    AssertFalse(architect.Contains("contractVersion", StringComparison.Ordinal), "the plan format lives in the output contract");
+                    AssertContains("\"contractVersion\": 4", StageOutputContract.For("Architect"));
                     AssertContains("ownedPaths", architect);
                     AssertContains("{MaxParallelMissionsPerVoyage}", architect);
                     AssertFalse(architect.Contains("dependsOn"), "the v4 architect names parent, not dependsOn");
@@ -697,9 +706,9 @@ namespace Test.Shared.Suites.Services
                     }
                     string architect = service.GetEmbeddedDefault("persona.architect")!;
                     AssertContains("Each description must stand alone", architect, "self-contained fan-out description");
-                    AssertContains("validationCommands", architect, "executable checks are part of the typed plan");
-                    AssertContains("exact commands", architect, "executable checks retain concrete commands");
-                    AssertContains("armada-plan", architect, "plan protocol preserved");
+                    AssertContains("validationCommands", StageOutputContract.For("Architect"), "executable checks are part of the typed plan");
+                    AssertContains("Exact commands", StageOutputContract.For("Architect"), "executable checks retain concrete commands");
+                    AssertContains("armada-plan", StageOutputContract.For("Architect"), "plan protocol preserved");
                     AssertContains("Scope exclusions", architect, "bounded architect scope");
                     AssertContains("Invariants", architect, "shared invariants");
                     AssertContains("final integration slice", architect, "end-to-end acceptance");
@@ -716,7 +725,8 @@ namespace Test.Shared.Suites.Services
                     AssertContains("named tests", testEngineer, "requirement mapping");
                     AssertContains("smallest corrective action", service.GetEmbeddedDefault("persona.judge")!, "actionable judge repair");
                     AssertContains("file/line references", service.GetEmbeddedDefault("persona.linter")!, "linter locations");
-                    AssertContains("[ARMADA:RESULT] COMPLETE", worker, "worker completion protocol preserved");
+                    AssertFalse(worker.Contains("[ARMADA:", StringComparison.Ordinal), "the worker completion line lives in the output contract");
+                    AssertContains("[ARMADA:RESULT] COMPLETE", StageOutputContract.For("Worker"), "worker completion protocol preserved");
                 }
             }));
 

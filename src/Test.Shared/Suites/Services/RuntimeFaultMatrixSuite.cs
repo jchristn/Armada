@@ -31,7 +31,7 @@ namespace Test.Shared.Suites.Services
         private const string SuiteId = "Services.RuntimeFaultMatrix";
 
         private const string ValidPass =
-            "## Correctness\nThe change adds the requested file, the build passes and every existing test still passes. I read the diff line by line and ran the suite locally.\n"
+            "## Correctness\nThe change adds the requested file, the build passes and every existing test still passes. I read the diff line by line and ran dotnet test locally.\n"
             + "## Blast Radius\nOnly one new file is added; no existing behavior, configuration, or public interface changes, so nothing downstream is affected.\n"
             + "## Source Fidelity\nThe implementation matches the mission description exactly and does not invent requirements or skip any acceptance criterion.\n"
             + "## Verdict\n[ARMADA:VERDICT] PASS";
@@ -109,7 +109,7 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(after!.State != CaptainStateEnum.Quarantined, "overload is backpressure, not an exhausted quota");
             }));
 
-            cases.Add(CaseAsync("unclassified_crash_fails_once_with_reason", "An exit 1 with no structured error is a crash: the mission fails once with a reason and is not relaunched", TestTags.Negative, async () =>
+            cases.Add(CaseAsync("unclassified_crash_fails_once_with_reason", "An exit 1 with no structured error and no side-effect tool is resumed in place once (R4), then fails with a reason", TestTags.Negative, async () =>
             {
                 using HarborDockGitFixture git = await HarborDockGitFixture.CreateAsync().ConfigureAwait(false);
                 StubCaptainBehavior behavior = new StubCaptainBehavior
@@ -125,7 +125,7 @@ namespace Test.Shared.Suites.Services
                 Mission done = await WaitForSettledAsync(s, mission.Id).ConfigureAwait(false);
                 AssertEqual(MissionStatusEnum.Failed, done.Status);
                 AssertFalse(String.IsNullOrWhiteSpace(done.FailureReason), "the failure says why");
-                AssertEqual(1, behavior.MissionLaunches, "a crash is not relaunched");
+                AssertEqual(2, behavior.MissionLaunches, "an unclassified exit with no side effects resumes once, then fails");
                 await WaitForCaptainIdleAsync(s, captain.Id).ConfigureAwait(false);
             }));
 

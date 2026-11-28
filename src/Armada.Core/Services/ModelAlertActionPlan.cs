@@ -31,6 +31,11 @@ namespace Armada.Core.Services
         public List<Captain> ProfileCaptains { get; set; } = new List<Captain>();
 
         /// <summary>
+        /// The alert's model profile when it was read (TierSuggestion alerts, RS-8.5), else null.
+        /// </summary>
+        public ModelProfile? Profile { get; set; } = null;
+
+        /// <summary>
         /// The suggested actions and whether each is available.
         /// </summary>
         public List<ModelAlertSuggestedAction> Actions { get; set; } = new List<ModelAlertSuggestedAction>();

@@ -6,16 +6,24 @@ namespace Armada.Core.Services
     using Armada.Core.Models;
     using PolyPrompt.Auth;
     using PolyPrompt.Clients;
+    using PolyPrompt.Models;
     using PolyPrompt.Options;
     using SyslogLogging;
 
     /// <summary>
-    /// Builds a PolyPrompt completion or embedding client for a configured <see cref="ModelEndpoint"/>. Maps the
+    /// Builds a PolyPrompt provider client for a configured <see cref="ModelEndpoint"/>. Maps the
     /// endpoint's provider to the concrete PolyPrompt client, applies the base URL, API key, model, and
     /// timeout, and enforces which providers can serve which kinds of model.
     /// </summary>
     public static class ModelEndpointClientFactory
     {
+        #region Private-Members
+
+        private const string DefaultOpenAiEndpoint = "https://api.openai.com";
+        private const string DefaultOllamaEndpoint = "http://localhost:11434";
+
+        #endregion
+
         #region Public-Methods
 
         /// <summary>
@@ -48,15 +56,17 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Build the PolyPrompt client that matches the endpoint's kind: a completion client for Inference
-        /// endpoints, an embedding client for Embedding endpoints. Use this when only the members shared by
-        /// every client (connectivity probe, timeout, disposal) are needed. The caller owns the returned client
-        /// and must dispose it.
+        /// Build the PolyPrompt client that matches the endpoint's kind, configured for inference on Inference
+        /// endpoints and for embeddings on Embedding endpoints. Use this when only the members shared by every
+        /// client (connectivity probe, timeout, disposal) are needed. The caller owns the returned client and
+        /// must dispose it.
         /// </summary>
         /// <param name="endpoint">Model endpoint.</param>
         /// <param name="logging">Logging module.</param>
         /// <returns>A configured client.</returns>
-        public static ClientBase Create(ModelEndpoint endpoint, LoggingModule logging)
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint"/> or <paramref name="logging"/> is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the provider does not support the endpoint's kind or its configuration is incomplete.</exception>
+        public static ProviderClientBase Create(ModelEndpoint endpoint, LoggingModule logging)
         {
             if (endpoint == null) throw new ArgumentNullException(nameof(endpoint));
             if (endpoint.Kind == ModelEndpointKindEnum.Embedding) return CreateEmbedding(endpoint, logging);
@@ -64,7 +74,7 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Build a PolyPrompt completion (chat / tool-chat) client for the endpoint. The caller owns the
+        /// Build a PolyPrompt client configured for chat and tool calling on the endpoint. The caller owns the
         /// returned client and must dispose it. With <paramref name="usageSink"/> the client's transport also
         /// reports allowlisted rate-limit response headers (passive capture on existing inference calls;
         /// nothing extra is ever requested), on every authentication path including the provider default.
@@ -72,10 +82,10 @@ namespace Armada.Core.Services
         /// <param name="endpoint">Model endpoint.</param>
         /// <param name="logging">Logging module.</param>
         /// <param name="usageSink">Receives rate-limit header observations, or null (the default) for no capture.</param>
-        /// <returns>A configured completion client.</returns>
+        /// <returns>A configured client.</returns>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint"/> or <paramref name="logging"/> is null.</exception>
         /// <exception cref="InvalidOperationException">Thrown when the provider does not support inference or its configuration is incomplete.</exception>
-        public static CompletionClientBase CreateCompletion(ModelEndpoint endpoint, LoggingModule logging, Action<UsageHeaderObservation>? usageSink = null)
+        public static ProviderClientBase CreateCompletion(ModelEndpoint endpoint, LoggingModule logging, Action<UsageHeaderObservation>? usageSink = null)
         {
             if (endpoint == null) throw new ArgumentNullException(nameof(endpoint));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
@@ -83,68 +93,27 @@ namespace Armada.Core.Services
             string? reason = UnsupportedReason(endpoint.Provider, ModelEndpointKindEnum.Inference);
             if (reason != null) throw new InvalidOperationException(reason);
 
-            string baseUrl = endpoint.BaseUrl ?? String.Empty;
-            string apiKey = ModelEndpointAuth.ProviderSecret(endpoint);
-            HttpClient? http = ModelEndpointAuth.CreateHttpClient(endpoint, usageSink);
-
-            CompletionClientBase client;
-            switch (endpoint.Provider)
-            {
-                case ModelProviderEnum.OllamaCloud:
-                    ModelEndpointAuth.Validate(endpoint);
-                    client = new OllamaCloudCompletionClient(endpoint.ApiKey!, logging, http);
-                    break;
-                case ModelProviderEnum.XAI:
-                    ModelEndpointAuth.Validate(endpoint);
-                    client = new XAiCompletionClient(endpoint.ApiKey!, (String.IsNullOrWhiteSpace(baseUrl) ? "https://api.x.ai" : baseUrl), logging, http);
-                    break;
-                case ModelProviderEnum.Ollama:
-                    client = new OllamaCompletionClient(baseUrl, apiKey, logging, http);
-                    break;
-                case ModelProviderEnum.OpenAI:
-                case ModelProviderEnum.OpenAICompatible:
-                    client = new OpenAiCompletionClient(baseUrl, apiKey, logging, http);
-                    break;
-                case ModelProviderEnum.Anthropic:
-                    client = new AnthropicCompletionClient(baseUrl, apiKey, logging, http);
-                    break;
-                case ModelProviderEnum.Gemini:
-                    client = new GeminiCompletionClient(baseUrl, apiKey, logging, http);
-                    break;
-                case ModelProviderEnum.AzureOpenAI:
-                    RequireAzure(endpoint, baseUrl, apiKey);
-                    client = new AzureOpenAiCompletionClient(baseUrl, endpoint.Model!, apiKey, endpoint.ApiVersion, logging, http);
-                    break;
-                case ModelProviderEnum.VertexAI:
-                    client = new VertexAiCompletionClient(endpoint.Project!, endpoint.Region!, VertexCredential(endpoint, apiKey), EndpointOverride(baseUrl), logging, http);
-                    break;
-                case ModelProviderEnum.Bedrock:
-                    client = new BedrockCompletionClient(BedrockCredential(endpoint, apiKey), endpoint.Region!, EndpointOverride(baseUrl), logging, http);
-                    break;
-                default:
-                    throw new InvalidOperationException("Unsupported provider: " + endpoint.Provider);
-            }
-
-            // Azure OpenAI derives its model from the deployment name at construction; do not overwrite it.
-            if (endpoint.Provider != ModelProviderEnum.AzureOpenAI && !String.IsNullOrWhiteSpace(endpoint.Model))
-                client.Model = endpoint.Model;
-            client.TimeoutMs = endpoint.TimeoutMs;
+            ProviderClientBase client = Build(endpoint, logging, ModelEndpointAuth.CreateHttpClient(endpoint, usageSink), false);
+            CompletionOptions? defaults = client.Defaults.Completion;
+            if (defaults != null && !String.IsNullOrWhiteSpace(endpoint.Model)) defaults.Model = endpoint.Model;
 
             // Ollama otherwise runs at the model's default window and drops the oldest history without saying so.
             int? contextLength = endpoint.InferenceOptions.ContextLength;
-            if (contextLength.HasValue && client.Defaults is OllamaCompletionOptions ollamaDefaults)
+            if (contextLength.HasValue && defaults is OllamaCompletionOptions ollamaDefaults)
                 ollamaDefaults.ContextLength = contextLength;
             return client;
         }
 
         /// <summary>
-        /// Build a PolyPrompt embedding client for the endpoint. The caller owns the returned client and must
-        /// dispose it.
+        /// Build a PolyPrompt client configured for embeddings on the endpoint. The caller owns the returned
+        /// client and must dispose it.
         /// </summary>
         /// <param name="endpoint">Model endpoint.</param>
         /// <param name="logging">Logging module.</param>
-        /// <returns>A configured embedding client.</returns>
-        public static EmbeddingClientBase CreateEmbedding(ModelEndpoint endpoint, LoggingModule logging)
+        /// <returns>A configured client.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint"/> or <paramref name="logging"/> is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the provider does not support embeddings or its configuration is incomplete.</exception>
+        public static ProviderClientBase CreateEmbedding(ModelEndpoint endpoint, LoggingModule logging)
         {
             if (endpoint == null) throw new ArgumentNullException(nameof(endpoint));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
@@ -152,58 +121,86 @@ namespace Armada.Core.Services
             string? reason = UnsupportedReason(endpoint.Provider, ModelEndpointKindEnum.Embedding);
             if (reason != null) throw new InvalidOperationException(reason);
 
-            string baseUrl = endpoint.BaseUrl ?? String.Empty;
-            string apiKey = ModelEndpointAuth.ProviderSecret(endpoint);
-            HttpClient? http = ModelEndpointAuth.CreateHttpClient(endpoint);
-
-            EmbeddingClientBase client;
-            switch (endpoint.Provider)
-            {
-                case ModelProviderEnum.OllamaCloud:
-                    ModelEndpointAuth.Validate(endpoint);
-                    client = new OllamaCloudEmbeddingClient(endpoint.ApiKey!, logging, http);
-                    break;
-                case ModelProviderEnum.XAI:
-                    ModelEndpointAuth.Validate(endpoint);
-                    client = new XAiEmbeddingClient(endpoint.ApiKey!, (String.IsNullOrWhiteSpace(baseUrl) ? "https://api.x.ai" : baseUrl), logging, http);
-                    break;
-                case ModelProviderEnum.Ollama:
-                    client = new OllamaEmbeddingClient(baseUrl, apiKey, logging, http);
-                    break;
-                case ModelProviderEnum.OpenAI:
-                case ModelProviderEnum.OpenAICompatible:
-                    client = new OpenAiEmbeddingClient(baseUrl, apiKey, logging, http);
-                    break;
-                case ModelProviderEnum.Gemini:
-                    client = new GeminiEmbeddingClient(baseUrl, apiKey, logging, http);
-                    break;
-                case ModelProviderEnum.VoyageAI:
-                    client = new VoyageAiEmbeddingClient(baseUrl, apiKey, logging, http);
-                    break;
-                case ModelProviderEnum.AzureOpenAI:
-                    RequireAzure(endpoint, baseUrl, apiKey);
-                    client = new AzureOpenAiEmbeddingClient(baseUrl, endpoint.Model!, apiKey, endpoint.ApiVersion, logging, http);
-                    break;
-                case ModelProviderEnum.VertexAI:
-                    client = new VertexAiEmbeddingClient(endpoint.Project!, endpoint.Region!, VertexCredential(endpoint, apiKey), EndpointOverride(baseUrl), logging, http);
-                    break;
-                case ModelProviderEnum.Bedrock:
-                    client = new BedrockEmbeddingClient(BedrockCredential(endpoint, apiKey), endpoint.Region!, EndpointOverride(baseUrl), logging, http);
-                    break;
-                default:
-                    throw new InvalidOperationException("Unsupported provider: " + endpoint.Provider);
-            }
-
-            // Azure OpenAI derives its model from the deployment name at construction; do not overwrite it.
-            if (endpoint.Provider != ModelProviderEnum.AzureOpenAI && !String.IsNullOrWhiteSpace(endpoint.Model))
-                client.Model = endpoint.Model;
-            client.TimeoutMs = endpoint.TimeoutMs;
+            ProviderClientBase client = Build(endpoint, logging, ModelEndpointAuth.CreateHttpClient(endpoint), true);
+            EmbeddingOptions? defaults = client.Defaults.Embedding;
+            if (defaults != null && !String.IsNullOrWhiteSpace(endpoint.Model)) defaults.Model = endpoint.Model;
             return client;
         }
 
         #endregion
 
         #region Private-Methods
+
+        private static ProviderClientBase Build(ModelEndpoint endpoint, LoggingModule logging, HttpClient? http, bool embedding)
+        {
+            string baseUrl = endpoint.BaseUrl ?? String.Empty;
+            string apiKey = ModelEndpointAuth.ProviderSecret(endpoint);
+            ClientOptions options = new ClientOptions { Logging = logging, HttpClient = http, TimeoutMs = endpoint.TimeoutMs };
+
+            switch (endpoint.Provider)
+            {
+                case ModelProviderEnum.OllamaCloud:
+                    ModelEndpointAuth.Validate(endpoint);
+                    return new OllamaCloudClient(endpoint.ApiKey!, EndpointOverride(baseUrl), options);
+                case ModelProviderEnum.XAI:
+                    ModelEndpointAuth.Validate(endpoint);
+                    string xaiEndpoint = String.IsNullOrWhiteSpace(baseUrl) ? "https://api.x.ai" : baseUrl;
+                    // PolyPrompt 4.0 dropped xAI embeddings; xAI's /v1/embeddings keeps the OpenAI shape the 3.x client sent.
+                    if (embedding) return new OpenAiCompatibleClient(xaiEndpoint, endpoint.ApiKey, options);
+                    return new XAiClient(endpoint.ApiKey!, xaiEndpoint, options);
+                case ModelProviderEnum.Ollama:
+                    return new OllamaClient(String.IsNullOrWhiteSpace(baseUrl) ? DefaultOllamaEndpoint : baseUrl, NullIfEmpty(apiKey), options);
+                case ModelProviderEnum.OpenAI:
+                case ModelProviderEnum.OpenAICompatible:
+                    // Chat Completions for both, as with PolyPrompt 3.x. PolyPrompt's OpenAiClient speaks the Responses API instead.
+                    return new OpenAiCompatibleClient(String.IsNullOrWhiteSpace(baseUrl) ? DefaultOpenAiEndpoint : baseUrl, NullIfEmpty(apiKey), options);
+                case ModelProviderEnum.Anthropic:
+                    return new AnthropicClient(KeyOrPlaceholder(endpoint, apiKey), EndpointOverride(baseUrl), options);
+                case ModelProviderEnum.Gemini:
+                    return new GeminiClient(KeyOrPlaceholder(endpoint, apiKey), EndpointOverride(baseUrl), options);
+                case ModelProviderEnum.VoyageAI:
+                    return new VoyageAiClient(KeyOrPlaceholder(endpoint, apiKey), EndpointOverride(baseUrl), options);
+                case ModelProviderEnum.AzureOpenAI:
+                    RequireAzure(endpoint, baseUrl, apiKey);
+                    return new OpenAiCompatibleClient(AzureV1Endpoint(baseUrl), NullIfEmpty(apiKey), new OpenAiCompatibleClientOptions
+                    {
+                        Logging = logging,
+                        HttpClient = http,
+                        TimeoutMs = endpoint.TimeoutMs,
+                        AuthPlacement = AuthPlacement.Header("api-key")
+                    });
+                case ModelProviderEnum.VertexAI:
+                    return new VertexAiClient(endpoint.Project!, endpoint.Region!, VertexCredential(endpoint, apiKey), EndpointOverride(baseUrl), options);
+                case ModelProviderEnum.Bedrock:
+                    return new BedrockClient(endpoint.Region!, BedrockCredential(endpoint, apiKey), EndpointOverride(baseUrl), options);
+                default:
+                    throw new InvalidOperationException("Unsupported provider: " + endpoint.Provider);
+            }
+        }
+
+        // Azure OpenAI's v1 API takes the deployment name as the model and needs no api-version. Chat Completions keeps
+        // the request shape the 3.x deployment route used.
+        private static string AzureV1Endpoint(string baseUrl)
+        {
+            string trimmed = baseUrl.Trim().TrimEnd('/');
+            if (trimmed.EndsWith("/openai/v1", StringComparison.OrdinalIgnoreCase)) return trimmed;
+            if (trimmed.EndsWith("/openai", StringComparison.OrdinalIgnoreCase)) return trimmed + "/v1";
+            return trimmed + "/openai/v1";
+        }
+
+        // Providers whose PolyPrompt client requires a key at construction get a placeholder when Armada authenticates
+        // the request itself (Bearer, Basic, header or query authentication); ModelEndpointAuthHandler strips it.
+        private static string KeyOrPlaceholder(ModelEndpoint endpoint, string apiKey)
+        {
+            if (!String.IsNullOrEmpty(apiKey)) return apiKey;
+            if (endpoint.AuthType != ModelEndpointAuthTypeEnum.ProviderDefault) return ModelEndpointAuthHandler.ExternalAuthPlaceholder;
+            throw new InvalidOperationException(endpoint.Provider + " requires an API key.");
+        }
+
+        private static string? NullIfEmpty(string value)
+        {
+            return String.IsNullOrEmpty(value) ? null : value;
+        }
 
         private static void RequireAzure(ModelEndpoint endpoint, string baseUrl, string apiKey)
         {

@@ -148,7 +148,7 @@ namespace Test.Shared.Suites.Services
             {
                 RuntimeProviderError? limit = RuntimeProviderErrorParser.TryParseCodexJsonLine("{\"type\":\"error\",\"message\":\"exceeded retry limit, last status: 429 Too Many Requests\"}");
                 AssertEqual(429, limit!.HttpStatusCode ?? 0);
-                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, limit));
+                AssertEqual(RuntimeFailureKindEnum.Transient, RuntimeFailureClassifier.Classify(1, limit));
                 RuntimeProviderError? failed = RuntimeProviderErrorParser.TryParseCodexJsonLine("{\"type\":\"turn.failed\",\"error\":{\"message\":\"model not reachable\"}}");
                 AssertEqual("codex turn failed: model not reachable", failed!.Reason);
                 AssertNull(failed.HttpStatusCode);

@@ -30,6 +30,19 @@ namespace Armada.Core.Database.Interfaces
         Task<bool> UpdateHealthAsync(ModelEndpoint endpoint, DateTime expectedLastUpdateUtc, CancellationToken token = default);
 
         /// <summary>
+        /// Write only the discovered context window of an endpoint (RS-7.8). Configuration, health and
+        /// <see cref="ModelEndpoint.LastUpdateUtc"/> are left unchanged, so a concurrent edit or health write is not lost.
+        /// </summary>
+        /// <param name="id">Endpoint identifier.</param>
+        /// <param name="contextLength">Discovered window in tokens.</param>
+        /// <param name="source">Where it was read.</param>
+        /// <param name="discoveredUtc">When it was read.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when one row changed.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when id or source is null or empty.</exception>
+        Task<bool> UpdateContextDiscoveryAsync(string id, int contextLength, string source, DateTime discoveredUtc, CancellationToken token = default);
+
+        /// <summary>
         /// Reads a model endpoint by its identifier.
         /// </summary>
         Task<ModelEndpoint?> ReadAsync(string id, CancellationToken token = default);

@@ -343,20 +343,20 @@ namespace Test.Shared.Suites.Services
 
             cases.Add(CaseAsync("failure_classifier_maps_steps_to_kinds", "The merge queue failure classifier maps each failing step to the kind that describes it", TestTags.Positive, async () =>
             {
-                AssertEqual(MissionFailureKindEnum.LandingConflict, MergeQueueFailureClassifier.ClassifyMerge(2));
-                AssertEqual(MissionFailureKindEnum.Infra, MergeQueueFailureClassifier.ClassifyMerge(0), "a merge that failed without conflicts is not a conflict");
-                AssertEqual(MissionFailureKindEnum.TestFail, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Verification,
+                AssertEqual(MissionFailureKindEnum.LandingConflict, FailureKindMapper.FromMergeResult(2));
+                AssertEqual(MissionFailureKindEnum.Infra, FailureKindMapper.FromMergeResult(0), "a merge that failed without conflicts is not a conflict");
+                AssertEqual(MissionFailureKindEnum.TestFail, FailureKindMapper.FromMergeQueueException(MergeQueueFailureStepEnum.Verification,
                     new LandingVerificationException("failed", "Failed", "exit 3", 3, "abc", false)));
-                AssertEqual(MissionFailureKindEnum.Timeout, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Verification,
+                AssertEqual(MissionFailureKindEnum.Timeout, FailureKindMapper.FromMergeQueueException(MergeQueueFailureStepEnum.Verification,
                     new LandingVerificationException("timed out", "TimedOut", "sleep 999", null, "abc", false)));
-                AssertEqual(MissionFailureKindEnum.Timeout, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Verification, new TimeoutException("budget")));
-                AssertEqual(MissionFailureKindEnum.Infra, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Verification,
+                AssertEqual(MissionFailureKindEnum.Timeout, FailureKindMapper.FromMergeQueueException(MergeQueueFailureStepEnum.Verification, new TimeoutException("budget")));
+                AssertEqual(MissionFailureKindEnum.Infra, FailureKindMapper.FromMergeQueueException(MergeQueueFailureStepEnum.Verification,
                     new LandingVerificationException("mutated", "Failed", "git reset", 0, "abc", true)));
-                AssertEqual(MissionFailureKindEnum.Infra, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Verification, new InvalidOperationException("could not start /bin/sh")));
-                AssertEqual(MissionFailureKindEnum.Infra, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Publication, new InvalidOperationException("push rejected")));
-                AssertEqual(MissionFailureKindEnum.Infra, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Preparation, new TimeoutException("fetch timed out")),
+                AssertEqual(MissionFailureKindEnum.Infra, FailureKindMapper.FromMergeQueueException(MergeQueueFailureStepEnum.Verification, new InvalidOperationException("could not start /bin/sh")));
+                AssertEqual(MissionFailureKindEnum.Infra, FailureKindMapper.FromMergeQueueException(MergeQueueFailureStepEnum.Publication, new InvalidOperationException("push rejected")));
+                AssertEqual(MissionFailureKindEnum.Infra, FailureKindMapper.FromMergeQueueException(MergeQueueFailureStepEnum.Preparation, new TimeoutException("fetch timed out")),
                     "a timeout outside verification is an environment failure");
-                AssertEqual(MissionFailureKindEnum.LandingConflict, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Preparation,
+                AssertEqual(MissionFailureKindEnum.LandingConflict, FailureKindMapper.FromMergeQueueException(MergeQueueFailureStepEnum.Preparation,
                     new GitMergeConflictException("conflict", new[] { "a.txt" })));
                 await Task.CompletedTask.ConfigureAwait(false);
             }));
@@ -519,6 +519,169 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(MergeStatusEnum.Cancelled, (await testDb.Driver.MergeEntries.ReadAsync(entry.Id))!.Status);
             }));
 
+            cases.Add(CaseAsync("push_not_fast_forward_requeues_from_fresh_fetch", "A push refused because the target moved is requeued, integrated again from a fresh fetch, and lands (RS-9.1)", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                repos.PushBranch("feature/raced", "raced.txt", "raced\n");
+                MergeQueueService queue = CreateQueue(testDb.Driver);
+                Mission mission = await CreateMissionAsync(testDb.Driver, repos);
+                MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, "feature/raced", mission.Id, "check");
+                int checks = 0;
+                // Another writer lands on main while the first check runs, so the first push is not a fast-forward.
+                queue.LocalVerificationCommands = new FakeHostCommandExecutor { Handler = _ =>
+                {
+                    if (++checks == 1) repos.AdvanceMain("other.txt", "other writer\n");
+                    return new HostCommandResult { ExitCode = 0 };
+                } };
+
+                await queue.ProcessQueueAsync();
+
+                AssertEqual(MergeStatusEnum.Landed, (await queue.GetAsync(entry.Id))!.Status, "the entry lands on the second attempt");
+                AssertEqual(2, checks, "the requeued entry is verified again against the moved target");
+                AssertTrue(repos.OriginHasFile("main", "raced.txt") && repos.OriginHasFile("main", "other.txt"), "both changes are on main");
+                AssertEqual(MissionStatusEnum.Complete, (await testDb.Driver.Missions.ReadAsync(mission.Id))!.Status);
+                List<ArmadaEvent> events = await testDb.Driver.Events.EnumerateRecentAsync(200);
+                AssertEqual(1, events.FindAll(e => e.EventType == MergeQueueService.RequeuedEventType && e.EntityId == entry.Id).Count, "one requeue recorded");
+            }));
+
+            cases.Add(CaseAsync("push_not_fast_forward_fails_after_requeue_limit", "With MergeQueueRequeueLimit 0 a non-fast-forward push fails the entry as Infra without a retry", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                repos.PushBranch("feature/raced", "raced.txt", "raced\n");
+                MergeQueueService queue = CreateQueue(testDb.Driver, s => s.MergeQueueRequeueLimit = 0);
+                Mission mission = await CreateMissionAsync(testDb.Driver, repos);
+                MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, "feature/raced", mission.Id, "check");
+                int checks = 0;
+                queue.LocalVerificationCommands = new FakeHostCommandExecutor { Handler = _ =>
+                {
+                    if (++checks == 1) repos.AdvanceMain("other.txt", "other writer\n");
+                    return new HostCommandResult { ExitCode = 0 };
+                } };
+
+                await queue.ProcessQueueAsync();
+
+                MergeEntry failed = (await queue.GetAsync(entry.Id))!;
+                AssertEqual(MergeStatusEnum.Failed, failed.Status);
+                AssertTrue(failed.TestOutput!.Contains("mergeQueueRequeueLimit"), "the failure names the limit");
+                AssertEqual(1, checks, "no second attempt");
+                Mission stored = (await testDb.Driver.Missions.ReadAsync(mission.Id))!;
+                AssertEqual(MissionStatusEnum.LandingFailed, stored.Status);
+                AssertEqual(MissionFailureKindEnum.Infra, stored.FailureKind);
+            }));
+
+            cases.Add(CaseAsync("push_rejected_by_remote_is_not_requeued", "A push the remote refuses while the target did not move fails at once, without a requeue", TestTags.Negative, async () =>
+            {
+                if (OperatingSystem.IsWindows()) return;
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                repos.PushBranch("feature/refused", "refused.txt", "refused\n");
+                string hook = Path.Combine(repos.Origin, "hooks", "pre-receive");
+                File.WriteAllText(hook, "#!/bin/sh\nexit 1\n");
+                File.SetUnixFileMode(hook, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                MergeQueueService queue = CreateQueue(testDb.Driver);
+                MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, "feature/refused", null, null);
+
+                await queue.ProcessQueueAsync();
+
+                MergeEntry failed = (await queue.GetAsync(entry.Id))!;
+                AssertEqual(MergeStatusEnum.Failed, failed.Status);
+                AssertTrue(failed.TestOutput!.Contains("remote refused"), "classified as a refusal, not a moved target");
+                List<ArmadaEvent> events = await testDb.Driver.Events.EnumerateRecentAsync(200);
+                AssertEqual(0, events.FindAll(e => e.EventType == MergeQueueService.RequeuedEventType).Count, "no requeue");
+            }));
+
+            cases.Add(CaseAsync("group_fetches_once_per_pass", "Three entries of one vessel and target branch land with one fetch (RS-9.3)", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                repos.PushBranch("feature/a", "a.txt", "a\n");
+                repos.PushBranch("feature/b", "b.txt", "b\n");
+                repos.PushBranch("feature/c", "c.txt", "c\n");
+                MergeQueueService queue = CreateQueue(testDb.Driver);
+                MergeEntry a = await EnqueueAsync(queue, testDb.Driver, repos, "feature/a", null, null, 1);
+                MergeEntry b = await EnqueueAsync(queue, testDb.Driver, repos, "feature/b", null, null, 2);
+                MergeEntry c = await EnqueueAsync(queue, testDb.Driver, repos, "feature/c", null, null, 3);
+
+                await queue.ProcessQueueAsync();
+
+                foreach (MergeEntry entry in new[] { a, b, c })
+                    AssertEqual(MergeStatusEnum.Landed, (await queue.GetAsync(entry.Id))!.Status, entry.BranchName);
+                AssertTrue(repos.OriginHasFile("main", "a.txt") && repos.OriginHasFile("main", "b.txt") && repos.OriginHasFile("main", "c.txt"), "all three on main");
+                AssertEqual(1L, queue.FetchCount, "one fetch for the group");
+            }));
+
+            cases.Add(CaseAsync("batched_landing_verifies_once", "With MergeQueueBatchSize 3, three entries merge into one worktree, verify once, and land with one push (RS-9.4)", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                repos.PushBranch("feature/a", "a.txt", "a\n");
+                repos.PushBranch("feature/b", "b.txt", "b\n");
+                repos.PushBranch("feature/c", "c.txt", "c\n");
+                MergeQueueService queue = CreateQueue(testDb.Driver, s => s.MergeQueueBatchSize = 3);
+                List<Mission> missions = new List<Mission>();
+                List<MergeEntry> entries = new List<MergeEntry>();
+                int priority = 1;
+                foreach (string branch in new[] { "feature/a", "feature/b", "feature/c" })
+                {
+                    Mission mission = await CreateMissionAsync(testDb.Driver, repos);
+                    missions.Add(mission);
+                    entries.Add(await EnqueueAsync(queue, testDb.Driver, repos, branch, mission.Id, "check", priority++));
+                }
+                int checks = 0;
+                queue.LocalVerificationCommands = new FakeHostCommandExecutor { Handler = _ =>
+                {
+                    checks++;
+                    return new HostCommandResult { ExitCode = 0 };
+                } };
+
+                await queue.ProcessQueueAsync();
+
+                foreach (MergeEntry entry in entries)
+                    AssertEqual(MergeStatusEnum.Landed, (await queue.GetAsync(entry.Id))!.Status, entry.BranchName);
+                AssertEqual(1, checks, "one verification for the batch");
+                string head = repos.OriginHead("main");
+                foreach (Mission mission in missions)
+                {
+                    Mission stored = (await testDb.Driver.Missions.ReadAsync(mission.Id))!;
+                    AssertEqual(MissionStatusEnum.Complete, stored.Status);
+                    AssertEqual(head, stored.CommitHash, "each mission records the published batch commit");
+                }
+            }));
+
+            cases.Add(CaseAsync("batched_landing_bisects_failing_entry", "A batch that fails verification is split until the failing entry fails alone; the others land (RS-9.4)", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                repos.PushBranch("feature/a", "a.txt", "a\n");
+                repos.PushBranch("feature/b", "b.txt", "b\n");
+                repos.PushBranch("feature/bad", "bad.txt", "bad\n");
+                repos.PushBranch("feature/d", "d.txt", "d\n");
+                MergeQueueService queue = CreateQueue(testDb.Driver, s => s.MergeQueueBatchSize = 4);
+                List<MergeEntry> entries = new List<MergeEntry>();
+                int priority = 1;
+                foreach (string branch in new[] { "feature/a", "feature/b", "feature/bad", "feature/d" })
+                    entries.Add(await EnqueueAsync(queue, testDb.Driver, repos, branch, null, "check", priority++));
+                int checks = 0;
+                queue.LocalVerificationCommands = new FakeHostCommandExecutor { Handler = request =>
+                {
+                    checks++;
+                    bool bad = File.Exists(Path.Combine(request.WorkingDirectory, "bad.txt"));
+                    return new HostCommandResult { ExitCode = bad ? 1 : 0, StandardError = bad ? "bad.txt is not allowed" : "" };
+                } };
+
+                await queue.ProcessQueueAsync();
+
+                AssertEqual(MergeStatusEnum.Landed, (await queue.GetAsync(entries[0].Id))!.Status, "a");
+                AssertEqual(MergeStatusEnum.Landed, (await queue.GetAsync(entries[1].Id))!.Status, "b");
+                AssertEqual(MergeStatusEnum.Failed, (await queue.GetAsync(entries[2].Id))!.Status, "bad");
+                AssertEqual(MergeStatusEnum.Landed, (await queue.GetAsync(entries[3].Id))!.Status, "d");
+                AssertFalse(repos.OriginHasFile("main", "bad.txt"), "the failing change is not published");
+                AssertTrue(repos.OriginHasFile("main", "a.txt") && repos.OriginHasFile("main", "d.txt"), "the others are");
+                AssertTrue(checks <= 5, "bisecting four entries needs at most five checks, got " + checks);
+            }));
+
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Merge Queue Processing", cases: cases);
         }
 
@@ -535,7 +698,7 @@ namespace Test.Shared.Suites.Services
             return System.Text.Json.JsonSerializer.Deserialize<MergeQueueFailure>(failed.Payload!)!;
         }
 
-        private static MergeQueueService CreateQueue(DatabaseDriver db)
+        private static MergeQueueService CreateQueue(DatabaseDriver db, Action<ArmadaSettings>? configure = null)
         {
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;
@@ -543,6 +706,7 @@ namespace Test.Shared.Suites.Services
             settings.DocksDirectory = TestTemp.NewDirectory("mq_docks");
             settings.ReposDirectory = TestTemp.NewDirectory("mq_repos");
             settings.MergeQueueTestCommand = null;
+            configure?.Invoke(settings);
             return new MergeQueueService(logging, db, settings, new GitService(logging));
         }
 

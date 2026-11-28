@@ -134,6 +134,14 @@ namespace Armada.Core.Models
         public CaptainTierEnum? Tier { get; set; } = null;
 
         /// <summary>
+        /// The tier an administrator set on this captain's model profile (RS-8.5), filled by routing from the profile
+        /// before tier decisions; null when the profile sets none or was not read. Not stored and not serialized; an
+        /// explicit <see cref="Tier"/> always wins over it.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public CaptainTierEnum? ProfileTier { get; set; } = null;
+
+        /// <summary>
         /// Runtime-specific configuration serialized as JSON.
         /// Use this for settings that should not be promoted into generic captain fields.
         /// </summary>
@@ -261,6 +269,12 @@ namespace Armada.Core.Models
         /// Operating system process identifier for the current exclusive session. Mission processes are recorded on each mission.
         /// </summary>
         public int? ProcessId { get; set; } = null;
+
+        /// <summary>
+        /// Whether a Harbor running this captain's current work is missing a capability flag this Admiral expects, so it runs
+        /// 1.4.0 behavior for those features and an update is recommended. Filled in on captain reads; not stored.
+        /// </summary>
+        public bool HarborUpdateRecommended { get; set; } = false;
 
         /// <summary>
         /// Number of auto-recovery attempts for the current mission.

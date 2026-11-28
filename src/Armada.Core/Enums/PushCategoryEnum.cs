@@ -62,6 +62,18 @@ namespace Armada.Core.Enums
         /// A model scorecard alert was raised or reopened (sent only when ModelAlerts.PushEnabled is true; default false).
         /// </summary>
         [EnumMember(Value = "ModelAlert")]
-        ModelAlert
+        ModelAlert,
+
+        /// <summary>
+        /// A mission moved to another captain up its persona escalation ladder.
+        /// </summary>
+        [EnumMember(Value = "MissionEscalated")]
+        MissionEscalated,
+
+        /// <summary>
+        /// A failed mission used up its autonomous rescue budget and needs a human.
+        /// </summary>
+        [EnumMember(Value = "RecoveryExhausted")]
+        RecoveryExhausted
     }
 }

@@ -14,7 +14,9 @@ import { spacing } from '../theme/typography';
  */
 export function PreferencesScreen() {
   const { t, catalogSource } = useLocale();
-  const version = Constants.expoConfig?.version ?? '';
+  // extra.releaseVersion carries any pre-release label; version is the numeric store version.
+  const releaseVersion = Constants.expoConfig?.extra?.releaseVersion;
+  const version = typeof releaseVersion === 'string' && releaseVersion ? releaseVersion : Constants.expoConfig?.version ?? '';
   return (
     <Screen testID="preferences">
       <Section title={t('Theme')}>

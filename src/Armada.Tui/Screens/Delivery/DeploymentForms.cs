@@ -133,8 +133,8 @@ namespace Armada.Tui.Screens.Delivery
                     AutoExecute = autoExecute.Value
                 };
                 saved = existing != null
-                    ? await context.Client.UpdateDeploymentAsync(existing.Id, payload, ct).ConfigureAwait(false)
-                    : await context.Client.CreateDeploymentAsync(payload, ct).ConfigureAwait(false);
+                    ? await context.Client.Deployments.UpdateAsync(existing.Id, payload, ct).ConfigureAwait(false)
+                    : await context.Client.Deployments.CreateAsync(payload, ct).ConfigureAwait(false);
                 return null;
             }, () =>
             {

@@ -8,8 +8,8 @@ One rule sits above everything else: **version numbers change only on the mainta
 agent preparing a release does not bump `Version` in `src/Directory.Build.props`, `src/Armada.Helm/Armada.Helm.csproj`,
 `ProductVersion` in `src/Armada.Core/Constants.cs`, the dashboard's `package.json` and `package-lock.json`, the build
 scripts, the image tags in the `docker/` compose files, the Postman collection, or the CHANGELOG heading on its own. It may propose a bump and explain why, then wait
-for approval. The rules are in `VERSIONING.md` in the shared requirements. The development tree is at `1.4.0`; release
-candidates (`1.4.0-rc.N`) and any other pre-release label are applied only on the maintainer's instruction.
+for approval. The rules are in `VERSIONING.md` in the shared requirements. The development tree is at `1.5.0`; release
+candidates (`1.5.0-rc.N`) and any other pre-release label are applied only on the maintainer's instruction.
 
 ## 1. Decide what is in the release
 
@@ -24,8 +24,8 @@ If the release changes the database schema, confirm that the migration is regist
 ## 2. Continuous integration is green
 
 Every push and pull request runs only the quick smoke test, `.github/workflows/ci.yml`: a warning-free Release build
-on Linux, the fast suites (`Models`, `Client`, `Metrics`, `Database` on SQLite, `Runtimes`; about a minute), and the
-dashboard `dist/` drift check. Nothing in the repository runs on a schedule. The full verification is manual: run
+on Linux and the fast suites (`Models`, `Client`, `Metrics`, `Database` on SQLite, `Runtimes`; about a minute).
+Nothing in the repository runs on a schedule. The full verification is manual: run
 `.github/workflows/full.yml` (Actions > full > Run workflow) on the release commit. Every job must be green:
 
 - `dotnet build src/Armada.sln -c Release -warnaserror` on Windows, macOS, and Linux (NuGet vulnerability-audit
@@ -33,8 +33,8 @@ dashboard `dist/` drift check. Nothing in the repository runs on a schedule. The
 - `Test.Automated` for both `net8.0` and `net10.0` on all three operating systems, with results uploaded as
   artifacts.
 - The dashboard: `npm ci`, `npm run build`, and `npm run test:run` in `src/Armada.Dashboard`.
-- The dist drift check, which fails when `src/Armada.Dashboard/dist` does not match a fresh build. The `dist/`
-  folder is committed on purpose, so a forgotten rebuild ships a stale dashboard to anyone installing without Node.
+  The dashboard's `dist/` is build output and is not committed (it is in `.gitignore`); the Docker images, the
+  release workflow and the deploy scripts build it from source, so there is no committed copy to drift.
 - The mobile app: typecheck, lint, Jest, route screens, and the parity manifest.
 - The TUI parity gate: `python3 scripts/tui/generate-parity-manifest.py --check` (the manifest matches the dashboard
   source and has no planned entries).
@@ -61,6 +61,24 @@ scripts/common/run-db-parity-tests.sh --providers sqlite,postgresql   # a subset
 The script also takes `--framework` (default `net10.0`) and `--no-build`. Docker must be running for the server
 providers. On Apple Silicon, SQL Server runs under emulation and can time out; trust the CI run on
 native amd64 over a local one.
+
+## 3a. The reliability gate passes
+
+From 1.5.0 a release that changes routing, recovery, the API runtime or the stage contracts also runs the reliability
+gate, because those are the changes that decide whether an open model can share a pipeline with Opus and GPT-6.1, and
+no unit suite measures that. Start an isolated Admiral and run every reference pipeline against the release commit:
+
+```bash
+benchmarks/start-bench-server.sh --name gate --port 25160 --real-agents --telemetry
+dotnet run --project src/Armada.Gate -- --url http://127.0.0.1:25160
+```
+
+The gate exits 0 only when every measured measure passes. Measures it cannot score from a battery run show as
+`NotMeasured` and name the suite or benchmark that covers them; check that each of those is green in step 2. Attach
+the report from `benchmarks/results/gate-<time>.md` to the release notes, and quote the before and after numbers in
+the CHANGELOG. Keep to the run budget in [benchmarks/README.md](../benchmarks/README.md#acceptance-gate-150): frontier
+models a few runs, open models on a metered service sparingly. The endpoint file with credentials stays in
+`benchmarks/config/gate-endpoints.local.json`, which git ignores.
 
 ## 4. The upgrade test passes
 

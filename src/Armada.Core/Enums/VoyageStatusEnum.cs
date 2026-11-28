@@ -37,6 +37,13 @@ namespace Armada.Core.Enums
         /// Voyage was cancelled.
         /// </summary>
         [EnumMember(Value = "Cancelled")]
-        Cancelled
+        Cancelled,
+
+        /// <summary>
+        /// Being created: the voyage row exists and its missions are being written. None of its missions is admitted
+        /// until it moves to Open. A creation that never finishes is failed by the Admiral's health check.
+        /// </summary>
+        [EnumMember(Value = "Building")]
+        Building
     }
 }

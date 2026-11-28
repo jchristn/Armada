@@ -73,9 +73,9 @@ export function dashboardHubs(): NavHub[] {
       ],
     },
     {
-      key: 'captains', label: 'Captains', icon: 'person', section: 'Build', route: '/captains', tooltip: 'AI coding agents that execute missions, their docks, battery packs and evaluations',
+      key: 'captains', label: 'Captains', icon: 'person', section: 'Build', route: '/captains', tooltip: 'AI coding agents that execute missions, the model profiles they run, their docks, battery packs and evaluations',
       pages: [
-        ...tabs('/captains', 'tab', [['captains', 'Captains', 'person'], ['docks', 'Docks', 'git-branch'], ['battery', 'Battery Packs', 'beaker']]),
+        ...tabs('/captains', 'tab', [['captains', 'Captains', 'person'], ['profiles', 'Model Profiles', 'hubot'], ['reliability', 'Reliability', 'pulse'], ['docks', 'Docks', 'git-branch'], ['battery', 'Battery Packs', 'beaker'], ['battery-runs', 'Battery Runs', 'history']]),
         { label: 'Evaluations', icon: 'checklist', route: '/evaluations', tooltip: 'Model evaluations and their scorecards' },
       ],
     },

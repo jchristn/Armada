@@ -159,7 +159,7 @@ namespace Test.Shared.Suites.Services
                 captains.OnLaunchAgent = (_, _, _) => Task.FromResult(9200);
                 MissionService missions = new MissionService(logging, db, settings, docks, captains, git: git);
                 AdmiralService admiral = new AdmiralService(logging, db, settings, captains, missions, new VoyageService(logging, db), docks);
-                admiral.OnReconcileManualLandings = _ => throw new InvalidOperationException("simulated reconciliation failure");
+                admiral.OnLandingReconciliation = _ => throw new InvalidOperationException("simulated reconciliation failure");
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
                 await CaptainAssignmentFixture.CreateAsync(db, new Captain("dispatch-after-failure")).ConfigureAwait(false);
@@ -194,7 +194,8 @@ namespace Test.Shared.Suites.Services
                 Mission? final = await db.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
                 AssertEqual(MissionStatusEnum.Failed, final!.Status, "the third violation fails closed");
                 AssertEqual(2, final.OutputRepairAttempts);
-                string description = final.Description ?? String.Empty;
+                string description = Armada.Core.Services.MissionNotes.EffectiveDescription(final);
+                AssertFalse((final.Description ?? String.Empty).Contains("## Output contract repair", StringComparison.Ordinal), "the description is never rewritten (RS-3.4)");
                 AssertEqual(1, CountOccurrences(description, "## Output contract repair"), "only the latest repair note is kept");
                 AssertContains("attempt 2 of 2", description);
                 AssertContains("after 2 output-contract repair attempt(s)", final.FailureReason ?? String.Empty);
@@ -305,7 +306,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("5555555555555555555555555555555555555555", finished!.CommitHash);
             }));
 
-            cases.Add(CaseAsync("endpoint_concurrency_cap_is_shared_across_captains", "Captains sharing one endpoint base URL share its MaxConcurrentMissions budget", TestTags.Reliability, async () =>
+            cases.Add(CaseAsync("endpoint_concurrency_cap_is_shared_across_captains", "Captains sharing one endpoint server and model share its MaxConcurrentMissions budget, however the URL is written", TestTags.Reliability, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
                 Harness h = new Harness(testDb, new DirCreatingGitService());
@@ -315,7 +316,7 @@ namespace Test.Shared.Suites.Services
                 ModelEndpoint first = new ModelEndpoint { Name = "gpu-a", BaseUrl = "http://gpu-box:11434/", Model = "qwen" };
                 first.InferenceOptions = new InferenceOptions { MaxConcurrentMissions = 1 };
                 first = await db.ModelEndpoints.CreateAsync(first).ConfigureAwait(false);
-                ModelEndpoint second = new ModelEndpoint { Name = "gpu-b", BaseUrl = "http://GPU-BOX:11434", Model = "llama" };
+                ModelEndpoint second = new ModelEndpoint { Name = "gpu-b", BaseUrl = "http://GPU-BOX:11434/v1", Model = "qwen" };
                 second.InferenceOptions = new InferenceOptions { MaxConcurrentMissions = 1 };
                 second = await db.ModelEndpoints.CreateAsync(second).ConfigureAwait(false);
 
@@ -684,7 +685,8 @@ namespace Test.Shared.Suites.Services
 
                 Mission? repaired = await db.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
                 AssertEqual(1, repaired!.OutputRepairAttempts);
-                AssertContains("Spec Conflict", repaired.Description ?? String.Empty, "the repair note names the required section");
+                AssertContains("Output Contract section at the end of these instructions", Armada.Core.Services.MissionNotes.EffectiveDescription(repaired), "RS-6.11: the repair note points at the contract the instructions state once");
+                AssertContains("Spec Conflict", Armada.Core.Services.StageOutputContract.For(Armada.Core.PersonaCatalog.Judge), "the stated Judge contract names the section");
             }));
 
             cases.Add(CaseAsync("stop_signals_gracefully_then_forces", "Stopping a local agent asks it to exit first and force-kills only one that ignores the request", TestTags.Reliability, async () =>
@@ -829,19 +831,19 @@ namespace Test.Shared.Suites.Services
             {
                 using StageCheckFixture fx = await StageCheckFixture.CreateAsync("exit 3").ConfigureAwait(false);
                 BudgetExecutor executor = new BudgetExecutor();
-                var command = typeof(MissionService).GetMethod("RunStageCommandAsync", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
-                var baseline = typeof(MissionService).GetMethod("FailsOnBaseCommitAsync", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+                System.Reflection.MethodInfo command = typeof(StageCheckRunner).GetMethod("RunStageCommandAsync", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+                System.Reflection.MethodInfo baseline = typeof(StageCheckRunner).GetMethod("FailsOnBaseCommitAsync", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
                 DateTime deadline = DateTime.UtcNow.AddSeconds(2);
-                await ((Task<HostCommandResult>)command.Invoke(fx.Missions, new object[] { executor, false, fx.Repo, "check", deadline, CancellationToken.None })!).ConfigureAwait(false);
-                bool? unknown = await ((Task<bool?>)baseline.Invoke(fx.Missions, new object[] { executor, false, "vessel", fx.Repo, "base", "check", deadline, CancellationToken.None })!).ConfigureAwait(false);
+                await ((Task<HostCommandResult>)command.Invoke(fx.Missions.Context.StageCheckRunner, new object[] { executor, false, fx.Repo, "check", deadline, CancellationToken.None })!).ConfigureAwait(false);
+                bool? unknown = await ((Task<bool?>)baseline.Invoke(fx.Missions.Context.StageCheckRunner, new object[] { executor, false, "vessel", fx.Repo, "base", "check", deadline, CancellationToken.None })!).ConfigureAwait(false);
                 AssertNull(unknown, "baseline timeout is unverified");
                 AssertEqual(2, executor.CheckTimeouts.Count);
                 AssertTrue(executor.CheckTimeouts[1] <= executor.CheckTimeouts[0], "baseline receives only remaining time");
                 executor.Timeout = false;
-                bool? known = await ((Task<bool?>)baseline.Invoke(fx.Missions, new object[] { executor, false, "vessel", fx.Repo, "base", "check", deadline, CancellationToken.None })!).ConfigureAwait(false);
+                bool? known = await ((Task<bool?>)baseline.Invoke(fx.Missions.Context.StageCheckRunner, new object[] { executor, false, "vessel", fx.Repo, "base", "check", deadline, CancellationToken.None })!).ConfigureAwait(false);
                 AssertEqual(false, known, "the timed-out baseline was not cached");
                 int count = executor.CheckTimeouts.Count;
-                await ((Task<HostCommandResult>)command.Invoke(fx.Missions, new object[] { executor, false, fx.Repo, "check", DateTime.UtcNow.AddSeconds(-1), CancellationToken.None })!).ConfigureAwait(false);
+                await ((Task<HostCommandResult>)command.Invoke(fx.Missions.Context.StageCheckRunner, new object[] { executor, false, fx.Repo, "check", DateTime.UtcNow.AddSeconds(-1), CancellationToken.None })!).ConfigureAwait(false);
                 AssertEqual(count, executor.CheckTimeouts.Count, "expired budget starts no command");
             }));
 
@@ -1170,7 +1172,7 @@ namespace Test.Shared.Suites.Services
                 await db.Missions.UpdateAsync(running).ConfigureAwait(false);
                 Mission waiting = await db.Missions.CreateAsync(new Mission("Waiting", "Do it next") { VesselId = vessel.Id }).ConfigureAwait(false);
 
-                RuntimeProviderError quota = new RuntimeProviderError { HttpStatusCode = 429, ErrorType = "rate_limit_error", Reason = "quota exhausted" };
+                RuntimeProviderError quota = new RuntimeProviderError { HttpStatusCode = 429, ErrorType = "insufficient_quota", Reason = "quota exhausted" };
                 await admiral.HandleProcessExitAsync(4500, RuntimeFailureClassifier.Decide(1, quota), captain.Id, running.Id).ConfigureAwait(false);
 
                 Captain? after = await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false);

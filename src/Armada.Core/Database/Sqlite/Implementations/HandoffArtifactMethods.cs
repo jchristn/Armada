@@ -20,19 +20,19 @@ namespace Armada.Core.Database.Sqlite.Implementations
         #region Private-Members
 
         private static readonly string _Insert = @"INSERT INTO handoff_artifacts
-            (id, tenant_id, user_id, mission_id, voyage_id, vessel_id, stage_outcome_id, persona, captain_id, captain_name,
+            (id, tenant_id, user_id, mission_id, voyage_id, vessel_id, stage_outcome_id, attempt_id, persona, captain_id, captain_name,
              attempt, rework_round, schema_version, verdict, branch_name, commit_hash, findings_json, acceptance_criteria_json,
              required_actions_json, check_results_json, commit_references_json, completion_lines_json, output, output_length,
              output_complete, diff, diff_length, diff_complete, diff_pointer, created_utc, last_update_utc)
             VALUES
-            (@id, @tenant_id, @user_id, @mission_id, @voyage_id, @vessel_id, @stage_outcome_id, @persona, @captain_id, @captain_name,
+            (@id, @tenant_id, @user_id, @mission_id, @voyage_id, @vessel_id, @stage_outcome_id, @attempt_id, @persona, @captain_id, @captain_name,
              @attempt, @rework_round, @schema_version, @verdict, @branch_name, @commit_hash, @findings_json, @acceptance_criteria_json,
              @required_actions_json, @check_results_json, @commit_references_json, @completion_lines_json, @output, @output_length,
              @output_complete, @diff, @diff_length, @diff_complete, @diff_pointer, @created_utc, @last_update_utc);";
 
         private static readonly string _Update = @"UPDATE handoff_artifacts SET
             user_id = @user_id, mission_id = @mission_id, voyage_id = @voyage_id, vessel_id = @vessel_id,
-            stage_outcome_id = @stage_outcome_id, persona = @persona, captain_id = @captain_id, captain_name = @captain_name,
+            stage_outcome_id = @stage_outcome_id, attempt_id = @attempt_id, persona = @persona, captain_id = @captain_id, captain_name = @captain_name,
             attempt = @attempt, rework_round = @rework_round, schema_version = @schema_version, verdict = @verdict,
             branch_name = @branch_name, commit_hash = @commit_hash, findings_json = @findings_json,
             acceptance_criteria_json = @acceptance_criteria_json, required_actions_json = @required_actions_json,
@@ -114,6 +114,35 @@ namespace Armada.Core.Database.Sqlite.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<HandoffArtifact?> ReadByAttemptAsync(string missionId, string attemptId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
+            if (String.IsNullOrEmpty(attemptId)) throw new ArgumentNullException(nameof(attemptId));
+            List<HandoffArtifact> rows = await SqliteCommandHelper.QueryAsync(_ConnectionString,
+                "SELECT * FROM handoff_artifacts WHERE mission_id = @mission_id AND attempt_id = @attempt_id ORDER BY created_utc DESC, id DESC LIMIT 1;",
+                cmd =>
+                {
+                    SqliteCommandHelper.Add(cmd, "@mission_id", missionId);
+                    SqliteCommandHelper.Add(cmd, "@attempt_id", attemptId);
+                }, FromReader, token).ConfigureAwait(false);
+            return rows.FirstOrDefault();
+        }
+
+        /// <summary>
+        /// Insert an artifact inside a caller's transaction (the pipeline handoff batch).
+        /// </summary>
+        /// <param name="conn">Open connection.</param>
+        /// <param name="tx">Transaction.</param>
+        /// <param name="artifact">Artifact.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Task.</returns>
+        internal static async Task InsertAsync(SqliteConnection conn, SqliteTransaction tx, HandoffArtifact artifact, CancellationToken token)
+        {
+            artifact.LastUpdateUtc = DateTime.UtcNow;
+            await SqliteCommandHelper.ExecuteAsync(conn, tx, _Insert, cmd => Bind(cmd, artifact, true), token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
         public async Task<EnumerationResult<HandoffArtifact>> EnumerateAsync(HandoffArtifactQuery query, CancellationToken token = default)
         {
             if (query == null) throw new ArgumentNullException(nameof(query));
@@ -184,6 +213,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             SqliteCommandHelper.Add(cmd, "@voyage_id", artifact.VoyageId);
             SqliteCommandHelper.Add(cmd, "@vessel_id", artifact.VesselId);
             SqliteCommandHelper.Add(cmd, "@stage_outcome_id", artifact.StageOutcomeId);
+            SqliteCommandHelper.Add(cmd, "@attempt_id", artifact.AttemptId);
             SqliteCommandHelper.Add(cmd, "@persona", artifact.Persona);
             SqliteCommandHelper.Add(cmd, "@captain_id", artifact.CaptainId);
             SqliteCommandHelper.Add(cmd, "@captain_name", artifact.CaptainName);
@@ -219,6 +249,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             artifact.VoyageId = SqliteCommandHelper.ReadString(reader["voyage_id"]);
             artifact.VesselId = SqliteCommandHelper.ReadString(reader["vessel_id"]);
             artifact.StageOutcomeId = SqliteCommandHelper.ReadString(reader["stage_outcome_id"]);
+            artifact.AttemptId = SqliteCommandHelper.ReadString(reader["attempt_id"]);
             artifact.Persona = SqliteCommandHelper.ReadString(reader["persona"]);
             artifact.CaptainId = SqliteCommandHelper.ReadString(reader["captain_id"]);
             artifact.CaptainName = SqliteCommandHelper.ReadString(reader["captain_name"]);

@@ -37,15 +37,17 @@ namespace Armada.Core.Services
         /// <param name="target">Requested status; only Complete may take the no-change path.</param>
         /// <param name="git">Git service for the no-change containment check, or null to disable that path.</param>
         /// <param name="settings">Settings (repos directory) for locating the vessel repository, or null.</param>
+        /// <param name="transitions">Mission status transitions, or null for the Admiral's.</param>
         /// <exception cref="InvalidOperationException">Landing is unavailable, no active dock exists and no change cannot be proven, or the mission changed concurrently.</exception>
-        public static async Task<Mission> LandAsync(DatabaseDriver database, IAdmiralService admiral, Mission mission, MissionStatusEnum target = MissionStatusEnum.WorkProduced, IGitService? git = null, ArmadaSettings? settings = null)
+        public static async Task<Mission> LandAsync(DatabaseDriver database, IAdmiralService admiral, Mission mission, MissionStatusEnum target = MissionStatusEnum.WorkProduced, IGitService? git = null, ArmadaSettings? settings = null, MissionTransitions? transitions = null)
         {
             if (admiral.OnMissionComplete == null || admiral.OnCaptureDiff == null)
                 throw new InvalidOperationException("Landing is not available; mission status was not changed.");
+            transitions ??= admiral.Transitions;
             Dock? dock = String.IsNullOrEmpty(mission.DockId) ? null : await database.Docks.ReadAsync(mission.DockId).ConfigureAwait(false);
             if (dock == null || !dock.Active || String.IsNullOrEmpty(dock.WorktreePath))
             {
-                Mission? completed = await TryCompleteWithoutChangesAsync(database, mission, target, git, settings).ConfigureAwait(false);
+                Mission? completed = await TryCompleteWithoutChangesAsync(database, transitions, mission, target, git, settings).ConfigureAwait(false);
                 if (completed != null) return completed;
                 throw new InvalidOperationException("An active dock is required to resolve and land this mission's branch head.");
             }
@@ -60,15 +62,15 @@ namespace Armada.Core.Services
                 throw new InvalidOperationException("Mission changed during manual handoff; retry against its current state.");
             version = current.LastUpdateUtc;
             current.CommitHash = mission.CommitHash;
-            current.Status = MissionStatusEnum.WorkProduced;
-            current.LastUpdateUtc = DateTime.UtcNow;
-            if (!await database.Missions.TryUpdateIfUnchangedAsync(current, version, new[] { status }).ConfigureAwait(false))
+            MissionTransitionRequest handoff = new MissionTransitionRequest { To = MissionStatusEnum.WorkProduced, ExpectedLastUpdateUtc = version };
+            handoff.AllowedFrom.Add(status);
+            if (!await transitions.TryTransitionAsync(current, handoff, CancellationToken.None).ConfigureAwait(false))
                 throw new InvalidOperationException("Mission changed during manual handoff; its newer state was preserved.");
             await admiral.OnMissionComplete(current, dock).ConfigureAwait(false);
             return await database.Missions.ReadAsync(current.Id).ConfigureAwait(false) ?? current;
         }
 
-        private static async Task<Mission?> TryCompleteWithoutChangesAsync(DatabaseDriver database, Mission mission, MissionStatusEnum target, IGitService? git, ArmadaSettings? settings)
+        private static async Task<Mission?> TryCompleteWithoutChangesAsync(DatabaseDriver database, MissionTransitions transitions, Mission mission, MissionStatusEnum target, IGitService? git, ArmadaSettings? settings)
         {
             if (git == null || target != MissionStatusEnum.Complete) return null;
             if (mission.Status != MissionStatusEnum.WorkProduced && mission.Status != MissionStatusEnum.LandingFailed) return null;
@@ -98,12 +100,12 @@ namespace Armada.Core.Services
             DateTime version = current.LastUpdateUtc;
             MissionStatusEnum status = current.Status;
             DateTime now = DateTime.UtcNow;
-            current.Status = MissionStatusEnum.Complete;
             current.CompletedUtc = now;
-            current.LastUpdateUtc = now;
             current.FailureReason = null;
             current.FailureKind = null;
-            if (!await database.Missions.TryUpdateIfUnchangedAsync(current, version, new[] { status }).ConfigureAwait(false))
+            MissionTransitionRequest completion = new MissionTransitionRequest { To = MissionStatusEnum.Complete, ExpectedLastUpdateUtc = version };
+            completion.AllowedFrom.Add(status);
+            if (!await transitions.TryTransitionAsync(current, completion, CancellationToken.None).ConfigureAwait(false))
                 throw new InvalidOperationException("Mission changed during manual handoff; its newer state was preserved.");
 
             // Same event the landing handler records on a successful landing; voyage completion rolls up from the status.

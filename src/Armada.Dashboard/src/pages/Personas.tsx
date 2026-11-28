@@ -103,7 +103,7 @@ export default function Personas() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     try {
-      const validation = validatePersonaPriorities(routing.captainPriorities);
+      const validation = validatePersonaPriorities(routing.captainPriorities) ?? validatePersonaPriorities(routing.escalationLadder);
       if (validation) throw new Error(t(validation));
       const payload: Record<string, unknown> = { ...routing, name: form.name, promptTemplateName: form.promptTemplateName, scope: form.scope };
       if (form.description) payload.description = form.description;
@@ -228,6 +228,7 @@ export default function Personas() {
             <ScopeSelect viewer={viewer} value={form.scope} onChange={(scope) => setForm({ ...form, scope })} />
           </div>
           <PersonaPriorityEditor value={routing} onChange={setRouting} />
+          <PersonaPriorityEditor value={routing} onChange={setRouting} list="escalationLadder" />
         </form>
       </DialogShell>
 

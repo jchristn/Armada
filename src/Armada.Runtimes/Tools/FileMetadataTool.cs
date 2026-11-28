@@ -105,7 +105,7 @@ namespace Armada.Runtimes.Tools
                     }
                     catch
                     {
-                        // Permission denied for contents — still return what we can
+                        // Permission denied for contents: still return what we can
                     }
 
                     string content = JsonSerializer.Serialize(new

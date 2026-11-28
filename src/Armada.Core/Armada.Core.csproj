@@ -14,6 +14,11 @@
     <EmbeddedResource Include="Prompts\persona-briefs-v4.json" />
     <EmbeddedResource Include="Prompts\persona-briefs-v5.json" />
     <EmbeddedResource Include="Prompts\persona-briefs-v6.json" />
+    <EmbeddedResource Include="Prompts\persona-briefs-v7.json" />
+    <EmbeddedResource Include="Prompts\persona-defaults-v0.json" />
+    <EmbeddedResource Include="Prompts\persona-variants.json" />
+    <EmbeddedResource Include="Prompts\persona-variants-previous.json" />
+    <EmbeddedResource Include="Prompts\progress-signals-previous.json" />
   </ItemGroup>
 
   <ItemGroup>
@@ -33,7 +38,7 @@
     <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
     <PackageReference Include="MySqlConnector" Version="2.6.2" />
     <PackageReference Include="Npgsql" Version="10.0.3" />
-    <PackageReference Include="PolyPrompt" Version="3.5.0" />
+    <PackageReference Include="PolyPrompt" Version="5.0.1" />
     <PackageReference Include="PrettyId" Version="2.0.2" />
     <PackageReference Include="SyslogLogging" Version="2.4.1" />
   </ItemGroup>

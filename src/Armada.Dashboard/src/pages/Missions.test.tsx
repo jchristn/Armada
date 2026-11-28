@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Missions from './Missions';
-import { getMission, createMission, listCaptains, listMissionSummaries, listVessels, listVoyages, previewMissionOverlap } from '../api/client';
+import { getMission, createMission, listCaptains, listMissionSummaries, listPersonas, listVessels, listVoyages, previewMissionOverlap } from '../api/client';
 import type { MissionSummary } from '../types/models';
 
 const translate = (text: string, params?: Record<string, string | number | null | undefined>) => {
@@ -20,6 +20,7 @@ vi.mock('../api/client', () => ({
   listVessels: vi.fn(),
   listCaptains: vi.fn(),
   listVoyages: vi.fn(),
+  listPersonas: vi.fn(),
   createMission: vi.fn(),
   updateMission: vi.fn(),
   deleteMission: vi.fn(),
@@ -57,6 +58,7 @@ describe('Missions table', () => {
     vi.mocked(listVessels).mockResolvedValue(page([]));
     vi.mocked(listCaptains).mockResolvedValue(page([]));
     vi.mocked(listVoyages).mockResolvedValue(page([]));
+    vi.mocked(listPersonas).mockResolvedValue(page([{ name: 'Worker' }, { name: 'Judge' }]));
   });
 
   it('puts refresh controls in the table toolbar and locks Title and ID in the column chooser', async () => {
@@ -144,6 +146,21 @@ describe('Mission create dispatch warnings', () => {
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Touch only src/a.ts' } });
     fireEvent.change(screen.getByLabelText(/^Vessel/), { target: { value: 'vsl_1' } });
   }
+
+  it('creates a mission with the chosen persona, and sends none for the default', async () => {
+    vi.mocked(createMission).mockReset().mockResolvedValue({ ...mission, id: 'msn_new' } as never);
+    await fillAndCreate();
+    const persona = await screen.findByRole('option', { name: 'Judge' });
+    fireEvent.change(persona.closest('select')!, { target: { value: 'Judge' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await vi.waitFor(() => expect(createMission).toHaveBeenCalledWith(expect.objectContaining({ title: 'Touch the parser', persona: 'Judge' })));
+    fireEvent.click(screen.getByRole('button', { name: '+ Mission' }));
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Default persona' } });
+    fireEvent.change(screen.getByLabelText(/^Vessel/), { target: { value: 'vsl_1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await vi.waitFor(() => expect(createMission).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(createMission).mock.calls[1][0].persona).toBeNull();
+  });
 
   it('previews overlaps in the form before submit', async () => {
     vi.mocked(createMission).mockResolvedValue({ ...mission, id: 'msn_new' } as never);

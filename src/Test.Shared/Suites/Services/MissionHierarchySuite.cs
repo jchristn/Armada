@@ -180,6 +180,15 @@ namespace Test.Shared.Suites.Services
             await AssertThrowsAsync<ArgumentException>(() => h.Admiral.DispatchVoyageAsync("bad", "bad", h.Vessel.Id,
                 new List<MissionDescription> { new MissionDescription("orphan", "x") { ParentKey = "missing" } }));
             AssertEqual(before, (await h.Db.Voyages.EnumerateAsync()).Count, "an unknown ParentKey creates no voyage");
+            string parentless = "";
+            try
+            {
+                await h.Admiral.DispatchVoyageAsync("bad", "bad", h.Vessel.Id,
+                    new List<MissionDescription> { new MissionDescription("loose", "x") { BranchStrategy = MissionBranchStrategyEnum.ContinueParent } });
+            }
+            catch (ArgumentException ex) { parentless = ex.Message; }
+            AssertContains("branchStrategy needs a parent", parentless, "the same rule as an Architect plan (RS-4.4)");
+            AssertEqual(before, (await h.Db.Voyages.EnumerateAsync()).Count, "a branch strategy without a parent creates no voyage");
         }
 
         private static TestCaseDescriptor Case(string id, string name, Func<CancellationToken, Task> body)

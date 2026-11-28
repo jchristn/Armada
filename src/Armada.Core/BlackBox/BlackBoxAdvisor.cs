@@ -460,7 +460,7 @@ namespace Armada.Core.BlackBox
             BlackBoxConfigRecommendation? rec = analysis.ConfigRecommendations.FirstOrDefault(r => r.SuggestedValue != null);
             if (rec != null && sentences.Count < 6) sentences.Add("To prevent it, set " + rec.Setting + " to " + rec.SuggestedValue + " on the " + rec.Scope.ToString().ToLowerInvariant() + ".");
             string summary = String.Join(" ", sentences.Take(6));
-            return BlackBoxLimits.Clip(summary.Replace('—', '-').Replace('–', '-'), BlackBoxLimits.MaxSummaryChars) ?? String.Empty;
+            return BlackBoxLimits.Clip(summary.Replace('\u2014', '-').Replace('–', '-'), BlackBoxLimits.MaxSummaryChars) ?? String.Empty;
         }
 
         /// <summary>

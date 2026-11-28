@@ -44,6 +44,15 @@ namespace Armada.Core.Database.Interfaces
         Task<HandoffArtifact?> ReadLatestByMissionAsync(string missionId, CancellationToken token = default);
 
         /// <summary>
+        /// The artifact of one attempt of a mission (<see cref="HandoffArtifact.AttemptIdFor"/>), or null.
+        /// </summary>
+        /// <param name="missionId">Mission id.</param>
+        /// <param name="attemptId">Attempt id.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The artifact, or null.</returns>
+        Task<HandoffArtifact?> ReadByAttemptAsync(string missionId, string attemptId, CancellationToken token = default);
+
+        /// <summary>
         /// One page of artifacts, newest first.
         /// </summary>
         /// <param name="query">Filters and paging.</param>

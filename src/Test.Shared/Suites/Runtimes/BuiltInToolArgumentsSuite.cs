@@ -265,7 +265,7 @@ namespace Test.Shared.Suites.Runtimes
                 }
             }));
 
-            string shellSkip = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            string? shellSkip = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
                     || !File.Exists("/bin/bash")
                     || !File.Exists("/usr/bin/env")
                     || !File.Exists("/usr/bin/head")
@@ -449,7 +449,7 @@ namespace Test.Shared.Suites.Runtimes
             try { Directory.Delete(dir, true); } catch { }
         }
 
-        private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body, string skipReason = null)
+        private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body, string? skipReason = null)
         {
             return new TestCaseDescriptor(
                 suiteId: _SuiteId,
@@ -457,12 +457,13 @@ namespace Test.Shared.Suites.Runtimes
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
                 tags: new List<string> { tag },
+                skip: skipReason != null,
                 skipReason: skipReason);
         }
 
         private static void AssertOmissionCount(string output, int totalInputBytes)
         {
-            int budget = ToolSafetyLimits.MaxProcessOutputBytes;
+            int budget = new ToolLimits().MaxProcessOutputBytes;
             AssertTrue(Encoding.UTF8.GetByteCount(output) <= budget, "Rendered stream must fit its UTF-8 byte budget.");
             int markerStart = output.IndexOf("\n[truncated - output exceeded ", StringComparison.Ordinal);
             AssertTrue(markerStart >= 0, "Expected a truncation note with an omitted-byte count.");

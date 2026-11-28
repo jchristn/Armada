@@ -59,6 +59,7 @@ namespace Armada.Core.Services
         {
             if (alert == null) throw new ArgumentNullException(nameof(alert));
             ModelAlertActionPlan plan = new ModelAlertActionPlan();
+            if (alert.Rule == ModelAlertRuleEnum.TierSuggestion) return await PlanTierAsync(alert, plan, defaultIgnoreDays, token).ConfigureAwait(false);
 
             List<Captain> tenantCaptains = String.IsNullOrEmpty(alert.TenantId)
                 ? await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false)
@@ -149,6 +150,33 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private async Task<ModelAlertActionPlan> PlanTierAsync(ModelAlert alert, ModelAlertActionPlan plan, int defaultIgnoreDays, CancellationToken token)
+        {
+            ModelProfile? profile = await _Database.ModelProfiles.ReadAsync(alert.ProfileId, token).ConfigureAwait(false);
+            if (profile != null && !String.Equals(profile.TenantId, alert.TenantId, StringComparison.Ordinal)) profile = null;
+            plan.Profile = profile;
+            CaptainTierEnum? suggested = profile?.Tiering.SuggestedTier;
+            string model = String.IsNullOrWhiteSpace(alert.Model) ? alert.ProfileId : alert.Model!;
+            ModelAlertSuggestedAction apply = new ModelAlertSuggestedAction
+            {
+                Action = ModelAlertActionEnum.ApplyTier,
+                Label = suggested.HasValue ? "Apply tier " + suggested.Value : "Apply tier",
+                Description = "Sets the tier of model profile " + model + " to the suggested tier, so routing uses it for captains on this profile that set no tier of their own.",
+                Recommended = true
+            };
+            SetAvailability(apply, profile == null ? "The model profile was not found."
+                : !suggested.HasValue ? "The profile has no tier suggestion now."
+                : profile.Tiering.Tier == suggested ? "The profile already has tier " + suggested.Value + "." : null);
+            plan.Actions.Add(apply);
+            plan.Actions.Add(new ModelAlertSuggestedAction
+            {
+                Action = ModelAlertActionEnum.Ignore,
+                Label = "Dismiss for " + defaultIgnoreDays + " days",
+                Description = "Hides this suggestion from the inbox for " + defaultIgnoreDays + " days (or the days given); it shows again afterwards if the data still suggests it, or at once if the data suggests another tier."
+            });
+            return plan;
+        }
 
         private static string? RoutingUnavailableReason(ModelAlertActionPlan plan, string personaName)
         {

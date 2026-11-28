@@ -30,7 +30,7 @@ namespace Armada.Server.Routes
         private readonly DateTime _startUtc;
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly LoggingModule _logging;
-        private readonly ISlotManager _slots;
+        private readonly IRebuildSlotManager _slots;
         private readonly ServerRebuildService _rebuild;
         private readonly Func<RemoteTunnelStatus>? _getRemoteTunnelStatus;
         private readonly Func<Task>? _onRemoteControlSettingsChanged;
@@ -75,7 +75,7 @@ namespace Armada.Server.Routes
             DateTime startUtc,
             JsonSerializerOptions jsonOptions,
             LoggingModule logging,
-            ISlotManager slots,
+            IRebuildSlotManager slots,
             ServerRebuildService rebuild,
             Func<RemoteTunnelStatus>? getRemoteTunnelStatus = null,
             Func<Task>? onRemoteControlSettingsChanged = null,
@@ -241,7 +241,7 @@ namespace Armada.Server.Routes
                     results.Add(new { Name = "Database", Status = DoctorCheckStatusEnum.Fail, Message = "Error checking database: " + ex.Message });
                 }
 
-                // 4. Admiral Server (self-check — always passes if we reach here)
+                // 4. Admiral Server (self-check: always passes if we reach here)
                 results.Add(new { Name = "Admiral Server", Status = DoctorCheckStatusEnum.Pass, Message = "Server is healthy" });
 
                 // 5. Stalled Captains
@@ -609,6 +609,18 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 400;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "StageCheckTimeoutMinutes must be between 1 and 240." };
                 }
+                string? rangeError = null;
+                if (body.TimeoutScaleReferenceTokensPerSecond.HasValue && (body.TimeoutScaleReferenceTokensPerSecond.Value < 0 || body.TimeoutScaleReferenceTokensPerSecond.Value > 1000))
+                    rangeError = "TimeoutScaleReferenceTokensPerSecond must be between 0 and 1000.";
+                else if (body.PromptVariantCompactMaxContextTokens.HasValue && (body.PromptVariantCompactMaxContextTokens.Value < 0 || body.PromptVariantCompactMaxContextTokens.Value > 2097152))
+                    rangeError = "PromptVariantCompactMaxContextTokens must be between 0 and 2097152.";
+                else if (body.PromptVariantLeanMaxContextTokens.HasValue && (body.PromptVariantLeanMaxContextTokens.Value < 0 || body.PromptVariantLeanMaxContextTokens.Value > 2097152))
+                    rangeError = "PromptVariantLeanMaxContextTokens must be between 0 and 2097152.";
+                if (rangeError != null)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = rangeError };
+                }
                 if (body.BlackBox != null)
                 {
                     // Storage secrets come back from GET masked; a masked value keeps the stored secret. The target's settings
@@ -668,6 +680,24 @@ namespace Armada.Server.Routes
 
                 if (body.BlockDependentsOfFailedStages.HasValue)
                     _settings.BlockDependentsOfFailedStages = body.BlockDependentsOfFailedStages.Value;
+
+                if (body.AcceptLegacyMissionMarkers.HasValue)
+                    _settings.AcceptLegacyMissionMarkers = body.AcceptLegacyMissionMarkers.Value;
+
+                if (body.OutputRepairNormalizerCaptainId != null)
+                    _settings.OutputRepairNormalizerCaptainId = String.IsNullOrWhiteSpace(body.OutputRepairNormalizerCaptainId) ? null : body.OutputRepairNormalizerCaptainId.Trim();
+
+                if (body.TimeoutScaleReferenceTokensPerSecond.HasValue) _settings.TimeoutScaleReferenceTokensPerSecond = body.TimeoutScaleReferenceTokensPerSecond.Value;
+                if (body.PromptVariantCompactMaxContextTokens.HasValue) _settings.PromptVariantCompactMaxContextTokens = body.PromptVariantCompactMaxContextTokens.Value;
+                if (body.PromptVariantLeanMaxContextTokens.HasValue) _settings.PromptVariantLeanMaxContextTokens = body.PromptVariantLeanMaxContextTokens.Value;
+                if (body.MergeQueueRequeueLimit.HasValue) _settings.MergeQueueRequeueLimit = body.MergeQueueRequeueLimit.Value;
+                if (body.MergeQueueBatchSize.HasValue) _settings.MergeQueueBatchSize = body.MergeQueueBatchSize.Value;
+                if (body.MergeQueueLeaseSeconds.HasValue) _settings.MergeQueueLeaseSeconds = body.MergeQueueLeaseSeconds.Value;
+                if (body.UnclassifiedResumeLimit.HasValue) _settings.UnclassifiedResumeLimit = body.UnclassifiedResumeLimit.Value;
+                if (body.JudgeReworkRounds.HasValue) _settings.JudgeReworkRounds = body.JudgeReworkRounds.Value;
+                if (body.MaxEscalations.HasValue) _settings.MaxEscalations = body.MaxEscalations.Value;
+                if (body.EscalateOnOpenEndpointBreaker.HasValue) _settings.EscalateOnOpenEndpointBreaker = body.EscalateOnOpenEndpointBreaker.Value;
+                if (body.RoutingData != null) _settings.RoutingData = body.RoutingData;
 
                 if (body.Concurrency != null)
                 {
@@ -933,6 +963,19 @@ namespace Armada.Server.Routes
                 RebuildSlotRetentionCount = _settings.RebuildSlotRetentionCount,
                 RequireHarborForLaunch = _settings.RequireHarborForLaunch,
                 BlockDependentsOfFailedStages = _settings.BlockDependentsOfFailedStages,
+                AcceptLegacyMissionMarkers = _settings.AcceptLegacyMissionMarkers,
+                OutputRepairNormalizerCaptainId = _settings.OutputRepairNormalizerCaptainId ?? "",
+                TimeoutScaleReferenceTokensPerSecond = _settings.TimeoutScaleReferenceTokensPerSecond,
+                PromptVariantCompactMaxContextTokens = _settings.PromptVariantCompactMaxContextTokens,
+                PromptVariantLeanMaxContextTokens = _settings.PromptVariantLeanMaxContextTokens,
+                MergeQueueRequeueLimit = _settings.MergeQueueRequeueLimit,
+                MergeQueueBatchSize = _settings.MergeQueueBatchSize,
+                MergeQueueLeaseSeconds = _settings.MergeQueueLeaseSeconds,
+                UnclassifiedResumeLimit = _settings.UnclassifiedResumeLimit,
+                JudgeReworkRounds = _settings.JudgeReworkRounds,
+                MaxEscalations = _settings.MaxEscalations,
+                EscalateOnOpenEndpointBreaker = _settings.EscalateOnOpenEndpointBreaker,
+                RoutingData = _settings.RoutingData,
                 RemoteControl = RedactRemoteControl(_settings.RemoteControl),
                 Import = _settings.Import,
                 FleetActions = _settings.FleetActions,

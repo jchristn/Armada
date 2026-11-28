@@ -92,7 +92,7 @@ namespace Armada.Tui.Screens.Configuration
         /// <inheritdoc />
         protected override Task<Persona?> FetchAsync(CancellationToken token)
         {
-            return Context.Client.GetPersonaAsync(EntityId, token);
+            return Context.Client.Personas.GetAsync(EntityId, token);
         }
 
         /// <inheritdoc />
@@ -109,7 +109,7 @@ namespace Armada.Tui.Screens.Configuration
             {
                 try
                 {
-                    _LoadedTemplate = await Context.Client.GetPromptTemplateAsync(entity.PromptTemplateName, token).ConfigureAwait(false);
+                    _LoadedTemplate = await Context.Client.PromptTemplates.GetAsync(entity.PromptTemplateName, token).ConfigureAwait(false);
                 }
                 catch (ArmadaApiException ex)
                 {
@@ -177,6 +177,7 @@ namespace Armada.Tui.Screens.Configuration
             Overview.Row("Captain priorities", String.Join(" -> ", p.CaptainPriorities.Select(priority => String.Join(" / ", new[] { priority.Runtime?.ToString(), priority.Model, priority.Endpoint, priority.MinimumTier?.ToString() }.Where(v => !String.IsNullOrEmpty(v))))));
             Overview.Row("When a priority is unavailable", Context.Loc.T(p.PriorityAvailability == Armada.Core.Enums.PersonaPriorityAvailabilityEnum.WaitForFirstPriority ? "Wait for the first priority" : "Try lower priorities"));
             Overview.Row("When all priorities are unavailable", Context.Loc.T(p.PriorityAvailability == Armada.Core.Enums.PersonaPriorityAvailabilityEnum.WaitForFirstPriority || p.PriorityExhaustion == Armada.Core.Enums.PersonaPriorityExhaustionEnum.Wait ? "Wait" : "Use any eligible captain"));
+            Overview.Row("Escalation ladder", p.EscalationLadder.Count == 0 ? T("None (higher tier only)") : String.Join(" -> ", p.EscalationLadder.Select(rung => String.Join(" / ", new[] { rung.Runtime?.ToString(), rung.Model, rung.Endpoint, rung.MinimumTier?.ToString() }.Where(v => !String.IsNullOrEmpty(v))))));
             Overview.Row("Built-in", p.IsBuiltIn ? T("Built-in") : T("No"));
             Overview.Row("Active", EntityUi.Badge(Context, p.Active ? "Active" : "Inactive"));
             Overview.Row("Visibility", T(ScopeRules.Label(p.Scope)));
@@ -232,7 +233,7 @@ namespace Armada.Tui.Screens.Configuration
             PromptTemplateUpdateRequest body = new PromptTemplateUpdateRequest();
             body.Content = PromptContent.Value;
             body.Description = EntityUi.Blank(PromptDescription.Value);
-            EntityUi.Run<PromptTemplate?>(Context, ct => Context.Client.UpdatePromptTemplateAsync(template.Name, body, ct), result =>
+            EntityUi.Run<PromptTemplate?>(Context, ct => Context.Client.PromptTemplates.UpdateAsync(template.Name, body, ct), result =>
             {
                 if (result != null)
                 {
@@ -251,7 +252,7 @@ namespace Armada.Tui.Screens.Configuration
             Context.Confirm("Reset Backing Prompt",
                 EntityUi.T(Context, "Reset prompt template \"{{name}}\" to its built-in default content? Your customizations will be lost.", "name", template.Name), () =>
                 {
-                    EntityUi.Run<PromptTemplate?>(Context, ct => Context.Client.ResetPromptTemplateAsync(template.Name, ct), result =>
+                    EntityUi.Run<PromptTemplate?>(Context, ct => Context.Client.PromptTemplates.ResetAsync(template.Name, ct), result =>
                     {
                         if (result != null)
                         {
@@ -276,7 +277,7 @@ namespace Armada.Tui.Screens.Configuration
 
             Context.Confirm("Delete Persona", EntityUi.T(Context, "Delete persona \"{{name}}\"? This cannot be undone.", "name", p.Name), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting persona", ct => Context.Client.DeletePersonaAsync(p.Name, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting persona", ct => Context.Client.Personas.DeleteAsync(p.Name, ct), () =>
                 {
                     EntityUi.Toast(Context, NotificationSeverityEnum.Warning, EntityUi.T(Context, "Persona \"{{name}}\" deleted.", "name", p.Name));
                     Context.Navigate("/configuration?tab=personas");

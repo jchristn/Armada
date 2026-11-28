@@ -146,7 +146,7 @@ namespace Armada.Tui.Screens.Delivery
             q.VesselId = EntityUi.Blank(Filter("vesselId"));
             if (Enum.TryParse<DeploymentStatusEnum>(Filter("status"), true, out DeploymentStatusEnum status)) q.Status = status;
             if (Enum.TryParse<DeploymentVerificationStatusEnum>(Filter("verification"), true, out DeploymentVerificationStatusEnum verification)) q.VerificationStatus = verification;
-            EnumerationResult<Deployment>? result = await Context.Client.ListDeploymentsAsync(q, token).ConfigureAwait(false);
+            EnumerationResult<Deployment>? result = await Context.Client.Deployments.ListAsync(q, token).ConfigureAwait(false);
             return PageOf(result);
         }
 
@@ -216,7 +216,7 @@ namespace Armada.Tui.Screens.Delivery
         /// <inheritdoc />
         protected override Task DeleteAsync(Deployment row, CancellationToken token)
         {
-            return Context.Client.DeleteDeploymentAsync(row.Id, token);
+            return Context.Client.Deployments.DeleteAsync(row.Id, token);
         }
 
         /// <inheritdoc />

@@ -1,6 +1,7 @@
 namespace Armada.Core.Services.Interfaces
 {
     using System;
+    using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Models;
@@ -21,5 +22,32 @@ namespace Armada.Core.Services.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>The advice, or null when there is none.</returns>
         Task<MissionDispatchAdvice?> AdviseAsync(Mission mission, Vessel vessel, CancellationToken token = default);
+
+        /// <summary>
+        /// Advise on a mission of a voyage being created, treating the voyage's earlier missions (planned in the same
+        /// create, not stored yet) as active work, so overlaps and chaining inside one voyage are found before any row
+        /// is written. The default ignores them.
+        /// </summary>
+        /// <param name="mission">The mission, not yet created.</param>
+        /// <param name="vessel">Its vessel.</param>
+        /// <param name="planned">Earlier missions of the same voyage, not yet created.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The advice, or null when there is none.</returns>
+        Task<MissionDispatchAdvice?> AdviseAsync(Mission mission, Vessel vessel, IReadOnlyList<Mission> planned, CancellationToken token = default)
+            => AdviseAsync(mission, vessel, token);
+
+        /// <summary>
+        /// Advise on a mission of a voyage being created, as <see cref="AdviseAsync(Mission, Vessel, IReadOnlyList{Mission}, CancellationToken)"/>,
+        /// reusing what the advisor loaded for earlier missions of the same creation (<paramref name="batch"/>). The
+        /// default ignores the batch.
+        /// </summary>
+        /// <param name="mission">The mission, not yet created.</param>
+        /// <param name="vessel">Its vessel.</param>
+        /// <param name="planned">Earlier missions of the same voyage, not yet created.</param>
+        /// <param name="batch">State shared across this voyage creation.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The advice, or null when there is none.</returns>
+        Task<MissionDispatchAdvice?> AdviseAsync(Mission mission, Vessel vessel, IReadOnlyList<Mission> planned, MissionDispatchBatch batch, CancellationToken token = default)
+            => AdviseAsync(mission, vessel, planned, token);
     }
 }

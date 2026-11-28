@@ -7,7 +7,7 @@
 <p align="center">
   <strong>Run a fleet of AI coding agents across all of your repositories: in parallel, isolated, reviewed, and on the record.</strong>
   <br />
-  <em>v1.4.0</em>
+  <em>v1.5.0</em>
 </p>
 
 <p align="center">
@@ -147,6 +147,25 @@ Armada does not replace your agent. It runs it. The comparison is with the work 
 **When you do not need Armada:** a quick one-off edit in a single repository. Run the agent directly.
 
 ---
+
+## v1.5.0: open and frontier models in one pipeline
+
+v1.5.0 is about one goal: a pipeline where an open model such as Qwen3.8, served by Ollama, vLLM or a proxy, does the
+bulk of the work next to Opus and GPT-6.1, and finishes as reliably as an all-frontier pipeline. Open models fail in
+different ways (tool calls written as text, small context windows, slow first tokens, servers that only report an
+error as a message), so most of the release is Armada absorbing those failures instead of passing them on as a failed
+mission.
+
+A stage that stalls or keeps failing now moves up the persona's **escalation ladder** to a stronger model on the same
+branch, and the stronger model is told how the previous attempt failed. A pipeline's **Judge strength rule** keeps a
+weak Judge from approving strong work. Captains can **submit results as typed JSON**, checked in the same call, so a
+format slip is fixed in the loop instead of by a rerun. Each **model profile** carries its own recovery policy,
+timeouts scaled to its measured speed, a tier and a prompt size that fits its context window, and captains are ranked
+by their recorded results. The dashboard, TUI, mobile app and CLI show every attempt of a mission, and a Reliability
+view shows completion, failures, repairs and escalations per model and persona.
+
+Start with [docs/OPEN_MODELS.md](docs/OPEN_MODELS.md). The .NET SDK now groups its calls into sub-clients, which is a
+breaking change for SDK users; see [UPGRADING.md](docs/UPGRADING.md#changes-to-act-on-when-coming-to-150).
 
 ## v1.3.0: concurrency and built-in fleet actions
 
@@ -891,7 +910,7 @@ Installing from source (above) is the path the project uses day to day. Release 
 | Windows | Harbor `.exe` (Inno Setup), the CLI `.msi` (`armada`, `armada tui`, and the embedded Admiral; adds `armada` to PATH), and the Admiral server `.msi` (WiX) |
 | macOS | `Armada Harbor.app` in a `.dmg`, the CLI `.pkg` (`/usr/local/bin/armada`, with `armada tui`), and the Admiral server `.pkg` |
 | Linux | `.deb` and `.rpm` packages for the CLI, Harbor, and the server |
-| Docker | Admiral, dashboard, and proxy images on Docker Hub (`jchristn77/armada-server`, `jchristn77/armada-dashboard`, `jchristn77/armada-proxy`; tags `v1.4.0` and `latest`). `docker/update.sh` or `docker/update.bat` pulls them and recreates the stack without touching its data |
+| Docker | Admiral, dashboard, and proxy images on Docker Hub (`jchristn77/armada-server`, `jchristn77/armada-dashboard`, `jchristn77/armada-proxy`; tags `v1.5.0` and `latest`). `docker/update.sh` or `docker/update.bat` pulls them and recreates the stack without touching its data |
 
 Each release carries a `SHA256SUMS` file. Installers are code-signed only when the release was built with signing credentials; an unsigned Windows installer shows a SmartScreen prompt ("More info", then "Run anyway"), and an unsigned macOS app or package must be allowed once in **System Settings > Privacy & Security** ("Open Anyway"), or cleared with `xattr -dr com.apple.quarantine "/Applications/Armada Harbor.app"`. See [BUILDING_INSTALLERS.md](BUILDING_INSTALLERS.md).
 
@@ -938,7 +957,7 @@ Sign in as `admin@armada` with the password you set. The compose file requires `
 | `armada-dashboard` | 3000 | `http://localhost:3000/dashboard/` | Standalone React dashboard (nginx, proxies the API to `armada-server`) |
 | `prometheus` / `loki` / `grafana` / `tempo` | loopback 9090 / 3100 / 3001 / 3200 | `http://localhost:3001` | Observability stack (Grafana login `admin` / configured password) |
 
-Data persists under `docker/armada/` (`db/`, `logs/`), and configuration is `docker/armada/armada.json` (restart `armada-server` after editing). `docker/armada/factory/reset.sh` (or `reset.bat`) deletes the local database and logs while keeping configuration. The compose files run the published `v1.4.0` images; to build images from source (`src/Armada.Server/Dockerfile`, `src/Armada.Dashboard/Dockerfile`, `src/Armada.Proxy/Dockerfile`) and for the volume layout, split mode, and the proxy stack, see [docs/DOCKER.md](docs/DOCKER.md).
+Data persists under `docker/armada/` (`db/`, `logs/`), and configuration is `docker/armada/armada.json` (restart `armada-server` after editing). `docker/armada/factory/reset.sh` (or `reset.bat`) deletes the local database and logs while keeping configuration. The compose files run the published `v1.5.0` images; to build images from source (`src/Armada.Server/Dockerfile`, `src/Armada.Dashboard/Dockerfile`, `src/Armada.Proxy/Dockerfile`) and for the volume layout, split mode, and the proxy stack, see [docs/DOCKER.md](docs/DOCKER.md).
 
 ### Harbor: run agents on your machine
 
@@ -997,7 +1016,7 @@ When Armada's own source is one of its vessels, set **Self Vessel ID** on the Se
 
 ### Upgrading / Migration
 
-Schema migrations run automatically at startup, and SQLite is backed up first. Upgrade any 0.9.x release directly to 1.0, any 1.0.x release directly to 1.1.0, any 1.1.x release directly to 1.2.0, and any 1.2.x release directly to 1.3.0, and any 1.3.x release directly to 1.4.0 (their migrations run automatically; update each Harbor along with the Admiral); downgrades are not supported. Backups, restores, supported paths, and the upgrade test are in [docs/UPGRADING.md](docs/UPGRADING.md), and the release-by-release notes (v0.1.0 through v1.4.0) are in [Version-by-version upgrade notes](docs/UPGRADING.md#version-by-version-upgrade-notes). Every change is in [CHANGELOG.md](CHANGELOG.md).
+Schema migrations run automatically at startup, and SQLite is backed up first. Upgrade any 0.9.x release directly to 1.0, any 1.0.x release directly to 1.1.0, any 1.1.x release directly to 1.2.0, and any 1.2.x release directly to 1.3.0, any 1.3.x release directly to 1.4.0, and any 1.4.x release directly to 1.5.0 (their migrations run automatically; update each Harbor along with the Admiral); downgrades are not supported. Backups, restores, supported paths, and the upgrade test are in [docs/UPGRADING.md](docs/UPGRADING.md), and the release-by-release notes (v0.1.0 through v1.5.0) are in [Version-by-version upgrade notes](docs/UPGRADING.md#version-by-version-upgrade-notes). Every change is in [CHANGELOG.md](CHANGELOG.md).
 
 **From 1.0.0 to 1.0.1: check your landing modes.** `LocalMerge` no longer pushes; the new `MergeAndPush` mode merges and then pushes (what `LocalMerge` did in 1.0.0) and is the global default. Nothing is migrated, so switch any vessel, voyage, or global `landingMode` that should keep pushing from `LocalMerge` to `MergeAndPush`. See [docs/MERGING.md](docs/MERGING.md#upgrading-from-100-landing-modes-fixed-in-101).
 
@@ -1101,8 +1120,14 @@ armada config init              # Interactive setup (optional)
 | `StageCheckTimeoutMinutes` | 15 | Minutes each stage-check command (the vessel workflow profile's build and unit-test commands, run in the dock after an API-endpoint or Mux stage) may take before it is reported as timed out (1 to 240). Set it above the slowest command, or give the profile a narrower test command |
 | `MaxRecoveryAttempts` | 3 | Stall recovery attempts before the mission fails |
 | `TransientOutageGraceMinutes` | 10 | How long transient model or endpoint failures keep resuming in place, past `MaxRecoveryAttempts`, before the mission fails (0 turns this off, maximum 120) |
+| `UnclassifiedResumeLimit` | 1 | In-place resumes after an `Unclassified` exit (non-zero, no provider error Armada recognizes) before the mission goes to escalation (0 to 3, never more than `MaxRecoveryAttempts`) |
+| `JudgeReworkRounds` | 2 | Automatic Judge rework rounds for one implementation slice before Armada tries a different Worker captain (1 to 5). A model profile's recovery policy can raise it for the Worker's model, and can override the other recovery budgets too (see `docs/REST_API.md`, Model profiles) |
+| `MaxEscalations` | 2 | Hops one mission may take up its persona's escalation ladder (or, with no ladder, to a captain with a strictly higher tier) when its captain cannot finish (0 to 5; 0 turns automatic escalation off). See `EscalationLadder` under Personas in `docs/REST_API.md` |
+| `EscalateOnOpenEndpointBreaker` | `false` | When on, a transient failure on a captain whose managed endpoint's circuit breaker is open escalates right away instead of riding out the outage on resumes |
 | `HarborDisconnectGraceMinutes` | 60 | How long a captain whose Harbor lost its link is held as unreachable (no stall, no recovery, no attempt counted) before normal stall recovery applies; the stall clock restarts when the Harbor reconnects (0 turns the grace off, maximum 1440) |
 | `BlockDependentsOfFailedStages` | `false` | Also on Server > Agent settings in the dashboard and TUI. When on, the stages waiting on a failed stage (and a final integration slice whose sibling slice failed) show `Blocked` instead of `Cancelled`, and the voyage stays open until the failed stage is restarted (they return to Pending) or the voyage is cancelled. When off, they are cancelled and the voyage settles as Failed; restarting the failed stage restores them either way |
+| `AcceptLegacyMissionMarkers` | `true` | Deprecated (D-027, removed in 2.0). Also on Server > Agent settings in the dashboard, TUI and mobile app. When on, an Architect plan written as `[ARMADA:MISSION]` markers is still accepted when the output has no `armada-plan` block, and each use logs a warning. When off, such output gets the output repair turn like a missing plan |
+| `OutputRepairNormalizerCaptainId` | none | Also on Server > Agent settings in the dashboard, TUI and mobile app. The captain that runs the format-only repair turn: when a Judge, Architect or verifier stage finishes its work but its report breaks the output contract, one tool-less call restates the stage's own output in the contract's format before the stage is ever rerun. The restatement is kept only when it parses and adds no verdict, evidence, finding or mission the original lacked. None uses the captain that wrote the report; an unknown id falls back to it. `MaxOutputRepairAttempts` 0 turns the format turn off too |
 | `ExcludeReviewAuthorsFromJudge` | `false` | When on, a Judge is never assigned to a captain that ran an earlier stage (Worker, Test Engineer and so on) of the chain it reviews, even when that captain is requested, so the Judge waits for an independent captain. When off, an idle non-author captain is still preferred, but an author reviews the work when no other eligible captain is idle, and a requested (or persona default) author captain is honored |
 | `MaxMissionRecoveryAttempts` | 2 | Rescue missions per incident for recoverable failures (0 disables, maximum 5) |
 | `LandingMode` | `MergeAndPush` | Default landing policy (vessels and voyages can override it): `MergeAndPush`, `LocalMerge` (merge, no push), `PullRequest`, `MergeQueue`, or `None`. See [docs/MERGING.md](docs/MERGING.md#landing-mode); upgrading from 1.0.0, read [the landing mode notes](docs/MERGING.md#upgrading-from-100-landing-modes-fixed-in-101) |
@@ -1302,6 +1327,7 @@ ID prefixes include `flt_` (fleet), `vsl_` (vessel), `cpt_` (captain), `msn_` (m
 |-------|------|
 | First steps | [GETTING_STARTED.md](GETTING_STARTED.md), [FAST_TRACK_SETUP.md](FAST_TRACK_SETUP.md) |
 | Ask Armada and approvals | [docs/ASK_ARMADA_HOME_BASE.md](docs/ASK_ARMADA_HOME_BASE.md) |
+| Open models in mixed pipelines | [docs/OPEN_MODELS.md](docs/OPEN_MODELS.md), [docs/MODEL_GUIDANCE.md](docs/MODEL_GUIDANCE.md), [docs/MODEL_HETEROGENEITY.md](docs/MODEL_HETEROGENEITY.md) |
 | Runtimes and captains | [docs/CAPTAINS.md](docs/CAPTAINS.md), [docs/CAPTAIN_ROUTING.md](docs/CAPTAIN_ROUTING.md), [docs/SCHEDULING.md](docs/SCHEDULING.md) |
 | Pipelines and personas | [docs/PIPELINES.md](docs/PIPELINES.md), [docs/PERSONAS_GUIDE.md](docs/PERSONAS_GUIDE.md), [docs/PERSONAS.md](docs/PERSONAS.md) |
 | Landing and the merge queue | [docs/MERGING.md](docs/MERGING.md) |

@@ -362,39 +362,52 @@ namespace Armada.Core.Database.Mysql.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (MySqlTransaction tx = await conn.BeginTransactionAsync(token).ConfigureAwait(false))
                 {
-                    using (MySqlCommand deleteCmd = conn.CreateCommand())
-                    {
-                        deleteCmd.Transaction = tx;
-                        deleteCmd.CommandText = "DELETE FROM mission_playbook_snapshots WHERE mission_id = @mission_id;";
-                        deleteCmd.Parameters.AddWithValue("@mission_id", missionId);
-                        await deleteCmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                    }
-
-                    for (int i = 0; i < snapshots.Count; i++)
-                    {
-                        MissionPlaybookSnapshot snapshot = snapshots[i];
-                        using (MySqlCommand insertCmd = conn.CreateCommand())
-                        {
-                            insertCmd.Transaction = tx;
-                            insertCmd.CommandText = @"INSERT INTO mission_playbook_snapshots
-                                (mission_id, playbook_id, selection_order, file_name, description, content, delivery_mode, resolved_path, worktree_relative_path, source_last_update_utc)
-                                VALUES (@mission_id, @playbook_id, @selection_order, @file_name, @description, @content, @delivery_mode, @resolved_path, @worktree_relative_path, @source_last_update_utc);";
-                            insertCmd.Parameters.AddWithValue("@mission_id", missionId);
-                            insertCmd.Parameters.AddWithValue("@playbook_id", (object?)snapshot.PlaybookId ?? DBNull.Value);
-                            insertCmd.Parameters.AddWithValue("@selection_order", i);
-                            insertCmd.Parameters.AddWithValue("@file_name", snapshot.FileName ?? String.Empty);
-                            insertCmd.Parameters.AddWithValue("@description", (object?)snapshot.Description ?? DBNull.Value);
-                            insertCmd.Parameters.AddWithValue("@content", snapshot.Content ?? String.Empty);
-                            insertCmd.Parameters.AddWithValue("@delivery_mode", snapshot.DeliveryMode.ToString());
-                            insertCmd.Parameters.AddWithValue("@resolved_path", (object?)snapshot.ResolvedPath ?? DBNull.Value);
-                            insertCmd.Parameters.AddWithValue("@worktree_relative_path", (object?)snapshot.WorktreeRelativePath ?? DBNull.Value);
-                            insertCmd.Parameters.AddWithValue("@source_last_update_utc",
-                                snapshot.SourceLastUpdateUtc.HasValue ? snapshot.SourceLastUpdateUtc.Value : DBNull.Value);
-                            await insertCmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                        }
-                    }
-
+                    await ReplaceMissionSnapshotsAsync(conn, tx, missionId, snapshots, token).ConfigureAwait(false);
                     await tx.CommitAsync(token).ConfigureAwait(false);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Replace one mission's playbook snapshots inside the caller's transaction.
+        /// </summary>
+        /// <param name="conn">Open connection.</param>
+        /// <param name="tx">Transaction the writes join.</param>
+        /// <param name="missionId">Mission id.</param>
+        /// <param name="snapshots">Snapshots in selection order.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A task.</returns>
+        internal static async Task ReplaceMissionSnapshotsAsync(MySqlConnection conn, MySqlTransaction tx, string missionId, List<MissionPlaybookSnapshot> snapshots, CancellationToken token)
+        {
+            using (MySqlCommand deleteCmd = conn.CreateCommand())
+            {
+                deleteCmd.Transaction = tx;
+                deleteCmd.CommandText = "DELETE FROM mission_playbook_snapshots WHERE mission_id = @mission_id;";
+                deleteCmd.Parameters.AddWithValue("@mission_id", missionId);
+                await deleteCmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+            }
+
+            for (int i = 0; i < snapshots.Count; i++)
+            {
+                MissionPlaybookSnapshot snapshot = snapshots[i];
+                using (MySqlCommand insertCmd = conn.CreateCommand())
+                {
+                    insertCmd.Transaction = tx;
+                    insertCmd.CommandText = @"INSERT INTO mission_playbook_snapshots
+                        (mission_id, playbook_id, selection_order, file_name, description, content, delivery_mode, resolved_path, worktree_relative_path, source_last_update_utc)
+                        VALUES (@mission_id, @playbook_id, @selection_order, @file_name, @description, @content, @delivery_mode, @resolved_path, @worktree_relative_path, @source_last_update_utc);";
+                    insertCmd.Parameters.AddWithValue("@mission_id", missionId);
+                    insertCmd.Parameters.AddWithValue("@playbook_id", (object?)snapshot.PlaybookId ?? DBNull.Value);
+                    insertCmd.Parameters.AddWithValue("@selection_order", i);
+                    insertCmd.Parameters.AddWithValue("@file_name", snapshot.FileName ?? String.Empty);
+                    insertCmd.Parameters.AddWithValue("@description", (object?)snapshot.Description ?? DBNull.Value);
+                    insertCmd.Parameters.AddWithValue("@content", snapshot.Content ?? String.Empty);
+                    insertCmd.Parameters.AddWithValue("@delivery_mode", snapshot.DeliveryMode.ToString());
+                    insertCmd.Parameters.AddWithValue("@resolved_path", (object?)snapshot.ResolvedPath ?? DBNull.Value);
+                    insertCmd.Parameters.AddWithValue("@worktree_relative_path", (object?)snapshot.WorktreeRelativePath ?? DBNull.Value);
+                    insertCmd.Parameters.AddWithValue("@source_last_update_utc",
+                        snapshot.SourceLastUpdateUtc.HasValue ? snapshot.SourceLastUpdateUtc.Value : DBNull.Value);
+                    await insertCmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
             }
         }

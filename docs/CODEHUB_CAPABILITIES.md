@@ -136,7 +136,7 @@ vessel. What's missing is multi-vessel orchestration and persistence.
 | Create a vessel | `POST /api/v1/vessels` (`src/Armada.Server/Routes/VesselRoutes.cs`); MCP `add_vessel` (`Mcp/Tools/McpVesselTools.cs`) with `TryResolveLocalClonePath`, which sets `WorkingDirectory` and deliberately leaves `LocalPath` unset |
 | Bulk-route precedent | `POST /api/v1/vessels/delete/multiple` collects per-item skips |
 | Shell execution | `IHostCommandExecutor.RunAsync(HostCommandRequest)` with Local and Remote (Harbor) implementations; `WorkspaceService.ExecAsync` behind `POST /api/v1/workspace/vessels/{id}/exec` (tenant admin only) |
-| AI dispatch | `IAdmiralService.DispatchVoyageAsync(...)`, `ValidateDispatchAsync`; one voyage targets exactly one vessel |
+| AI dispatch | `IAdmiralService.CreateVoyageAsync(caller, VoyageCreationRequest)`, `ValidateDispatchAsync`; one voyage targets exactly one vessel |
 | Background work | `JobService` (`EnqueueAsync`, `CancelAsync`, stale-Running reaper); `HealthCheckLoopAsync` in `ArmadaServer.cs` with every-cycle, 10-cycle and 100-cycle steps |
 | Git facts | `IGitService.ListBranchesAsync` returns `BranchInfo` with Ahead/Behind; `GET /api/v1/vessels/{id}/git-status` (ahead/behind after fetch); `FetchAsync`, `IsRepositoryAsync` |
 | Readiness | `VesselReadinessService.EvaluateAsync` (error/warning issues) |
@@ -274,7 +274,7 @@ and marks pending targets `Cancelled`.
 **Restart recovery.** On startup, any target still marked `Running` from a Command
 run is set to `Failed` with the reason `Interrupted`. Pending targets resume.
 
-**How a Mission run executes.** The run fans out to one `DispatchVoyageAsync` per
+**How a Mission run executes.** The run fans out to one `CreateVoyageAsync` per
 vessel, with the rendered prompt as the single mission description. Each target
 stores its `VoyageId` and then follows the voyage's status:
 

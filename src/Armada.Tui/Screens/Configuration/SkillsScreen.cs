@@ -128,7 +128,7 @@ namespace Armada.Tui.Screens.Configuration
             ArmadaPageQuery q = new ArmadaPageQuery(query.PageNumber, query.PageSize);
             q.With("search", EntityUi.Blank(Filter("search")));
             q.With("category", EntityUi.Blank(Filter("category")));
-            EnumerationResult<Skill>? result = await Context.Client.ListSkillsAsync(q, token).ConfigureAwait(false);
+            EnumerationResult<Skill>? result = await Context.Client.Skills.ListAsync(q, token).ConfigureAwait(false);
             return PageOf(result);
         }
 
@@ -142,7 +142,7 @@ namespace Armada.Tui.Screens.Configuration
         /// <inheritdoc />
         protected override async Task<List<KpiItem>?> FetchKpisAsync(CancellationToken token)
         {
-            List<Skill> all = await ArmadaPaging.ReadAllAsync<Skill>((p, ct) => Context.Client.ListSkillsAsync(new ArmadaPageQuery(p, EntityLookups.PageSize), ct), 20, token).ConfigureAwait(false);
+            List<Skill> all = await ArmadaPaging.ReadAllAsync<Skill>((p, ct) => Context.Client.Skills.ListAsync(new ArmadaPageQuery(p, EntityLookups.PageSize), ct), 20, token).ConfigureAwait(false);
             List<string> categories = all.Where(s => !String.IsNullOrEmpty(s.Category)).Select(s => s.Category!).Distinct(StringComparer.Ordinal).OrderBy(c => c, StringComparer.Ordinal).ToList();
             List<SelectOption<string>> options = categories.Select(c => new SelectOption<string>(c, c)).ToList();
             Context.Dispatcher.Post(() => Filters.SetOptions("category", options));
@@ -183,7 +183,7 @@ namespace Armada.Tui.Screens.Configuration
         /// <inheritdoc />
         protected override Task DeleteAsync(Skill row, CancellationToken token)
         {
-            return Context.Client.DeleteSkillAsync(row.Id, token);
+            return Context.Client.Skills.DeleteAsync(row.Id, token);
         }
 
         /// <inheritdoc />

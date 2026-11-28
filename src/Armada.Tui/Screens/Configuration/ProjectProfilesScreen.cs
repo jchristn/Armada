@@ -132,7 +132,7 @@ namespace Armada.Tui.Screens.Configuration
             q.With("scope", EntityUi.Blank(Filter("scope")));
             string status = Filter("status");
             q.With("active", status == "active" ? "true" : status == "inactive" ? "false" : null);
-            EnumerationResult<ProjectProfile>? result = await Context.Client.ListProjectProfilesAsync(q, token).ConfigureAwait(false);
+            EnumerationResult<ProjectProfile>? result = await Context.Client.ProjectProfiles.ListAsync(q, token).ConfigureAwait(false);
             return PageOf(result);
         }
 
@@ -152,7 +152,7 @@ namespace Armada.Tui.Screens.Configuration
         /// <inheritdoc />
         protected override async Task<List<KpiItem>?> FetchKpisAsync(CancellationToken token)
         {
-            List<ProjectProfile> all = await ArmadaPaging.ReadAllAsync<ProjectProfile>((p, ct) => Context.Client.ListProjectProfilesAsync(new ArmadaPageQuery(p, EntityLookups.PageSize), ct), 20, token).ConfigureAwait(false);
+            List<ProjectProfile> all = await ArmadaPaging.ReadAllAsync<ProjectProfile>((p, ct) => Context.Client.ProjectProfiles.ListAsync(new ArmadaPageQuery(p, EntityLookups.PageSize), ct), 20, token).ConfigureAwait(false);
             return new List<KpiItem>
             {
                 new KpiItem("Total Profiles", EntityUi.Number(Context, all.Count)),
@@ -190,7 +190,7 @@ namespace Armada.Tui.Screens.Configuration
         /// <inheritdoc />
         protected override Task DeleteAsync(ProjectProfile row, CancellationToken token)
         {
-            return Context.Client.DeleteProjectProfileAsync(row.Id, token);
+            return Context.Client.ProjectProfiles.DeleteAsync(row.Id, token);
         }
 
         /// <inheritdoc />

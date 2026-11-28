@@ -71,8 +71,6 @@ namespace Armada.Server.Routes
             Func<WatsonWebserver.Core.HttpContextBase, Task<AuthContext>> authenticate,
             IAuthorizationService authz)
         {
-            string _Header = "[ArmadaServer] ";
-
             // Voyages
             app.Get("/api/v1/voyages", async (ApiRequest req) =>
             {
@@ -158,104 +156,38 @@ namespace Armada.Server.Routes
                 }
                 VoyageRequest voyageReq = JsonSerializer.Deserialize<VoyageRequest>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as VoyageRequest.");
-                try
-                {
-                    voyageReq.ApprovalOptions?.ValidateFor(ctx);
-                    CollectionLimits.RequireRequestItems(voyageReq.Missions, "Missions");
-                    CollectionLimits.RequireConfigItems(voyageReq.SelectedPlaybooks, "SelectedPlaybooks");
-                }
-                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex)) { return RouteErrorMapper.ToResponse(req, ex); }
                 List<MissionDescription> missions = new List<MissionDescription>();
                 if (voyageReq.Missions != null)
                 {
                     foreach (MissionRequest m in voyageReq.Missions)
                     {
-                        missions.Add(new MissionDescription(m.Title, m.Description) { Tier = m.Tier, RequestedCaptainId = m.RequestedCaptainId, Key = m.Key, ParentKey = m.ParentKey, BranchStrategy = m.BranchStrategy, OwnedPaths = m.OwnedPaths });
+                        missions.Add(new MissionDescription(m.Title, m.Description) { Tier = m.Tier, RequestedCaptainId = m.RequestedCaptainId, Key = m.Key, ParentKey = m.ParentKey, BranchStrategy = m.BranchStrategy, OwnedPaths = m.OwnedPaths, Persona = String.IsNullOrWhiteSpace(m.Persona) ? null : m.Persona.Trim(), Mode = m.Mode ?? MissionModeEnum.Implementation });
                     }
                 }
 
-                // Shared validation: objective existence, pipeline-by-name resolution, and bare-voyage
-                // detection all live in one place so REST and MCP accept and reject the same inputs.
-                DispatchValidationResult validation = await _admiral.ValidateDispatchAsync(
-                    voyageReq.ObjectiveId, voyageReq.PipelineId, voyageReq.Pipeline, voyageReq.VesselId, missions.Count, allowBareVoyage: true).ConfigureAwait(false);
-                if (!validation.IsValid)
-                {
-                    bool notFound = validation.Error == DispatchValidationErrorEnum.ObjectiveNotFound
-                        || validation.Error == DispatchValidationErrorEnum.PipelineNotFound;
-                    req.Http.Response.StatusCode = notFound ? 404 : 400;
-                    return new ApiErrorResponse { Error = notFound ? ApiResultEnum.NotFound : ApiResultEnum.BadRequest, Message = validation.Message ?? "Invalid dispatch request" };
-                }
-
-                string? pipelineId = validation.ResolvedPipelineId;
-
+                // One creation path for every surface (RS-4.1): validation, caller scope (a vessel or objective the caller
+                // cannot see is 404), pipeline, playbooks, hierarchy, and objective linking.
                 Voyage voyage;
-                if (validation.IsBareVoyage)
+                try
                 {
-                    // Bare voyage creation (missions added separately)
-                    List<SelectedPlaybook> selectedPlaybooks = voyageReq.SelectedPlaybooks ?? new List<SelectedPlaybook>();
-                    if (selectedPlaybooks.Count > 0)
+                    voyage = await _admiral.CreateVoyageAsync(ctx, new VoyageCreationRequest
                     {
-                        PlaybookService playbookService = new PlaybookService(_database, _logging);
-                        try
-                        {
-                            await playbookService.ResolveSelectionsAsync(ctx.TenantId!, selectedPlaybooks).ConfigureAwait(false);
-                        }
-                        catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
-                        {
-                            return RouteErrorMapper.ToResponse(req, ex);
-                        }
-                    }
-
-                    voyage = new Voyage(voyageReq.Title, voyageReq.Description);
-                    voyage.TenantId = ctx.TenantId;
-                    voyage.UserId = ctx.UserId;
-                    voyage.LandingMode = voyageReq.LandingMode;
-                    voyage.ApprovalOptions = voyageReq.ApprovalOptions?.Snapshot();
-                    voyage.IsEvaluation = voyageReq.IsEvaluation;
-                    voyage = await _database.Voyages.CreateAsync(voyage).ConfigureAwait(false);
-                    voyage.SelectedPlaybooks = selectedPlaybooks;
-                    if (voyage.SelectedPlaybooks.Count > 0)
-                    {
-                        await _database.Playbooks.SetVoyageSelectionsAsync(voyage.Id, voyage.SelectedPlaybooks).ConfigureAwait(false);
-                    }
-                    _logging.Info(_Header + "created bare voyage " + voyage.Id + ": " + voyageReq.Title);
+                        Title = voyageReq.Title,
+                        Description = voyageReq.Description,
+                        VesselId = voyageReq.VesselId,
+                        Missions = missions,
+                        PipelineId = voyageReq.PipelineId,
+                        PipelineName = voyageReq.Pipeline,
+                        SelectedPlaybooks = voyageReq.SelectedPlaybooks ?? new List<SelectedPlaybook>(),
+                        CaptainOverrides = voyageReq.CaptainAssignments ?? new List<CaptainAssignmentOverride>(),
+                        LandingMode = voyageReq.LandingMode,
+                        ApprovalOptions = voyageReq.ApprovalOptions,
+                        IsEvaluation = voyageReq.IsEvaluation,
+                        ObjectiveId = voyageReq.ObjectiveId,
+                        AllowBareVoyage = true
+                    }).ConfigureAwait(false);
                 }
-                else
-                {
-                    // Serialize the per-persona captain overrides and pass them in so they are persisted on the
-                    // voyage BEFORE any mission is created and assigned -- otherwise the first stage's inline
-                    // assignment runs before the overrides exist and auto-assigns an arbitrary idle captain.
-                    string? overridesJson = (voyageReq.CaptainAssignments != null && voyageReq.CaptainAssignments.Count > 0)
-                        ? MissionService.SerializeCaptainOverrides(voyageReq.CaptainAssignments)
-                        : null;
-
-                    try
-                    {
-                        voyage = await _admiral.DispatchVoyageAsync(
-                            voyageReq.Title,
-                            voyageReq.Description,
-                            voyageReq.VesselId,
-                            missions,
-                            pipelineId,
-                            voyageReq.SelectedPlaybooks,
-                            overridesJson,
-                            voyageReq.LandingMode, approvalOptions: voyageReq.ApprovalOptions, isEvaluation: voyageReq.IsEvaluation).ConfigureAwait(false);
-                    }
-                    catch (ArgumentException ex) { return RouteErrorMapper.ToResponse(req, ex); }
-                }
-
-                if (!String.IsNullOrWhiteSpace(voyageReq.ObjectiveId))
-                {
-                    await _objectives.LinkVoyageAsync(ctx, voyageReq.ObjectiveId, voyage.Id).ConfigureAwait(false);
-                }
-
-                // For a bare voyage (missions added separately), there was no inline dispatch, so persist the
-                // overrides now; they will apply when missions are added later.
-                if (validation.IsBareVoyage && voyageReq.CaptainAssignments != null && voyageReq.CaptainAssignments.Count > 0)
-                {
-                    voyage.CaptainOverridesJson = MissionService.SerializeCaptainOverrides(voyageReq.CaptainAssignments);
-                    voyage = await _database.Voyages.UpdateAsync(voyage).ConfigureAwait(false);
-                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex)) { return RouteErrorMapper.ToResponse(req, ex); }
 
                 req.Http.Response.StatusCode = 201;
                 return voyage;

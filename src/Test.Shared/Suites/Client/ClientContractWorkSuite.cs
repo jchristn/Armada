@@ -42,20 +42,20 @@ namespace Test.Shared.Suites.Client
                 request.VesselId = setup.Vessel.Id;
                 request.Title = "Contract pending mission";
                 request.Description = "No captain exists yet.";
-                MissionDispatchResult? result = await c.DispatchMissionAsync(request);
+                MissionDispatchResult? result = await c.Missions.DispatchAsync(request);
                 AssertStartsWith("msn_", result?.Mission?.Id, "mission id read from the wrapped reply");
                 AssertEqual("Contract pending mission", result!.Mission!.Title, "title");
                 AssertEqual(MissionStatusEnum.Pending, result.Mission.Status, "pending");
                 AssertFalse(String.IsNullOrEmpty(result.Warning), "warning kept");
 
-                Mission created = (await c.CreateMissionAsync(new Mission("Contract created mission", "Also pending.") { VesselId = setup.Vessel.Id }))!;
+                Mission created = (await c.Missions.CreateAsync(new Mission("Contract created mission", "Also pending.") { VesselId = setup.Vessel.Id }))!;
                 AssertStartsWith("msn_", created.Id, "CreateMissionAsync unwraps the reply");
                 created.Description = "updated";
-                AssertEqual("updated", (await c.UpdateMissionAsync(created.Id, created))?.Description, "update mission");
-                AssertEqual(MissionStatusEnum.Cancelled, (await c.TransitionMissionAsync(created.Id, new TransitionRequest { Status = "Cancelled" }))?.Status, "transition");
-                await c.DeleteMissionAsync(result.Mission.Id);
-                await c.PurgeMissionAsync(created.Id);
-                await ClientContract.ExpectErrorAsync(() => c.GetMissionAsync(created.Id), "purged", 404, 404);
+                AssertEqual("updated", (await c.Missions.UpdateAsync(created.Id, created))?.Description, "update mission");
+                AssertEqual(MissionStatusEnum.Cancelled, (await c.Missions.TransitionAsync(created.Id, new TransitionRequest { Status = "Cancelled" }))?.Status, "transition");
+                await c.Missions.DeleteAsync(result.Mission.Id);
+                await c.Missions.PurgeAsync(created.Id);
+                await ClientContract.ExpectErrorAsync(() => c.Missions.GetAsync(created.Id), "purged", 404, 404);
             }));
 
             cases.Add(Case("missions_land_and_detail", "A dispatched mission lands; diff, log, instructions, landing preview, PR, retry landing; review approve and deny; restart a failed mission", async (c, fx) =>
@@ -67,35 +67,35 @@ namespace Test.Shared.Suites.Client
                 request.VesselId = setup.Vessel.Id;
                 request.Title = "Contract landing mission";
                 request.Description = "Add a file.";
-                MissionDispatchResult? result = await c.DispatchMissionAsync(request);
+                MissionDispatchResult? result = await c.Missions.DispatchAsync(request);
                 AssertTrue(String.IsNullOrEmpty(result?.Warning), "assigned at once, no warning");
                 Mission done = await WaitForStatusAsync(c, result!.Mission!.Id, MissionStatusEnum.Complete);
                 AssertTrue(LiveServerSetup.OriginHasStubCommit(setup.BarePath), "landed on the origin");
 
-                AssertContains("stub-captain-", (await c.GetMissionDiffAsync(done.Id))?.Diff ?? "", "diff");
-                AssertContains("[stub captain]", (await c.GetMissionLogAsync(done.Id, 100))?.Log ?? "", "log");
-                AssertNotNull(await c.GetMissionInstructionsAsync(done.Id), "instructions");
-                AssertEqual(setup.Vessel.Id, (await c.GetMissionLandingPreviewAsync(done.Id))?.VesselId, "landing preview");
-                await ClientContract.ExpectErrorAsync(() => c.GetMissionGitHubPullRequestAsync(done.Id), "no pull request for a local merge");
-                await ClientContract.ExpectErrorAsync(() => c.EnumerateMissionPullRequestReviewsAsync(done.Id, new EnumerationQuery { PageSize = 5 }), "no pull request reviews for a local merge");
-                await ClientContract.ExpectErrorAsync(() => c.EnumerateMissionPullRequestCommentsAsync(done.Id), "no pull request comments for a local merge");
-                await ClientContract.ExpectErrorAsync(() => c.EnumerateMissionPullRequestChecksAsync(done.Id), "no pull request checks for a local merge");
-                await ClientContract.ExpectErrorAsync(() => c.RetryMissionLandingAsync(done.Id), "a landed mission cannot retry landing", 400, 409);
+                AssertContains("stub-captain-", (await c.Missions.GetDiffAsync(done.Id))?.Diff ?? "", "diff");
+                AssertContains("[stub captain]", (await c.Missions.GetLogAsync(done.Id, 100))?.Log ?? "", "log");
+                AssertNotNull(await c.Missions.GetInstructionsAsync(done.Id), "instructions");
+                AssertEqual(setup.Vessel.Id, (await c.Missions.GetLandingPreviewAsync(done.Id))?.VesselId, "landing preview");
+                await ClientContract.ExpectErrorAsync(() => c.Missions.GetGitHubPullRequestAsync(done.Id), "no pull request for a local merge");
+                await ClientContract.ExpectErrorAsync(() => c.Missions.EnumeratePullRequestReviewsAsync(done.Id, new EnumerationQuery { PageSize = 5 }), "no pull request reviews for a local merge");
+                await ClientContract.ExpectErrorAsync(() => c.Missions.EnumeratePullRequestCommentsAsync(done.Id), "no pull request comments for a local merge");
+                await ClientContract.ExpectErrorAsync(() => c.Missions.EnumeratePullRequestChecksAsync(done.Id), "no pull request checks for a local merge");
+                await ClientContract.ExpectErrorAsync(() => c.Missions.RetryLandingAsync(done.Id), "a landed mission cannot retry landing", 400, 409);
 
-                Mission review = (await c.CreateMissionAsync(new Mission("Contract review approve", "Needs review.") { VesselId = setup.Vessel.Id, RequiresReview = true }))!;
+                Mission review = (await c.Missions.CreateAsync(new Mission("Contract review approve", "Needs review.") { VesselId = setup.Vessel.Id, RequiresReview = true }))!;
                 await WaitForStatusAsync(c, review.Id, MissionStatusEnum.Review);
-                AssertNotEqual(MissionStatusEnum.Review, (await c.ApproveMissionReviewAsync(review.Id, new MissionReviewApproveRequest { Comment = "ok" }))?.Status, "approved");
+                AssertNotEqual(MissionStatusEnum.Review, (await c.Missions.ApproveReviewAsync(review.Id, new MissionReviewApproveRequest { Comment = "ok" }))?.Status, "approved");
                 await WaitForStatusAsync(c, review.Id, MissionStatusEnum.Complete);
 
-                Mission denied = (await c.CreateMissionAsync(new Mission("Contract review deny", "Needs review.") { VesselId = setup.Vessel.Id, RequiresReview = true }))!;
+                Mission denied = (await c.Missions.CreateAsync(new Mission("Contract review deny", "Needs review.") { VesselId = setup.Vessel.Id, RequiresReview = true }))!;
                 await WaitForStatusAsync(c, denied.Id, MissionStatusEnum.Review);
-                AssertNotEqual(MissionStatusEnum.Review, (await c.DenyMissionReviewAsync(denied.Id, new MissionReviewDenyRequest { Comment = "no", Action = "FailPipeline" }))?.Status, "denied");
+                AssertNotEqual(MissionStatusEnum.Review, (await c.Missions.DenyReviewAsync(denied.Id, new MissionReviewDenyRequest { Comment = "no", Action = "FailPipeline" }))?.Status, "denied");
 
                 _Behavior.MissionsSucceed = false;
-                Mission failing = (await c.CreateMissionAsync(new Mission("Contract failing mission", "Fails first.") { VesselId = setup.Vessel.Id }))!;
+                Mission failing = (await c.Missions.CreateAsync(new Mission("Contract failing mission", "Fails first.") { VesselId = setup.Vessel.Id }))!;
                 await WaitForStatusAsync(c, failing.Id, MissionStatusEnum.Failed);
                 _Behavior.MissionsSucceed = true;
-                Mission? restarted = await c.RestartMissionAsync(failing.Id);
+                Mission? restarted = await c.Missions.RestartAsync(failing.Id);
                 AssertEqual(failing.Id, restarted?.Id, "restart keeps the mission");
                 AssertNotEqual(MissionStatusEnum.Failed, restarted!.Status, "restart re-queues the mission (dispatched on the next cycle)");
             }));
@@ -105,7 +105,7 @@ namespace Test.Shared.Suites.Client
                 await LiveServerSetup.CreateCaptainAsync(c, "contract-lander");
 
                 VesselSetup local = await LiveServerSetup.CreateVesselAsync(c, "localmerge", LandingModeEnum.LocalMerge);
-                Mission localMission = (await c.CreateMissionAsync(new Mission("Contract LocalMerge mission", "Add a file.") { VesselId = local.Vessel.Id }))!;
+                Mission localMission = (await c.Missions.CreateAsync(new Mission("Contract LocalMerge mission", "Add a file.") { VesselId = local.Vessel.Id }))!;
                 await WaitForStatusAsync(c, localMission.Id, MissionStatusEnum.Complete);
                 AssertTrue(LiveServerSetup.CheckoutHasStubCommit(local.WorkingDirectory), "LocalMerge: merged into the working checkout");
                 AssertFalse(LiveServerSetup.OriginHasStubCommit(local.BarePath), "LocalMerge: nothing pushed to the origin");
@@ -113,7 +113,7 @@ namespace Test.Shared.Suites.Client
                 AssertTrue(Int32.TryParse(ahead.Trim(), out int aheadCount) && aheadCount > 0, "LocalMerge: the checkout's main is ahead of origin/main, not pushed (" + ahead.Trim() + ")");
 
                 VesselSetup pushed = await LiveServerSetup.CreateVesselAsync(c, "mergeandpush", LandingModeEnum.MergeAndPush);
-                Mission pushedMission = (await c.CreateMissionAsync(new Mission("Contract MergeAndPush mission", "Add a file.") { VesselId = pushed.Vessel.Id }))!;
+                Mission pushedMission = (await c.Missions.CreateAsync(new Mission("Contract MergeAndPush mission", "Add a file.") { VesselId = pushed.Vessel.Id }))!;
                 await WaitForStatusAsync(c, pushedMission.Id, MissionStatusEnum.Complete);
                 AssertTrue(LiveServerSetup.CheckoutHasStubCommit(pushed.WorkingDirectory), "MergeAndPush: merged into the working checkout");
                 AssertTrue(LiveServerSetup.OriginHasStubCommit(pushed.BarePath), "MergeAndPush: pushed to the origin");
@@ -131,9 +131,9 @@ namespace Test.Shared.Suites.Client
                 create.VesselId = setup.Vessel.Id;
                 create.LandingMode = LandingModeEnum.LocalMerge;
                 create.Missions.Add(new DispatchRequest { VesselId = setup.Vessel.Id, Title = "Voyage LocalMerge mission", Description = "Add a file." });
-                Voyage voyage = (await c.CreateVoyageAsync(create))!;
+                Voyage voyage = (await c.Voyages.CreateAsync(create))!;
                 AssertEqual(LandingModeEnum.LocalMerge, voyage.LandingMode, "the create reply carries the voyage landing mode");
-                AssertEqual(LandingModeEnum.LocalMerge, (await c.GetVoyageAsync(voyage.Id))?.LandingMode, "persisted");
+                AssertEqual(LandingModeEnum.LocalMerge, (await c.Voyages.GetAsync(voyage.Id))?.LandingMode, "persisted");
                 AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => (await VoyageMissionsAsync(c, voyage.Id)).Any(m => m.Status == MissionStatusEnum.Complete), LiveTimeoutMs), "voyage mission landed");
                 AssertTrue(LiveServerSetup.CheckoutHasStubCommit(setup.WorkingDirectory), "merged into the working checkout");
                 AssertFalse(LiveServerSetup.OriginHasStubCommit(setup.BarePath), "the voyage's LocalMerge did not push");
@@ -142,14 +142,14 @@ namespace Test.Shared.Suites.Client
                 bare.Title = "Contract bare voyage with a landing mode";
                 bare.VesselId = setup.Vessel.Id;
                 bare.LandingMode = LandingModeEnum.PullRequest;
-                Voyage bareVoyage = (await c.CreateVoyageAsync(bare))!;
-                AssertEqual(LandingModeEnum.PullRequest, (await c.GetVoyageAsync(bareVoyage.Id))?.LandingMode, "a bare voyage keeps its landing mode");
+                Voyage bareVoyage = (await c.Voyages.CreateAsync(bare))!;
+                AssertEqual(LandingModeEnum.PullRequest, (await c.Voyages.GetAsync(bareVoyage.Id))?.LandingMode, "a bare voyage keeps its landing mode");
 
                 VoyageCreateRequest inherit = new VoyageCreateRequest();
                 inherit.Title = "Contract bare voyage inheriting";
                 inherit.VesselId = setup.Vessel.Id;
-                Voyage inheritVoyage = (await c.CreateVoyageAsync(inherit))!;
-                AssertNull((await c.GetVoyageAsync(inheritVoyage.Id))?.LandingMode, "no landing mode means inherit");
+                Voyage inheritVoyage = (await c.Voyages.CreateAsync(inherit))!;
+                AssertNull((await c.Voyages.GetAsync(inheritVoyage.Id))?.LandingMode, "no landing mode means inherit");
             }));
 
             cases.Add(Case("voyage_evaluation_flag", "Voyage and mission dispatch carry IsEvaluation; missions inherit the voyage flag; the default stays false", async (c, fx) =>
@@ -160,9 +160,9 @@ namespace Test.Shared.Suites.Client
                 evaluation.VesselId = setup.Vessel.Id;
                 evaluation.IsEvaluation = true;
                 evaluation.Missions.Add(new DispatchRequest { VesselId = setup.Vessel.Id, Title = "Evaluation mission", Description = "Add a file." });
-                Voyage evalVoyage = (await c.CreateVoyageAsync(evaluation))!;
+                Voyage evalVoyage = (await c.Voyages.CreateAsync(evaluation))!;
                 AssertTrue(evalVoyage.IsEvaluation, "the create reply carries the evaluation flag");
-                VoyageProgress? evalDetail = await c.GetVoyageDetailAsync(evalVoyage.Id);
+                VoyageProgress? evalDetail = await c.Voyages.GetDetailAsync(evalVoyage.Id);
                 AssertTrue(evalDetail?.Voyage?.IsEvaluation == true, "persisted voyage flagged");
                 List<Mission> evalMissions = await VoyageMissionsAsync(c, evalVoyage.Id);
                 AssertTrue(evalMissions.Count > 0 && evalMissions.All(m => m.IsEvaluation), "every voyage mission inherits the flag");
@@ -171,18 +171,18 @@ namespace Test.Shared.Suites.Client
                 bareEval.Title = "Contract bare evaluation voyage";
                 bareEval.VesselId = setup.Vessel.Id;
                 bareEval.IsEvaluation = true;
-                Voyage bareVoyage = (await c.CreateVoyageAsync(bareEval))!;
-                AssertTrue((await c.GetVoyageAsync(bareVoyage.Id))?.IsEvaluation == true, "a bare voyage keeps the flag");
+                Voyage bareVoyage = (await c.Voyages.CreateAsync(bareEval))!;
+                AssertTrue((await c.Voyages.GetAsync(bareVoyage.Id))?.IsEvaluation == true, "a bare voyage keeps the flag");
 
-                MissionDispatchResult? standalone = await c.DispatchMissionAsync(new DispatchRequest { VesselId = setup.Vessel.Id, Title = "Standalone evaluation mission", Description = "x", IsEvaluation = true });
+                MissionDispatchResult? standalone = await c.Missions.DispatchAsync(new DispatchRequest { VesselId = setup.Vessel.Id, Title = "Standalone evaluation mission", Description = "x", IsEvaluation = true });
                 AssertTrue(standalone?.Mission?.IsEvaluation == true, "a standalone mission keeps the flag");
 
                 VoyageCreateRequest production = new VoyageCreateRequest();
                 production.Title = "Contract production voyage";
                 production.VesselId = setup.Vessel.Id;
                 production.Missions.Add(new DispatchRequest { VesselId = setup.Vessel.Id, Title = "Production mission", Description = "Add a file." });
-                Voyage prodVoyage = (await c.CreateVoyageAsync(production))!;
-                VoyageProgress? prodDetail = await c.GetVoyageDetailAsync(prodVoyage.Id);
+                Voyage prodVoyage = (await c.Voyages.CreateAsync(production))!;
+                VoyageProgress? prodDetail = await c.Voyages.GetDetailAsync(prodVoyage.Id);
                 AssertFalse(prodDetail!.Voyage!.IsEvaluation, "a normal dispatch is not evaluation");
                 List<Mission> prodMissions = await VoyageMissionsAsync(c, prodVoyage.Id);
                 AssertTrue(prodMissions.Count > 0 && prodMissions.All(m => !m.IsEvaluation), "normal missions are not evaluation");
@@ -195,19 +195,19 @@ namespace Test.Shared.Suites.Client
                 create.Title = "Contract voyage";
                 create.VesselId = setup.Vessel.Id;
                 create.Missions.Add(new DispatchRequest { VesselId = setup.Vessel.Id, Title = "Voyage mission", Description = "Add a file." });
-                Voyage voyage = (await c.CreateVoyageAsync(create))!;
+                Voyage voyage = (await c.Voyages.CreateAsync(create))!;
                 AssertStartsWith("vyg_", voyage.Id, "voyage id");
-                AssertEqual("Contract voyage", (await c.GetVoyageAsync(voyage.Id))?.Title, "GetVoyageAsync unwraps the voyage detail");
-                VoyageProgress? progress = await c.GetVoyageDetailAsync(voyage.Id);
+                AssertEqual("Contract voyage", (await c.Voyages.GetAsync(voyage.Id))?.Title, "GetVoyageAsync unwraps the voyage detail");
+                VoyageProgress? progress = await c.Voyages.GetDetailAsync(voyage.Id);
                 AssertEqual(1, progress?.TotalMissions, "the detail counts the voyage's missions");
                 AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => (await VoyageMissionsAsync(c, voyage.Id)).Any(m => m.Status == MissionStatusEnum.Complete), LiveTimeoutMs), "voyage mission landed");
-                ArmadaRawJson? statusJson = await c.GetVoyageStatusAsync(voyage.Id);
+                ArmadaRawJson? statusJson = await c.Voyages.GetStatusAsync(voyage.Id);
                 AssertNotNull(statusJson, "status JSON");
                 VoyageProgress statusDetail = JsonHelper.Deserialize<VoyageProgress>(statusJson!.Json);
                 AssertEqual(voyage.Id, statusDetail.Voyage?.Id, "status JSON voyage");
                 AssertTrue(statusDetail.TotalMissions > 0, "status JSON counts the missions");
                 AssertFalse(statusJson.Json.Contains("\"Missions\"", StringComparison.Ordinal), "status JSON embeds no mission list");
-                EnumerationResult<VoyageProgress>? active = await c.EnumerateVoyageProgressAsync(new EnumerationQuery { PageSize = 1000 });
+                EnumerationResult<VoyageProgress>? active = await c.Voyages.EnumerateProgressAsync(new EnumerationQuery { PageSize = 1000 });
                 AssertNotNull(active, "voyage progress page");
 
                 _Behavior.MissionsSucceed = false;
@@ -215,63 +215,63 @@ namespace Test.Shared.Suites.Client
                 second.Title = "Contract voyage to cancel";
                 second.VesselId = setup.Vessel.Id;
                 second.Missions.Add(new DispatchRequest { VesselId = setup.Vessel.Id, Title = "Cancelled mission", Description = "x" });
-                Voyage toCancel = (await c.CreateVoyageAsync(second))!;
-                VoyageCancelResult? cancelResult = await c.CancelVoyageAsync(toCancel.Id);
+                Voyage toCancel = (await c.Voyages.CreateAsync(second))!;
+                VoyageCancelResult? cancelResult = await c.Voyages.CancelAsync(toCancel.Id);
                 AssertEqual(VoyageStatusEnum.Cancelled, cancelResult?.Voyage?.Status, "cancel returns the cancelled voyage");
                 AssertTrue(cancelResult!.CancelledMissions + cancelResult.NotCancelledMissions <= 1, "cancel returns counts");
                 _Behavior.MissionsSucceed = true;
                 AssertTrue(await LiveServerSetup.WaitUntilAsync(async () =>
                 {
-                    VoyageProgress? detail = await c.GetVoyageDetailAsync(toCancel.Id);
+                    VoyageProgress? detail = await c.Voyages.GetDetailAsync(toCancel.Id);
                     return detail?.Voyage != null && detail.Voyage.Status != VoyageStatusEnum.InProgress
                         && (await VoyageMissionsAsync(c, toCancel.Id)).All(m => m.Status != MissionStatusEnum.Assigned && m.Status != MissionStatusEnum.InProgress);
                 }, LiveTimeoutMs), "voyage and its missions stopped");
-                await c.PurgeVoyageAsync(toCancel.Id);
-                await ClientContract.ExpectErrorAsync(() => c.GetVoyageAsync(toCancel.Id), "purged", 404, 404);
+                await c.Voyages.PurgeAsync(toCancel.Id);
+                await ClientContract.ExpectErrorAsync(() => c.Voyages.GetAsync(toCancel.Id), "purged", 404, 404);
             }));
 
             cases.Add(Case("captains", "Captain create, get, update, tools, log, stop, recall, unquarantine, restart, stop all, delete", async (c, fx) =>
             {
                 Captain captain = await LiveServerSetup.CreateCaptainAsync(c, "contract-captain");
-                AssertEqual(captain.Name, (await c.GetCaptainAsync(captain.Id))?.Name, "get captain");
+                AssertEqual(captain.Name, (await c.Captains.GetAsync(captain.Id))?.Name, "get captain");
                 captain.SystemInstructions = "Be brief.";
-                AssertEqual("Be brief.", (await c.UpdateCaptainAsync(captain.Id, captain))?.SystemInstructions, "update captain");
-                AssertEqual(captain.Id, (await c.GetCaptainToolsAsync(captain.Id))?.CaptainId, "tools");
-                CaptainToolAccessResult? toolPage = await c.EnumerateCaptainToolsAsync(captain.Id, 2, 1, CaptainToolSourceKindEnum.McpServer);
+                AssertEqual("Be brief.", (await c.Captains.UpdateAsync(captain.Id, captain))?.SystemInstructions, "update captain");
+                AssertEqual(captain.Id, (await c.Captains.GetToolsAsync(captain.Id))?.CaptainId, "tools");
+                CaptainToolAccessResult? toolPage = await c.Captains.EnumerateToolsAsync(captain.Id, 2, 1, CaptainToolSourceKindEnum.McpServer);
                 AssertNotNull(toolPage, "paged tools");
                 AssertEqual(2, toolPage!.Tools.PageNumber, "tools page number");
                 AssertEqual(1, toolPage.Tools.PageSize, "tools page size");
                 AssertTrue(toolPage.Tools.Objects.All(t => t.SourceKind == CaptainToolSourceKindEnum.McpServer), "source kind filter");
                 try
                 {
-                    AssertNotNull(await c.GetCaptainLogAsync(captain.Id, 50), "log");
+                    AssertNotNull(await c.Captains.GetLogAsync(captain.Id, 50), "log");
                 }
                 catch (ArmadaApiException ex)
                 {
                     AssertEqual(404, ex.StatusCode, "an idle captain without a log reads 404");
                 }
 
-                await c.StopCaptainAsync(captain.Id);
-                await c.RecallCaptainAsync(captain.Id);
-                AssertEqual(captain.Id, (await c.UnquarantineCaptainAsync(captain.Id))?.Id, "unquarantine of a captain that is not quarantined returns that captain");
+                await c.Captains.StopAsync(captain.Id);
+                await c.Captains.RecallAsync(captain.Id);
+                AssertEqual(captain.Id, (await c.Captains.UnquarantineAsync(captain.Id))?.Id, "unquarantine of a captain that is not quarantined returns that captain");
 
-                Captain replacement = (await c.RestartCaptainAsync(captain.Id))!;
+                Captain replacement = (await c.Captains.RestartAsync(captain.Id))!;
                 AssertEqual(captain.Name, replacement.Name, "restart recreates the captain");
                 AssertNotEqual(captain.Id, replacement.Id, "with a new id");
-                await c.StopAllCaptainsAsync();
-                await c.DeleteCaptainAsync(replacement.Id);
+                await c.Captains.StopAllAsync();
+                await c.Captains.DeleteAsync(replacement.Id);
             }));
 
             cases.Add(Case("docks_and_merge_queue", "Docks list, get, delete; merge queue enqueue, get, process, process all, cancel, delete", async (c, fx) =>
             {
                 VesselSetup setup = await LiveServerSetup.CreateVesselAsync(c, "merge");
-                EnumerationResult<Dock>? docks = await c.ListDocksAsync(new ArmadaPageQuery(1, 100));
+                EnumerationResult<Dock>? docks = await c.Docks.ListAsync(new ArmadaPageQuery(1, 100));
                 Dock? dock = docks?.Objects.FirstOrDefault();
                 AssertNotNull(dock, "earlier missions left docks");
-                AssertEqual(dock!.Id, (await c.GetDockAsync(dock.Id))?.Id, "get dock");
+                AssertEqual(dock!.Id, (await c.Docks.GetAsync(dock.Id))?.Id, "get dock");
                 try
                 {
-                    await c.DeleteDockAsync(dock.Id);
+                    await c.Docks.DeleteAsync(dock.Id);
                 }
                 catch (ArmadaApiException ex)
                 {
@@ -287,63 +287,63 @@ namespace Test.Shared.Suites.Client
                 AssertEqual(0, LiveServerSetup.Git(work, out string o3, "push", "origin", branch), "push: " + o3);
                 LiveServerSetup.Git(work, out _, "checkout", "main");
 
-                MergeEntry entry = (await c.EnqueueMergeAsync(new MergeEntry(branch, "main") { VesselId = setup.Vessel.Id }))!;
-                AssertEqual(branch, (await c.GetMergeEntryAsync(entry.Id))?.BranchName, "get entry");
-                await c.ProcessMergeEntryAsync(entry.Id);
-                await c.ProcessAllMergeQueueAsync();
-                AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => (await c.GetMergeEntryAsync(entry.Id))?.Status != MergeStatusEnum.Queued, LiveTimeoutMs), "entry processed");
+                MergeEntry entry = (await c.MergeQueue.EnqueueAsync(new MergeEntry(branch, "main") { VesselId = setup.Vessel.Id }))!;
+                AssertEqual(branch, (await c.MergeQueue.GetAsync(entry.Id))?.BranchName, "get entry");
+                await c.MergeQueue.ProcessAsync(entry.Id);
+                await c.MergeQueue.ProcessAllAsync();
+                AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => (await c.MergeQueue.GetAsync(entry.Id))?.Status != MergeStatusEnum.Queued, LiveTimeoutMs), "entry processed");
 
-                MergeEntry second = (await c.EnqueueMergeAsync(new MergeEntry(branch, "main") { VesselId = setup.Vessel.Id }))!;
-                await c.CancelMergeEntryAsync(second.Id);
-                MergeEntry third = (await c.EnqueueMergeAsync(new MergeEntry(branch, "main") { VesselId = setup.Vessel.Id }))!;
-                await c.DeleteMergeEntryAsync(third.Id);
-                AssertNotNull(await c.ListMergeQueueAsync(new ArmadaPageQuery(1, 50)), "list");
+                MergeEntry second = (await c.MergeQueue.EnqueueAsync(new MergeEntry(branch, "main") { VesselId = setup.Vessel.Id }))!;
+                await c.MergeQueue.CancelAsync(second.Id);
+                MergeEntry third = (await c.MergeQueue.EnqueueAsync(new MergeEntry(branch, "main") { VesselId = setup.Vessel.Id }))!;
+                await c.MergeQueue.DeleteAsync(third.Id);
+                AssertNotNull(await c.MergeQueue.ListAsync(new ArmadaPageQuery(1, 50)), "list");
             }));
 
             cases.Add(Case("signals_events_jobs_history", "Signals send, get, read, batch delete; event get and batch delete; job get and cancel; history; request history get and deletes", async (c, fx) =>
             {
                 Captain captain = await LiveServerSetup.CreateCaptainAsync(c, "contract-signals");
-                Signal sent = (await c.SendSignalAsync(new SendSignalRequest { ToCaptainId = captain.Id, Type = "Nudge", Payload = "contract" }))!;
-                AssertEqual("contract", (await c.GetSignalAsync(sent.Id))?.Payload, "get signal");
-                await c.MarkSignalReadAsync(sent.Id);
-                AssertTrue((await c.GetSignalAsync(sent.Id))?.Read == true, "read");
-                AssertEqual(1, (await c.DeleteSignalsBatchAsync(new List<string> { sent.Id }))?.Deleted ?? 0, "batch delete signals");
+                Signal sent = (await c.Signals.SendAsync(new SendSignalRequest { ToCaptainId = captain.Id, Type = "Nudge", Payload = "contract" }))!;
+                AssertEqual("contract", (await c.Signals.GetAsync(sent.Id))?.Payload, "get signal");
+                await c.Signals.MarkReadAsync(sent.Id);
+                AssertTrue((await c.Signals.GetAsync(sent.Id))?.Read == true, "read");
+                AssertEqual(1, (await c.Signals.DeleteBatchAsync(new List<string> { sent.Id }))?.Deleted ?? 0, "batch delete signals");
 
-                ArmadaEvent evt = (await c.ListEventsAsync(new ArmadaPageQuery(1, 10)))!.Objects.First();
-                AssertEqual(evt.Id, (await c.GetEventAsync(evt.Id))?.Id, "GET /api/v1/events/{id}");
-                AssertEqual(1, (await c.DeleteEventsBatchAsync(new List<string> { evt.Id }))?.Deleted ?? 0, "batch delete events");
-                await ClientContract.ExpectErrorAsync(() => c.GetEventAsync(evt.Id), "deleted event", 404, 404);
+                ArmadaEvent evt = (await c.Events.ListAsync(new ArmadaPageQuery(1, 10)))!.Objects.First();
+                AssertEqual(evt.Id, (await c.Events.GetAsync(evt.Id))?.Id, "GET /api/v1/events/{id}");
+                AssertEqual(1, (await c.Events.DeleteBatchAsync(new List<string> { evt.Id }))?.Deleted ?? 0, "batch delete events");
+                await ClientContract.ExpectErrorAsync(() => c.Events.GetAsync(evt.Id), "deleted event", 404, 404);
 
                 VesselSetup setup = await LiveServerSetup.CreateVesselAsync(c, "jobs");
-                VesselHealthEvaluationStart? start = await c.EvaluateVesselHealthAsync(new VesselHealthEvaluateRequest { VesselIds = new List<string> { setup.Vessel.Id } });
+                VesselHealthEvaluationStart? start = await c.VesselHealth.EvaluateAsync(new VesselHealthEvaluateRequest { VesselIds = new List<string> { setup.Vessel.Id } });
                 AssertFalse(String.IsNullOrEmpty(start?.JobId), "evaluation job");
-                AssertEqual(start!.JobId, (await c.GetJobAsync(start.JobId))?.Id, "get job");
+                AssertEqual(start!.JobId, (await c.Jobs.GetAsync(start.JobId))?.Id, "get job");
                 try
                 {
-                    AssertEqual(start.JobId, (await c.CancelJobAsync(start.JobId))?.Id, "cancel job");
+                    AssertEqual(start.JobId, (await c.Jobs.CancelAsync(start.JobId))?.Id, "cancel job");
                 }
                 catch (ArmadaApiException ex)
                 {
                     AssertEqual(409, ex.StatusCode, "a finished job cannot be cancelled");
                 }
 
-                AssertNotNull(await c.ListHistoryTimelineAsync(new HistoricalTimelineQuery { PageSize = 5 }), "history (GET)");
+                AssertNotNull(await c.History.ListTimelineAsync(new HistoricalTimelineQuery { PageSize = 5 }), "history (GET)");
 
-                await ClientContract.ExpectErrorAsync(() => c.GetMissionAsync("msn_contract_missing_a"), "404 to record", 404, 404);
-                await ClientContract.ExpectErrorAsync(() => c.GetMissionAsync("msn_contract_missing_b"), "404 to record", 404, 404);
-                await ClientContract.ExpectErrorAsync(() => c.GetMissionAsync("msn_contract_missing_c"), "404 to record", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.Missions.GetAsync("msn_contract_missing_a"), "404 to record", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.Missions.GetAsync("msn_contract_missing_b"), "404 to record", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.Missions.GetAsync("msn_contract_missing_c"), "404 to record", 404, 404);
                 List<RequestHistoryEntry> missing = new List<RequestHistoryEntry>();
                 AssertTrue(await LiveServerSetup.WaitUntilAsync(async () =>
                 {
-                    missing = (await c.ListRequestHistoryAsync(new RequestHistoryQuery { StatusCode = 404, PageSize = 100 }))?.Objects.Where(e => e.Route.Contains("msn_contract_missing_", StringComparison.Ordinal)).ToList() ?? new List<RequestHistoryEntry>();
+                    missing = (await c.RequestHistory.ListAsync(new RequestHistoryQuery { StatusCode = 404, PageSize = 100 }))?.Objects.Where(e => e.Route.Contains("msn_contract_missing_", StringComparison.Ordinal)).ToList() ?? new List<RequestHistoryEntry>();
                     return missing.Count >= 3;
                 }, 15000), "requests recorded");
                 RequestHistoryEntry first = missing.First(e => e.Route.EndsWith("_a", StringComparison.Ordinal));
-                AssertEqual(first.Id, (await c.GetRequestHistoryEntryAsync(first.Id))?.Entry.Id, "get request entry");
-                await c.DeleteRequestHistoryEntryAsync(first.Id);
+                AssertEqual(first.Id, (await c.RequestHistory.GetEntryAsync(first.Id))?.Entry.Id, "get request entry");
+                await c.RequestHistory.DeleteEntryAsync(first.Id);
                 RequestHistoryEntry second = missing.First(e => e.Route.EndsWith("_b", StringComparison.Ordinal));
-                AssertEqual(1, (await c.DeleteRequestHistoryEntriesAsync(new List<string> { second.Id }))?.Deleted ?? 0, "delete entries");
-                BatchDeleteResult? byFilter = await c.DeleteRequestHistoryByFilterAsync(new RequestHistoryQuery { Route = "/api/v1/missions/msn_contract_missing_c" });
+                AssertEqual(1, (await c.RequestHistory.DeleteEntriesAsync(new List<string> { second.Id }))?.Deleted ?? 0, "delete entries");
+                BatchDeleteResult? byFilter = await c.RequestHistory.DeleteByFilterAsync(new RequestHistoryQuery { Route = "/api/v1/missions/msn_contract_missing_c" });
                 AssertTrue((byFilter?.Deleted ?? 0) >= 1, "delete by filter");
             }));
 
@@ -360,7 +360,7 @@ namespace Test.Shared.Suites.Client
             List<Mission> missions = new List<Mission>();
             for (int pageNumber = 1; pageNumber <= 100; pageNumber++)
             {
-                EnumerationResult<Mission>? page = await c.ListMissionsAsync(new ArmadaPageQuery(pageNumber, 100).With("voyageId", voyageId)).ConfigureAwait(false);
+                EnumerationResult<Mission>? page = await c.Missions.ListAsync(new ArmadaPageQuery(pageNumber, 100).With("voyageId", voyageId)).ConfigureAwait(false);
                 if (page == null || page.Objects.Count == 0) break;
                 missions.AddRange(page.Objects);
                 if (pageNumber >= page.TotalPages) break;
@@ -379,7 +379,7 @@ namespace Test.Shared.Suites.Client
             Mission? mission = null;
             bool reached = await LiveServerSetup.WaitUntilAsync(async () =>
             {
-                mission = await c.GetMissionAsync(missionId);
+                mission = await c.Missions.GetAsync(missionId);
                 return mission != null && mission.Status == status;
             }, LiveTimeoutMs);
             if (!reached)

@@ -216,7 +216,7 @@ namespace Armada.Tui.Screens.Delivery
         /// <inheritdoc />
         protected override Task<Runbook?> FetchAsync(CancellationToken token)
         {
-            return Context.Client.GetRunbookAsync(EntityId, token);
+            return Context.Client.Runbooks.GetAsync(EntityId, token);
         }
 
         /// <inheritdoc />
@@ -406,7 +406,7 @@ namespace Armada.Tui.Screens.Delivery
         {
             try
             {
-                return await ArmadaPaging.ReadAllAsync<RunbookExecution>((p, ct) => Context.Client.ListRunbookExecutionsAsync(new RunbookExecutionQuery { RunbookId = runbookId, PageNumber = p, PageSize = EntityLookups.PageSize }, ct), 20, token).ConfigureAwait(false);
+                return await ArmadaPaging.ReadAllAsync<RunbookExecution>((p, ct) => Context.Client.Runbooks.ListExecutionsAsync(new RunbookExecutionQuery { RunbookId = runbookId, PageNumber = p, PageSize = EntityLookups.PageSize }, ct), 20, token).ConfigureAwait(false);
             }
             catch (ArmadaApiException)
             {
@@ -505,7 +505,7 @@ namespace Armada.Tui.Screens.Delivery
             if (IsCreateMode)
             {
                 payload.Scope = ScopeRules.ResolveCreateScope(Context.Session, null);
-                EntityUi.Run<Runbook?>(Context, ct => Context.Client.CreateRunbookAsync(payload, ct), created =>
+                EntityUi.Run<Runbook?>(Context, ct => Context.Client.Runbooks.CreateAsync(payload, ct), created =>
                 {
                     if (created == null) return;
                     Editor.MarkClean();
@@ -517,7 +517,7 @@ namespace Armada.Tui.Screens.Delivery
 
             Runbook? current = Entity;
             if (current == null) return;
-            EntityUi.Run<Runbook?>(Context, ct => Context.Client.UpdateRunbookAsync(current.Id, payload, ct), updated =>
+            EntityUi.Run<Runbook?>(Context, ct => Context.Client.Runbooks.UpdateAsync(current.Id, payload, ct), updated =>
             {
                 if (updated == null) return;
                 Editor.MarkClean();
@@ -559,7 +559,7 @@ namespace Armada.Tui.Screens.Delivery
                 if (!payload.StepNotes.ContainsKey(kvp.Key) && !StepChecklist.Items.Any(i => i.Step.Id == kvp.Key)) payload.StepNotes[kvp.Key] = kvp.Value;
             }
 
-            EntityUi.Run<RunbookExecution?>(Context, ct => Context.Client.UpdateRunbookExecutionAsync(x.Id, payload, ct), updated =>
+            EntityUi.Run<RunbookExecution?>(Context, ct => Context.Client.Runbooks.UpdateExecutionAsync(x.Id, payload, ct), updated =>
             {
                 if (updated == null) return;
                 int idx = _Executions.FindIndex(e => e.Id == updated.Id);
@@ -609,7 +609,7 @@ namespace Armada.Tui.Screens.Delivery
             if (r == null || !CanManage()) return;
             Context.Confirm("Delete Runbook", EntityUi.T(Context, "Delete \"{{title}}\"? This removes the runbook definition and keeps existing executions only in the event log history.", "title", r.Title), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting runbook", ct => Context.Client.DeleteRunbookAsync(r.Id, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting runbook", ct => Context.Client.Runbooks.DeleteAsync(r.Id, ct), () =>
                 {
                     EntityUi.Toast(Context, NotificationSeverityEnum.Warning, EntityUi.T(Context, "Runbook \"{{title}}\" deleted.", "title", r.Title));
                     Context.Navigate("/delivery?tab=runbooks");

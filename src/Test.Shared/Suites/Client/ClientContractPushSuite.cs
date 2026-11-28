@@ -34,25 +34,25 @@ namespace Test.Shared.Suites.Client
             {
                 string token = "ExponentPushToken[" + Guid.NewGuid().ToString("N") + "]";
                 PushDeviceRegisterRequest register = new PushDeviceRegisterRequest { Platform = PushPlatformEnum.Android, ExpoPushToken = token, DeviceName = "contract" };
-                PushDevice created = (await c.RegisterPushDeviceAsync(register))!;
+                PushDevice created = (await c.Push.RegisterAsync(register))!;
                 AssertTrue(created.Id.StartsWith("pdv_", StringComparison.Ordinal), "created id");
                 AssertTrue(created.ExpoPushToken.Contains("****"), "masked token");
-                PushDevice refreshed = (await c.RegisterPushDeviceAsync(register))!;
+                PushDevice refreshed = (await c.Push.RegisterAsync(register))!;
                 AssertEqual(created.Id, refreshed.Id, "refresh keeps the device");
 
-                List<PushDevice> listed = (await c.ListPushDevicesAsync())!;
+                List<PushDevice> listed = (await c.Push.ListAsync())!;
                 AssertTrue(listed.Any(d => d.Id == created.Id), "listed");
 
-                PushDevice updated = (await c.UpdatePushDeviceAsync(created.Id, new PushDeviceUpdateRequest { DeviceName = "renamed", Categories = new List<PushCategoryEnum> { PushCategoryEnum.VoyageFinished } }))!;
+                PushDevice updated = (await c.Push.UpdateAsync(created.Id, new PushDeviceUpdateRequest { DeviceName = "renamed", Categories = new List<PushCategoryEnum> { PushCategoryEnum.VoyageFinished } }))!;
                 AssertEqual("renamed", updated.DeviceName, "renamed");
                 AssertEqual("VoyageFinished", String.Join(",", updated.Categories), "categories");
 
-                PushTestResult test = (await c.TestPushDeviceAsync(created.Id))!;
+                PushTestResult test = (await c.Push.TestAsync(created.Id))!;
                 AssertEqual(PushTestStatusEnum.Sent, test.Status, test.Message ?? "");
                 AssertTrue(fx.PushTransport.Messages.Any(m => m.To == token), "the recording transport received the test push");
 
-                await c.DeletePushDeviceAsync(created.Id);
-                await ClientContract.ExpectErrorAsync(() => c.TestPushDeviceAsync(created.Id), "deleted", 404, 404);
+                await c.Push.DeleteAsync(created.Id);
+                await ClientContract.ExpectErrorAsync(() => c.Push.TestAsync(created.Id), "deleted", 404, 404);
             }));
 
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "Armada.Client contract: push devices", cases: cases);

@@ -17,6 +17,7 @@ has no notes saying why. The Tui.Parity test suite parses the same sources and e
 """
 import json
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -24,6 +25,20 @@ from client_exports import server_exports, pascal, ROOT  # noqa: E402
 from dashboard_surfaces import HUB_PAGES, events, read, routes, settings_fields, tabs  # noqa: E402
 
 MANIFEST = os.path.join(ROOT, "src", "Armada.Tui", "parity.json")
+
+
+def client_methods():
+    """Map each api/client.ts export to its sub-client call ("Fleets.ListAsync") from the [DashboardExport] attributes."""
+    found = {}
+    folder = os.path.join(ROOT, "src", "Armada.Client")
+    for name in sorted(os.listdir(folder)):
+        m = re.match(r"(\w+)Client\.cs$", name)
+        if not m or name == "ArmadaClient.cs":
+            continue
+        text = read(os.path.join(folder, name))
+        for hit in re.finditer(r'\[DashboardExport\("(\w+)"\)\]\s*public [^\n(]*?\b(\w+Async)\(', text):
+            found[hit.group(1)] = m.group(1) + "." + hit.group(2)
+    return found
 
 
 def check(entries, rendered):
@@ -71,7 +86,7 @@ def main():
         route, param = HUB_PAGES[page]
         add("tab", page + ":" + key, "planned", route + "?" + param + "=" + key, "", label)
     for area, name, kind, text in server_exports():
-        add("api", name, "implemented", "ArmadaClient." + pascal(name) + "Async", "W0.2", area)
+        add("api", name, "implemented", "ArmadaClient." + client_methods().get(name, pascal(name) + "Async"), "W0.2", area)
     entity = {"mission.changed", "voyage.changed", "captain.changed", "deployment.changed", "objective.changed", "incident.changed"}
     for ev in events():
         if ev in entity:
@@ -86,8 +101,8 @@ def main():
         add("setting", field, "planned", "ServerSettingsScreen", "W7.7", "")
     for route in ["/approvals", "/setup"]:
         add("route", route, "extension", "", "", "TUI-only route")
-    for name in ["GetI18nCatalogAsync", "GetOpenApiDocumentAsync", "SendRawAsync"]:
-        add("api", "tui:" + name, "extension", "ArmadaClient." + name, "W0.2", "TUI-only client call")
+    for name in ["Support.GetI18nCatalogAsync", "Support.GetOpenApiDocumentAsync", "SendRawAsync"]:
+        add("api", "tui:" + name.split(".")[-1], "extension", "ArmadaClient." + name, "W0.2", "TUI-only client call")
 
     entries.sort(key=lambda e: (["route", "tab", "api", "event", "setting"].index(e["kind"]), e["key"]))
     doc = {

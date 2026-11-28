@@ -5,10 +5,11 @@ namespace Armada.Core.Services
     using System.Linq;
     using System.Text;
     using System.Text.Json;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
 
     /// <summary>
-    /// Reads the structured plan an Architect captain emits as a fenced code block whose info string is
+    /// Reads the structured plan an Architect captain emits as a fenced code block (backticks or tildes) whose info string is
     /// <c>armada-plan</c>:
     /// <code>
     /// ```armada-plan
@@ -74,42 +75,79 @@ namespace Armada.Core.Services
         /// <returns>True when a valid plan was found.</returns>
         public static bool TryParse(string? output, out ArchitectPlan? plan, out string? error, int maxHierarchyDepth)
         {
-            plan = null;
-            error = null;
-            if (String.IsNullOrWhiteSpace(output)) return false;
+            ArchitectPlanParseResult result = Parse(output, maxHierarchyDepth);
+            plan = result.Plan;
+            error = result.Error;
+            return result.Status == ArchitectPlanParseStatusEnum.Parsed;
+        }
+
+        /// <summary>
+        /// Read an Architect plan from the final <c>armada-plan</c> block (a backtick or tilde fence). The final block must be
+        /// valid: an Architect that revises its plan emits the final one last, and a malformed final block never falls back
+        /// to an earlier one. Validation stays strict; a value of the wrong type or a wrong-case <c>kind</c> is reported, not
+        /// coerced, so the Architect fixes it in a repair turn.
+        /// </summary>
+        /// <param name="output">Architect output.</param>
+        /// <param name="maxHierarchyDepth">Deepest allowed parent chain (Concurrency.MaxHierarchyDepth).</param>
+        /// <returns>The status, the plan when valid, and the ordered, capped error list when not.</returns>
+        public static ArchitectPlanParseResult Parse(string? output, int maxHierarchyDepth)
+        {
+            ArchitectPlanParseResult result = new ArchitectPlanParseResult();
+            if (String.IsNullOrWhiteSpace(output)) return result;
             foreach (string block in ExtractPlanBlocks(output))
             {
+                result = new ArchitectPlanParseResult();
                 ArchitectPlan? candidate;
                 try { candidate = JsonSerializer.Deserialize<ArchitectPlan>(block, _Options); }
-                catch (JsonException)
+                catch (JsonException ex)
                 {
                     // A later malformed revision must not silently dispatch an older plan.
-                    plan = null;
-                    error = "Architect plan JSON is invalid. Emit a complete armada-plan block with numeric dependencies.";
+                    string detail = DescribeJsonError(ex);
+                    result.Status = ArchitectPlanParseStatusEnum.InvalidJson;
+                    result.Errors.Add(detail);
+                    result.Error = "Architect plan JSON is invalid: " + detail + ". Emit a complete armada-plan block with numeric dependencies.";
                     continue;
                 }
                 try { CollectionBounds.Validate(candidate); }
                 catch (CollectionLimitExceededException limit)
                 {
                     // An oversized plan is rejected (never truncated): the Architect must split the work.
-                    plan = null;
-                    error = "Architect plan rejected: " + limit.Message + " Split the work into smaller plans.";
+                    result.Status = ArchitectPlanParseStatusEnum.TooLarge;
+                    result.Errors.Add(limit.Message);
+                    result.Error = "Architect plan rejected: " + limit.Message + " Split the work into smaller plans.";
                     continue;
                 }
                 if (candidate?.ContractVersion != null)
                 {
-                    List<string> errors = ValidateContract(candidate, maxHierarchyDepth);
-                    plan = errors.Count == 0 ? candidate : null;
-                    error = errors.Count == 0 ? null : "Architect plan contract rejected: " + String.Join("; ", errors)
+                    List<string> errors = ArchitectPlanParseResult.Cap(ValidateContract(candidate, maxHierarchyDepth));
+                    if (errors.Count == 0)
+                    {
+                        result.Status = ArchitectPlanParseStatusEnum.Parsed;
+                        result.Plan = candidate;
+                        continue;
+                    }
+
+                    result.Status = ArchitectPlanParseStatusEnum.Rejected;
+                    result.Errors = errors;
+                    result.Error = "Architect plan contract rejected: " + String.Join("; ", errors)
                         + ". Remediation: correct the plan before dispatching Workers; retain objective requirement IDs and explicit failure-case evidence.";
                 }
                 else
                 {
-                    plan = Normalize(candidate, maxHierarchyDepth);
-                    error = plan == null ? "Architect plan contains no valid missions." : null;
+                    ArchitectPlan? normalized = Normalize(candidate, maxHierarchyDepth, out string? normalizeError);
+                    if (normalized != null)
+                    {
+                        result.Status = ArchitectPlanParseStatusEnum.Parsed;
+                        result.Plan = normalized;
+                        continue;
+                    }
+
+                    result.Status = ArchitectPlanParseStatusEnum.Rejected;
+                    result.Error = normalizeError ?? "Architect plan contains no valid missions.";
+                    result.Errors.Add(result.Error);
                 }
             }
-            return plan != null;
+            return result;
         }
 
         /// <summary>Render validated structured criteria into the persisted slice, so every downstream stage sees the same contract.</summary>
@@ -155,76 +193,38 @@ namespace Armada.Core.Services
             return text;
         }
 
-        // Contract v4 hierarchy and ownership. v3 accepts the same fields; its ownership overlaps are warnings.
+        // Hierarchy and ownership through the one validator (RS-4.4). Only contract v4 rejects an ownership overlap.
         private static void ValidateHierarchy(ArchitectPlan plan, int maxHierarchyDepth, List<string> errors)
         {
-            int count = plan.Missions.Count;
-            int[] depth = new int[count];
-            for (int i = 0; i < count; i++)
+            PlanValidationResult result = MissionPlanValidator.Validate(ToNodes(plan), maxHierarchyDepth, plan.ContractVersion == 4);
+            errors.AddRange(result.Errors.Select(e => e.Message));
+            plan.Warnings.AddRange(result.Warnings.Select(w => w.Message));
+            for (int i = 0; i < plan.Missions.Count; i++)
             {
                 ArchitectPlanMission? mission = plan.Missions[i];
                 if (mission == null) continue;
-                string prefix = "mission " + (i + 1) + ": ";
-                if (mission.DependsOn.HasValue)
+                if (result.IsValid)
                 {
-                    if (!mission.Parent.HasValue)
-                    {
-                        mission.Parent = mission.DependsOn;
-                        plan.Warnings.Add(prefix + "dependsOn " + mission.DependsOn.Value + " was read as parent " + mission.DependsOn.Value + "; use parent");
-                    }
-                    else if (mission.Parent != mission.DependsOn) errors.Add(prefix + "parent and dependsOn disagree; use parent only");
+                    mission.Parent = result.ParentOf(i + 1);
                     mission.DependsOn = null;
                 }
-                if (mission.Parent.HasValue)
-                {
-                    if (mission.Parent.Value == i + 1) errors.Add(prefix + "parent cannot refer to the mission itself");
-                    else if (mission.Parent.Value < 1 || mission.Parent.Value > i) errors.Add(prefix + "parent must name an earlier mission");
-                    else
-                    {
-                        depth[i] = depth[mission.Parent.Value - 1] + 1;
-                        if (depth[i] > maxHierarchyDepth) errors.Add(prefix + "parent chain is " + depth[i] + " deep; the maximum is " + maxHierarchyDepth + ". Flatten the plan");
-                    }
-                }
-                if (mission.BranchStrategy != null && mission.BranchStrategy != "continue" && mission.BranchStrategy != "fork")
-                    errors.Add(prefix + "branchStrategy must be continue or fork");
-                if (mission.BranchStrategy != null && !mission.Parent.HasValue)
-                    errors.Add(prefix + "branchStrategy needs a parent");
                 if (plan.ContractVersion == 4 && (mission.OwnedPaths == null || mission.OwnedPaths.Count == 0) && mission.Kind == "implementation")
-                    plan.Warnings.Add(prefix + "no ownedPaths; give every implementation mission the files it may change");
-            }
-            foreach (string overlap in ParallelOverlaps(plan))
-            {
-                if (plan.ContractVersion == 4) errors.Add(overlap);
-                else plan.Warnings.Add(overlap);
+                    plan.Warnings.Add("mission " + (i + 1) + ": no ownedPaths; give every implementation mission the files it may change");
             }
         }
 
-        // Missions that can run at the same time: neither is an ancestor of the other and neither waits for all others.
-        private static List<string> ParallelOverlaps(ArchitectPlan plan)
+        private static List<PlanNode> ToNodes(ArchitectPlan plan)
         {
-            List<string> found = new List<string>();
-            int count = plan.Missions.Count;
-            bool IsAncestor(int ancestor, int index)
+            // Contract v2 and unversioned plans name the parent with dependsOn; v3 and later read it as parent with a warning.
+            bool dependsOnIsParent = plan.ContractVersion == null || plan.ContractVersion < 3;
+            return plan.Missions.Select(m => m == null ? new PlanNode() : new PlanNode
             {
-                for (int hops = 0; hops < count && plan.Missions[index]?.Parent is int parent && parent >= 1 && parent <= count; hops++)
-                {
-                    index = parent - 1;
-                    if (index == ancestor) return true;
-                }
-                return false;
-            }
-            for (int i = 0; i < count; i++)
-                for (int j = i + 1; j < count; j++)
-                {
-                    ArchitectPlanMission? a = plan.Missions[i], b = plan.Missions[j];
-                    if (a == null || b == null || a.WaitForOtherMissions || b.WaitForOtherMissions) continue;
-                    if (IsAncestor(i, j) || IsAncestor(j, i)) continue;
-                    string? overlap = OwnedPathMatcher.FirstOverlap(a.OwnedPaths, b.OwnedPaths);
-                    if (overlap != null)
-                        found.Add("Missions " + (i + 1) + " and " + (j + 1) + " can run in parallel but both own " + overlap
-                            + "; make one the parent of the other, merge them, or split ownership");
-                }
-            return found;
+                Parent = dependsOnIsParent ? m.Parent ?? m.DependsOn : m.Parent,
+                DependsOn = dependsOnIsParent && !m.Parent.HasValue ? null : m.DependsOn,
+                BranchStrategy = m.BranchStrategy,
+                OwnedPaths = (m.OwnedPaths ?? new List<string>()).Select(OwnedPathMatcher.Normalize).Where(p => p.Length > 0).ToList(),
+                WaitsForAll = m.WaitForOtherMissions
+            }).ToList();
         }
 
         private static List<string> ValidateContract(ArchitectPlan plan, int maxHierarchyDepth)
@@ -251,7 +251,6 @@ namespace Armada.Core.Services
                 if (String.IsNullOrWhiteSpace(mission.Title) || IsPlaceholder(mission.Title) || !titles.Add(mission.Title.Trim())) errors.Add(prefix + "real unique title required");
                 if (String.IsNullOrWhiteSpace(mission.Description)) errors.Add(prefix + "bounded description required");
                 if (mission.Kind != "implementation" && mission.Kind != "investigation" && mission.Kind != "integration") errors.Add(prefix + "kind must be implementation, investigation or integration");
-                if (plan.ContractVersion == 2 && mission.DependsOn.HasValue && (mission.DependsOn.Value < 1 || mission.DependsOn.Value > i)) errors.Add(prefix + "dependsOn must name an earlier mission");
                 if (mission.WaitForOtherMissions && i != plan.Missions.Count - 1) errors.Add(prefix + "only final integration may wait for all missions");
                 if (mission.DecisionIndexes != null && (mission.DecisionIndexes.Any(index => index < 1 || index > (plan.Decisions?.Count ?? 0))
                     || mission.DecisionIndexes.Distinct().Count() != mission.DecisionIndexes.Count)) errors.Add(prefix + "decisionIndexes must be unique 1-based plan decision indexes");
@@ -296,7 +295,7 @@ namespace Armada.Core.Services
                         errors.Add(prefix + "negativeCases or a specific non-applicability reason required");
                 }
             }
-            if (plan.ContractVersion >= 3) ValidateHierarchy(plan, maxHierarchyDepth, errors);
+            ValidateHierarchy(plan, maxHierarchyDepth, errors);
             ArchitectPlanMission? final = plan.Missions[plan.Missions.Count - 1];
             if (final?.Kind != "integration" || !final.WaitForOtherMissions) errors.Add("last mission must be integration with waitForOtherMissions=true");
             foreach (string requirement in requirements.Where(r => !covered.Contains(r))) errors.Add("uncovered objective requirement " + requirement);
@@ -304,25 +303,6 @@ namespace Armada.Core.Services
                 for (int index = 1; index <= (plan.Decisions?.Count ?? 0); index++)
                     if (!checkedDecisions.Contains(index)) errors.Add("decision D" + index + " has no acceptance check; link it to a named verification before dispatch");
             return errors;
-        }
-
-        /// <summary>
-        /// One-sentence output contract for Architect prompts.
-        /// </summary>
-        /// <returns>Contract text.</returns>
-        public static string FormatInstructions()
-        {
-            return "Respond with one fenced ```" + FenceInfo + " JSON block using contractVersion:4, requirements:[\"REQ-1\"], decisions:[atomic resolved compatibility/default/override rules], " +
-                "missions:[{title,description,kind:implementation|investigation|integration,parent:earlier 1-based index or null,ownedPaths:[files or dir/ prefixes this mission may change],readsPaths:[context it must not change],branchStrategy:continue|fork (optional, needs parent),waitForOtherMissions:false," +
-                "decisionIndexes:[1-based indexes of only relevant decisions; empty if none],validationCommands:[exact commands],acceptanceCriteria:[{id,requirementIds:[objective IDs],decisionIndexes:[plan decisions verified by this check; [] for general checks],scenario,expected,verification,negativeCases:[inputs and expected failures],negativeCasesNotApplicableReason:only if none apply}]}]. " +
-                "requirements contains IDs only, never \"REQ-1: explanation\"; put requirement text in descriptions. Each requirementIds entry must match exactly a requirements string, including case. " +
-                "REQ-1 is illustrative: retain every ID assigned by the objective or Product Manager, not this single example. If upstream supplies no IDs, assign one per independent objective requirement. " +
-                "Challenge interacting invariants with concrete counterexamples, including user input equal to a fixed output marker and partial fragments outside matched spans. Resolve conflicts against the original objective before implementation; do not weaken it. " +
-                "Descriptions define one bounded outcome, components, approach, scope exclusions, invariants and uncertainties. Split compound decisions into separately verifiable rules. Every objective ID and decision must have a named acceptance check. Criterion decision indexes must be within its slice scope. " +
-                "Prefer small missions (one coherent change, usually 1-5 files). Set parent only when a mission needs code another mission produces: a child starts after its parent finishes and branches from its result; independent missions are siblings and run in parallel. Keep the tree shallow. " +
-                "Give every mission ownedPaths; two missions that can run at the same time (neither an ancestor of the other) must never own the same file, so shared files (project files, index exports, lockfiles, migration registries, changelogs) belong to one mission, usually a parent or the final integration mission. A plan with overlapping parallel ownership is rejected. " +
-                "Resolve correctness-critical uncertainty before implementation. Last mission must be integration with waitForOtherMissions:true. Invalid versioned plans are rejected before dispatch; " +
-                "legacy [ARMADA:MISSION] blocks remain supported for customized templates.";
         }
 
         #endregion
@@ -335,21 +315,25 @@ namespace Armada.Core.Services
             string[] lines = output.Replace("\r\n", "\n").Split('\n');
             StringBuilder? current = null;
 
+            string? openFence = null;
+
             foreach (string rawLine in lines)
             {
                 string line = rawLine.Trim();
                 if (current == null)
                 {
-                    if (line.StartsWith("```", StringComparison.Ordinal)
+                    // The plan block may use a backtick or a tilde fence; it closes with the same fence.
+                    if (ProtocolLines.IsFence(line)
                         && String.Equals(line.Substring(3).Trim(), FenceInfo, StringComparison.OrdinalIgnoreCase))
                     {
+                        openFence = line.Substring(0, 3);
                         current = new StringBuilder();
                     }
 
                     continue;
                 }
 
-                if (line.StartsWith("```", StringComparison.Ordinal))
+                if (line.StartsWith(openFence!, StringComparison.Ordinal))
                 {
                     blocks.Add(current.ToString());
                     current = null;
@@ -362,6 +346,29 @@ namespace Armada.Core.Services
             return blocks;
         }
 
+        /// <summary>
+        /// Where and why JSON failed to read, so a repair turn or a submit tool can point at the exact value: the reason,
+        /// the JSON path, and the line and position.
+        /// </summary>
+        /// <param name="ex">The exception.</param>
+        /// <returns>The description.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when ex is null.</exception>
+        public static string DescribeJsonError(JsonException ex)
+        {
+            if (ex == null) throw new ArgumentNullException(nameof(ex));
+            string reason = ex.Message;
+            int cut = reason.IndexOf(" Path:", StringComparison.Ordinal);
+            if (cut < 0) cut = reason.IndexOf(" LineNumber:", StringComparison.Ordinal);
+            if (cut > 0) reason = reason.Substring(0, cut);
+            reason = reason.TrimEnd('.', ' ');
+            if (reason.StartsWith("The JSON value could not be converted", StringComparison.Ordinal))
+                reason = "value has the wrong type (numbers and booleans must not be quoted)";
+            StringBuilder text = new StringBuilder(reason);
+            if (!String.IsNullOrEmpty(ex.Path)) text.Append(" at ").Append(ex.Path);
+            if (ex.LineNumber.HasValue) text.Append(" (line ").Append(ex.LineNumber.Value + 1).Append(", position ").Append(ex.BytePositionInLine ?? 0).Append(')');
+            return text.ToString();
+        }
+
         private static bool IsPlaceholder(string title)
         {
             // The prompt's own example uses angle-bracket placeholders such as "<title>"; an echoed example is not a plan.
@@ -369,59 +376,61 @@ namespace Armada.Core.Services
             return trimmed.StartsWith("<", StringComparison.Ordinal) && trimmed.EndsWith(">", StringComparison.Ordinal);
         }
 
-        private static ArchitectPlan? Normalize(ArchitectPlan? candidate, int maxHierarchyDepth)
+        // Unversioned plans: untitled, placeholder and duplicate-title entries are dropped, but the hierarchy is checked by
+        // the one validator against the Architect's own numbering first, so a bad link gets a repair turn (R12).
+        private static ArchitectPlan? Normalize(ArchitectPlan? candidate, int maxHierarchyDepth, out string? error)
         {
+            error = null;
             if (candidate == null || candidate.Missions == null) return null;
 
-            // Map each original 1-based position to its position after untitled entries are dropped, so dependsOn
-            // keeps naming the mission the Architect meant.
+            // Map each original 1-based position to its position after unusable entries are dropped, so a parent keeps
+            // naming the mission the Architect meant.
             Dictionary<int, int> positionMap = new Dictionary<int, int>();
             HashSet<string> seenTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             ArchitectPlan normalized = new ArchitectPlan();
+            List<ArchitectPlanMission?> kept = new List<ArchitectPlanMission?>();
             for (int i = 0; i < candidate.Missions.Count; i++)
             {
                 ArchitectPlanMission? mission = candidate.Missions[i];
-                if (mission == null || String.IsNullOrWhiteSpace(mission.Title)) continue;
-                if (IsPlaceholder(mission.Title)) continue;
-                if (!seenTitles.Add(mission.Title.Trim())) continue;
+                bool usable = mission != null && !String.IsNullOrWhiteSpace(mission.Title) && !IsPlaceholder(mission.Title) && seenTitles.Add(mission.Title.Trim());
+                kept.Add(usable ? mission : null);
+                if (usable) positionMap[i + 1] = positionMap.Count + 1;
+            }
 
+            ArchitectPlan numbering = new ArchitectPlan { Missions = candidate.Missions };
+            List<PlanNode> nodes = ToNodes(numbering);
+            for (int i = 0; i < nodes.Count; i++)
+                if (kept[i] != null && nodes[i].Parent is int parent && parent >= 1 && parent <= i && kept[parent - 1] == null)
+                    nodes[i].UnresolvedParent = "mission " + parent + " (untitled, a placeholder, or a duplicate title)";
+            for (int i = 0; i < nodes.Count; i++)
+                if (kept[i] == null) nodes[i] = new PlanNode();
+            PlanValidationResult result = MissionPlanValidator.Validate(nodes, maxHierarchyDepth, false);
+            if (!result.IsValid)
+            {
+                error = "Architect plan rejected: " + result.Describe() + ". Remediation: give each mission an earlier mission's number as its parent, or none.";
+                return null;
+            }
+
+            for (int i = 0; i < kept.Count; i++)
+            {
+                ArchitectPlanMission? mission = kept[i];
+                if (mission == null) continue;
                 ArchitectPlanMission copy = new ArchitectPlanMission();
-                copy.Title = mission.Title.Trim();
+                copy.Title = mission.Title!.Trim();
                 copy.Description = String.IsNullOrWhiteSpace(mission.Description) ? copy.Title : mission.Description.Trim();
                 copy.WaitForOtherMissions = mission.WaitForOtherMissions;
                 copy.Kind = mission.Kind;
                 copy.OwnedPaths = (mission.OwnedPaths ?? new List<string>()).Select(OwnedPathMatcher.Normalize).Where(p => p.Length > 0).ToList();
                 copy.ReadsPaths = (mission.ReadsPaths ?? new List<string>()).Select(OwnedPathMatcher.Normalize).Where(p => p.Length > 0).ToList();
-
-                // Legacy plans: parent (or dependsOn, read as the parent) must name an earlier kept mission.
-                int originalPosition = i + 1;
-                int? reference = mission.Parent ?? mission.DependsOn;
-                if (reference.HasValue
-                    && reference.Value < originalPosition
-                    && positionMap.TryGetValue(reference.Value, out int mapped))
+                if (result.ParentOf(i + 1) is int parent)
                 {
-                    copy.Parent = mapped;
-                    if (mission.BranchStrategy == "continue" || mission.BranchStrategy == "fork") copy.BranchStrategy = mission.BranchStrategy;
+                    copy.Parent = positionMap[parent];
+                    copy.BranchStrategy = mission.BranchStrategy;
                 }
-
                 normalized.Missions.Add(copy);
-                positionMap[originalPosition] = normalized.Missions.Count;
             }
 
-            // A legacy chain deeper than allowed is flattened at the limit rather than rejected.
-            int[] depth = new int[normalized.Missions.Count];
-            for (int i = 0; i < normalized.Missions.Count; i++)
-            {
-                ArchitectPlanMission mission = normalized.Missions[i];
-                if (!mission.Parent.HasValue) continue;
-                depth[i] = depth[mission.Parent.Value - 1] + 1;
-                if (depth[i] > maxHierarchyDepth)
-                {
-                    normalized.Warnings.Add("mission " + (i + 1) + ": parent chain exceeds " + maxHierarchyDepth + "; it starts as a top-level mission");
-                    mission.Parent = null; mission.BranchStrategy = null; depth[i] = 0;
-                }
-            }
-            normalized.Warnings.AddRange(ParallelOverlaps(normalized));
+            normalized.Warnings.AddRange(result.Warnings.Select(w => w.Message));
             return normalized.Missions.Count > 0 ? normalized : null;
         }
 

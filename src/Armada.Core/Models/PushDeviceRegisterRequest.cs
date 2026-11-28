@@ -41,7 +41,7 @@ namespace Armada.Core.Models
         /// Enabled categories. Null keeps the categories of a device the caller already registered, and uses the
         /// server's Push.Categories defaults for a new device (including a token another user registered before).
         /// </summary>
-        [CollectionBound(8, Reason = "At most one entry per PushCategoryEnum value")]
+        [CollectionBound(16, Reason = "At most one entry per PushCategoryEnum value (11 today); headroom for new categories")]
         public List<PushCategoryEnum>? Categories { get; set; } = null;
 
         #endregion

@@ -63,8 +63,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = @"INSERT INTO voyages (id, tenant_id, user_id, title, description, status, created_utc, completed_utc, last_update_utc, auto_push, auto_create_pull_requests, auto_merge_pull_requests, landing_mode, captain_overrides_json, approval_options_json, is_evaluation, last_blackbox_entry_id)
-                        VALUES (@id, @tenant_id, @user_id, @title, @description, @status, @created_utc, @completed_utc, @last_update_utc, @auto_push, @auto_create_pull_requests, @auto_merge_pull_requests, @landing_mode, @captain_overrides_json, @approval_options_json, @is_evaluation, @last_blackbox_entry_id);";
+                    cmd.CommandText = @"INSERT INTO voyages (id, tenant_id, user_id, title, description, status, created_utc, completed_utc, last_update_utc, auto_push, auto_create_pull_requests, auto_merge_pull_requests, landing_mode, captain_overrides_json, approval_options_json, is_evaluation, last_blackbox_entry_id, judge_strength)
+                        VALUES (@id, @tenant_id, @user_id, @title, @description, @status, @created_utc, @completed_utc, @last_update_utc, @auto_push, @auto_create_pull_requests, @auto_merge_pull_requests, @landing_mode, @captain_overrides_json, @approval_options_json, @is_evaluation, @last_blackbox_entry_id, @judge_strength);";
                     cmd.Parameters.AddWithValue("@id", voyage.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)voyage.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)voyage.UserId ?? DBNull.Value);
@@ -81,6 +81,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@captain_overrides_json", (object?)voyage.CaptainOverridesJson ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@approval_options_json", (object?)RunApprovalOptions.ToJson(voyage.ApprovalOptions) ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@is_evaluation", voyage.IsEvaluation);
+                    cmd.Parameters.AddWithValue("@judge_strength", voyage.JudgeStrength.HasValue ? (object)voyage.JudgeStrength.Value.ToString() : DBNull.Value);
                     cmd.Parameters.AddWithValue("@last_blackbox_entry_id", (object?)voyage.LastBlackBoxEntryId ?? DBNull.Value);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
@@ -147,7 +148,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         auto_create_pull_requests = @auto_create_pull_requests,
                         auto_merge_pull_requests = @auto_merge_pull_requests,
                         landing_mode = @landing_mode,
-                        captain_overrides_json = @captain_overrides_json, approval_options_json = @approval_options_json, is_evaluation = @is_evaluation, last_blackbox_entry_id = COALESCE(@last_blackbox_entry_id, last_blackbox_entry_id)
+                        captain_overrides_json = @captain_overrides_json, approval_options_json = @approval_options_json, is_evaluation = @is_evaluation, judge_strength = @judge_strength, last_blackbox_entry_id = COALESCE(@last_blackbox_entry_id, last_blackbox_entry_id)
                         WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", voyage.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)voyage.TenantId ?? DBNull.Value);
@@ -164,6 +165,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@captain_overrides_json", (object?)voyage.CaptainOverridesJson ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@approval_options_json", (object?)RunApprovalOptions.ToJson(voyage.ApprovalOptions) ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@is_evaluation", voyage.IsEvaluation);
+                    cmd.Parameters.AddWithValue("@judge_strength", voyage.JudgeStrength.HasValue ? (object)voyage.JudgeStrength.Value.ToString() : DBNull.Value);
                     cmd.Parameters.AddWithValue("@last_blackbox_entry_id", (object?)voyage.LastBlackBoxEntryId ?? DBNull.Value);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
@@ -650,6 +652,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             voyage.CaptainOverridesJson = NullableString(reader["captain_overrides_json"]);
             voyage.ApprovalOptions = RunApprovalOptions.FromJson(NullableString(reader["approval_options_json"]));
             try { voyage.IsEvaluation = reader["is_evaluation"] != DBNull.Value && Convert.ToBoolean(reader["is_evaluation"]); } catch { }
+            try { voyage.JudgeStrength = Armada.Core.Services.JudgeStrengthRule.Parse(reader["judge_strength"]); } catch { }
             try { voyage.LastBlackBoxEntryId = NullableString(reader["last_blackbox_entry_id"]); } catch { }
             return voyage;
         }

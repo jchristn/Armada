@@ -395,7 +395,7 @@ namespace Test.Shared.Suites.Services
                 server.Reset(200, OpenAiHeaders(), streamTruncated: false);
                 HeaderUsageCapture capture = new HeaderUsageCapture();
                 ModelEndpoint openAi = new ModelEndpoint { Name = "usage-openai", Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = server.BaseUrl, Model = "fixture-model", ApiKey = "sk-fixture-key-0001" };
-                using (CompletionClientBase client = ModelEndpointClientFactory.CreateCompletion(openAi, logging, capture.Record))
+                using (ProviderClientBase client = ModelEndpointClientFactory.CreateCompletion(openAi, logging, capture.Record))
                 {
                     ChatResponse reply = await client.ChatAsync("usage capture probe text", new CompletionOptions(), CancellationToken.None).ConfigureAwait(false);
                     AssertTrue(reply.Success, "the known request succeeds through the capturing transport: " + reply.Error);
@@ -417,7 +417,7 @@ namespace Test.Shared.Suites.Services
 
                 // Without a sink the factory keeps its previous behaviour: nothing is captured.
                 HeaderUsageCapture detached = new HeaderUsageCapture();
-                using (CompletionClientBase client = ModelEndpointClientFactory.CreateCompletion(openAi, logging))
+                using (ProviderClientBase client = ModelEndpointClientFactory.CreateCompletion(openAi, logging))
                 {
                     await client.ChatAsync("no capture attached", new CompletionOptions(), CancellationToken.None).ConfigureAwait(false);
                 }
@@ -437,7 +437,7 @@ namespace Test.Shared.Suites.Services
                     AuthHeaderName = "X-Fixture-Key",
                     ApiKey = "fixture-header-secret"
                 };
-                using (CompletionClientBase client = ModelEndpointClientFactory.CreateCompletion(anthropic, logging, anthropicCapture.Record))
+                using (ProviderClientBase client = ModelEndpointClientFactory.CreateCompletion(anthropic, logging, anthropicCapture.Record))
                 {
                     ChatResponse reply = await client.ChatAsync("anthropic capture text", new CompletionOptions(), CancellationToken.None).ConfigureAwait(false);
                     AssertTrue(reply.Success, "the Anthropic request succeeds: " + reply.Error);
@@ -461,7 +461,7 @@ namespace Test.Shared.Suites.Services
                 {
                     server.Reset(error.Key, OpenAiHeaders(), streamTruncated: false);
                     HeaderUsageCapture errorCapture = new HeaderUsageCapture();
-                    using (CompletionClientBase client = ModelEndpointClientFactory.CreateCompletion(openAi, logging, errorCapture.Record))
+                    using (ProviderClientBase client = ModelEndpointClientFactory.CreateCompletion(openAi, logging, errorCapture.Record))
                     {
                         ChatResponse reply = await client.ChatAsync("error path", new CompletionOptions(), CancellationToken.None).ConfigureAwait(false);
                         AssertFalse(reply.Success, error.Key + " is a failed call");
@@ -476,7 +476,7 @@ namespace Test.Shared.Suites.Services
                 server.Reset(200, OpenAiHeaders(), streamTruncated: true);
                 HeaderUsageCapture streamCapture = new HeaderUsageCapture();
                 bool completed = false;
-                using (CompletionClientBase client = ModelEndpointClientFactory.CreateCompletion(openAi, logging, streamCapture.Record))
+                using (ProviderClientBase client = ModelEndpointClientFactory.CreateCompletion(openAi, logging, streamCapture.Record))
                 {
                     try
                     {

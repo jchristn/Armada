@@ -94,7 +94,7 @@ namespace Test.Shared.Suites.Services
                 record.Subject!.Title = "Title — with dash";
                 record.Classification!.RawReason = "push to https://ci:s3cr3tpass@git.example.com failed — token=ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
                 string brief = renderer.Render(entry, record);
-                AssertFalse(brief.Contains('—'), "no em-dash");
+                AssertFalse(brief.Contains('\u2014'), "no em-dash");
                 AssertFalse(brief.Contains('–'), "no en-dash");
                 AssertFalse(brief.Contains("s3cr3tpass", StringComparison.Ordinal), "no password");
                 AssertFalse(brief.Contains("ghp_ABCDEF", StringComparison.Ordinal), "no token");

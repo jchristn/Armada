@@ -46,6 +46,8 @@ import CaptainRef from '../components/shared/CaptainRef';
 import CaptainSelectionCard from '../components/missions/CaptainSelectionCard';
 import AssignmentBlockerCard from '../components/missions/AssignmentBlockerCard';
 import MissionWaitsCard from '../components/missions/MissionWaitsCard';
+import MissionAttemptsCard from '../components/missions/MissionAttemptsCard';
+import MissionSubmissionsCard from '../components/missions/MissionSubmissionsCard';
 import MissionHierarchyCard from '../components/missions/MissionHierarchyCard';
 import VerificationStatusCard from '../components/missions/VerificationStatusCard';
 import BlackBoxPanel from '../components/blackbox/BlackBoxPanel';
@@ -525,6 +527,8 @@ export default function MissionDetail() {
       )}
       <CaptainSelectionCard missionId={mission.id} status={mission.status} revision={mission.lastUpdateUtc} />
       <MissionWaitsCard missionId={mission.id} revision={mission.lastUpdateUtc} readyUtc={mission.readyUtc} assignedUtc={mission.assignedUtc} />
+      <MissionAttemptsCard missionId={mission.id} revision={mission.lastUpdateUtc} />
+      <MissionSubmissionsCard missionId={mission.id} revision={mission.lastUpdateUtc} />
       <MissionHierarchyCard mission={mission} />
 
       {showManualMerge && mission.vesselId && (

@@ -47,7 +47,7 @@ namespace Test.Shared.Suites.Services
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
-            cases.Add(CaseAsync("mission_service_fallback_progress_signals_match_embedded_result_and_verdict_contract", "MissionService fallback progress signals match embedded result and verdict contract", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("progress_signals_leave_result_and_verdict_lines_to_the_output_contract", "Embedded and fallback progress signals keep the blocked outcome and leave result and verdict lines to the one output contract", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
@@ -58,27 +58,13 @@ namespace Test.Shared.Suites.Services
                     MissionService missionService = CreateMissionService(logging, testDb.Driver, CreateSettings());
                     string fallbackSignals = GetMissionServiceFallback(missionService, "mission.progress_signals");
 
-                    AssertContains("`[ARMADA:RESULT] COMPLETE`", embeddedSignals, "embedded runtime signals should include RESULT COMPLETE");
-                    AssertContains("`[ARMADA:VERDICT] PASS`", embeddedSignals, "embedded runtime signals should include VERDICT PASS");
-                    AssertContains("`[ARMADA:VERDICT] FAIL`", embeddedSignals, "embedded runtime signals should include VERDICT FAIL");
-                    AssertContains("`[ARMADA:VERDICT] NEEDS_REVISION`", embeddedSignals, "embedded runtime signals should include VERDICT NEEDS_REVISION");
-                    AssertContains("Architect missions must not emit `[ARMADA:RESULT]` or `[ARMADA:VERDICT]`", embeddedSignals, "embedded runtime signals should restrict architect output");
-                    AssertNotContains("`[ARMADA:RESULT] PASS`", embeddedSignals, "embedded runtime signals");
-                    AssertNotContains("`[ARMADA:RESULT] FAIL`", embeddedSignals, "embedded runtime signals");
-                    AssertNotContains("`[ARMADA:RESULT] NEEDS_REVISION`", embeddedSignals, "embedded runtime signals");
-                    AssertNotContains("`[ARMADA:VERDICT] COMPLETE`", embeddedSignals, "embedded runtime signals");
-
-                    AssertContains("`" + VerifierContract.BlockedMarker + "` -- any persona", embeddedSignals, "embedded runtime signals should document the blocked outcome for every persona");
-                    AssertContains("`" + VerifierContract.BlockedMarker + "` -- any persona", fallbackSignals, "fallback runtime signals should document the blocked outcome for every persona");
-                    AssertContains("`[ARMADA:RESULT] COMPLETE`", fallbackSignals, "fallback runtime signals should include RESULT COMPLETE");
-                    AssertContains("`[ARMADA:VERDICT] PASS`", fallbackSignals, "fallback runtime signals should include VERDICT PASS");
-                    AssertContains("`[ARMADA:VERDICT] FAIL`", fallbackSignals, "fallback runtime signals should include VERDICT FAIL");
-                    AssertContains("`[ARMADA:VERDICT] NEEDS_REVISION`", fallbackSignals, "fallback runtime signals should include VERDICT NEEDS_REVISION");
-                    AssertContains("Architect missions must not emit `[ARMADA:RESULT]` or `[ARMADA:VERDICT]`", fallbackSignals, "fallback runtime signals should restrict architect output");
-                    AssertNotContains("`[ARMADA:RESULT] PASS`", fallbackSignals, "fallback runtime signals");
-                    AssertNotContains("`[ARMADA:RESULT] FAIL`", fallbackSignals, "fallback runtime signals");
-                    AssertNotContains("`[ARMADA:RESULT] NEEDS_REVISION`", fallbackSignals, "fallback runtime signals");
-                    AssertNotContains("`[ARMADA:VERDICT] COMPLETE`", fallbackSignals, "fallback runtime signals");
+                    foreach (KeyValuePair<string, string> signals in new Dictionary<string, string> { ["embedded"] = embeddedSignals, ["fallback"] = fallbackSignals })
+                    {
+                        AssertContains("`" + VerifierContract.BlockedMarker + "` -- any persona", signals.Value, signals.Key + " runtime signals should document the blocked outcome for every persona");
+                        AssertNotContains(StageOutputContract.ResultMarker, signals.Value, signals.Key + " runtime signals");
+                        AssertNotContains(StageOutputContract.VerdictMarker, signals.Value, signals.Key + " runtime signals");
+                        AssertNotContains(StageOutputContract.Heading, signals.Value, signals.Key + " runtime signals");
+                    }
                 }
             }));
 
@@ -114,14 +100,13 @@ namespace Test.Shared.Suites.Services
                         fixture.Dock,
                         null).ConfigureAwait(false);
 
-                    AssertContains("armada-plan", embeddedPrompt, "architect embedded template should use the typed plan contract");
-                    AssertContains("contractVersion:4", embeddedPrompt, "architect embedded template should require evidence-bearing plans");
-                    AssertContains("Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.", embeddedPrompt, "architect embedded template should forbid result and verdict lines");
-                    AssertContains("[ARMADA:MISSION]", templateParams["CaptainInstructions"], "architect captain instructions should use mission markers");
-                    AssertContains("Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.", templateParams["CaptainInstructions"], "architect captain instructions should forbid result and verdict lines");
-                    AssertContains("[ARMADA:MISSION]", fallbackPrompt, "architect fallback prompt should use mission markers");
+                    AssertNotContains("armada-plan", embeddedPrompt, "architect embedded template leaves the plan contract to StageOutputContract");
+                    AssertNotContains("[ARMADA:", embeddedPrompt, "architect embedded template");
+                    AssertNotContains("[ARMADA:", templateParams["CaptainInstructions"], "architect captain instructions carry no contract");
+                    AssertContains(StageOutputContract.For("Architect"), fallbackPrompt, "architect fallback prompt carries the generated contract");
+                    AssertContains("\"contractVersion\": 4", fallbackPrompt, "architect fallback prompt shows a v4 example");
+                    AssertNotContains("[ARMADA:MISSION]", fallbackPrompt, "architect fallback prompt shows only the versioned contract");
                     AssertContains("Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.", fallbackPrompt, "architect fallback prompt should forbid result and verdict lines");
-                    AssertContains("[ARMADA:MISSION]", launchPrompt, "architect launch prompt should use mission markers");
                     AssertContains("Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.", launchPrompt, "architect launch prompt should forbid result and verdict lines");
                 }
             }));
@@ -174,13 +159,14 @@ namespace Test.Shared.Suites.Services
                             else if (PersonaCatalog.Matches(persona, PersonaCatalog.Architect))
                             {
                                 AssertContains("armada-plan", prompt, label + " plan contract");
-                                AssertContains("contractVersion:4", prompt, label + " plan contract version");
+                                AssertContains("\"contractVersion\": 4", prompt, label + " plan contract version");
                             }
                             else
                             {
-                                AssertContains("`[ARMADA:RESULT] COMPLETE`", prompt, label);
+                                AssertContains("\n" + StageOutputContract.ResultCompleteLine + "\n", prompt, label);
                                 AssertNotContains("[ARMADA:VERDICT]", prompt, label);
                             }
+                            AssertNotContains("`[ARMADA:", prompt, label + " shows no marker in backticks");
 
                         }
                     }
@@ -263,12 +249,12 @@ namespace Test.Shared.Suites.Services
 
         private static string GetMissionServiceFallback(MissionService service, string templateName)
         {
-            MethodInfo? method = typeof(MissionService).GetMethod(
+            MethodInfo? method = typeof(MissionInstructionWriter).GetMethod(
                 "GetHardcodedFallback",
                 BindingFlags.Instance | BindingFlags.NonPublic);
             if (method == null) throw new InvalidOperationException("Could not find GetHardcodedFallback.");
 
-            return (string?)method.Invoke(service, new object[] { templateName }) ?? String.Empty;
+            return (string?)method.Invoke(service.Context.MissionInstructionWriter, new object[] { templateName }) ?? String.Empty;
         }
 
         private static string? ParseStructuredJudgeVerdictSignal(string line)
@@ -326,13 +312,10 @@ namespace Test.Shared.Suites.Services
                 fixture.Dock,
                 null).ConfigureAwait(false);
 
-            AssertContains("`[ARMADA:RESULT] COMPLETE`", embeddedPrompt, templateName + " embedded template");
-            AssertContains("[ARMADA:RESULT] COMPLETE", templateParams["CaptainInstructions"], persona + " captain instructions");
-            AssertContains("[ARMADA:RESULT] COMPLETE", fallbackPrompt, persona + " fallback prompt");
-            AssertContains("[ARMADA:RESULT] COMPLETE", launchPrompt, persona + " launch prompt");
-
-            AssertNotContains("[ARMADA:VERDICT]", embeddedPrompt, templateName + " embedded template");
-            AssertNotContains("[ARMADA:VERDICT]", templateParams["CaptainInstructions"], persona + " captain instructions");
+            AssertNotContains("[ARMADA:", embeddedPrompt, templateName + " embedded template carries no contract");
+            AssertNotContains("[ARMADA:", templateParams["CaptainInstructions"], persona + " captain instructions carry no contract");
+            AssertContains("\n" + StageOutputContract.ResultCompleteLine + "\n", fallbackPrompt, persona + " fallback prompt");
+            AssertContains(StageOutputContract.ResultCompleteLine, launchPrompt, persona + " launch prompt");
             AssertNotContains("[ARMADA:VERDICT]", fallbackPrompt, persona + " fallback prompt");
             AssertNotContains("[ARMADA:VERDICT]", launchPrompt, persona + " launch prompt");
         }
@@ -354,24 +337,14 @@ namespace Test.Shared.Suites.Services
                 fixture.Dock,
                 null).ConfigureAwait(false);
 
-            AssertContains("`[ARMADA:VERDICT] PASS`", embeddedPrompt, "judge embedded template PASS");
-            AssertContains("`[ARMADA:VERDICT] FAIL`", embeddedPrompt, "judge embedded template FAIL");
-            AssertContains("`[ARMADA:VERDICT] NEEDS_REVISION`", embeddedPrompt, "judge embedded template NEEDS_REVISION");
+            AssertNotContains("[ARMADA:", embeddedPrompt, "judge embedded template carries no contract");
+            AssertNotContains("[ARMADA:", templateParams["CaptainInstructions"], "judge captain instructions carry no contract");
+            foreach (JudgeVerdictEnum verdict in StageOutputContract.AcceptedVerdicts)
+            {
+                AssertContains("\n" + StageOutputContract.VerdictLine(verdict) + "\n", fallbackPrompt, "judge fallback " + verdict);
+                AssertContains(StageOutputContract.VerdictLine(verdict), launchPrompt, "judge launch prompt " + verdict);
+            }
 
-            AssertContains("[ARMADA:VERDICT] PASS", templateParams["CaptainInstructions"], "judge captain instructions PASS");
-            AssertContains("[ARMADA:VERDICT] FAIL", templateParams["CaptainInstructions"], "judge captain instructions FAIL");
-            AssertContains("[ARMADA:VERDICT] NEEDS_REVISION", templateParams["CaptainInstructions"], "judge captain instructions NEEDS_REVISION");
-
-            AssertContains("[ARMADA:VERDICT] PASS", fallbackPrompt, "judge fallback PASS");
-            AssertContains("[ARMADA:VERDICT] FAIL", fallbackPrompt, "judge fallback FAIL");
-            AssertContains("[ARMADA:VERDICT] NEEDS_REVISION", fallbackPrompt, "judge fallback NEEDS_REVISION");
-
-            AssertContains("[ARMADA:VERDICT] PASS", launchPrompt, "judge launch prompt PASS");
-            AssertContains("[ARMADA:VERDICT] FAIL", launchPrompt, "judge launch prompt FAIL");
-            AssertContains("[ARMADA:VERDICT] NEEDS_REVISION", launchPrompt, "judge launch prompt NEEDS_REVISION");
-
-            AssertNotContains("[ARMADA:RESULT]", embeddedPrompt, "judge embedded template");
-            AssertNotContains("[ARMADA:RESULT]", templateParams["CaptainInstructions"], "judge captain instructions");
             AssertNotContains("[ARMADA:RESULT]", fallbackPrompt, "judge fallback");
             AssertNotContains("[ARMADA:RESULT]", launchPrompt, "judge launch prompt");
         }

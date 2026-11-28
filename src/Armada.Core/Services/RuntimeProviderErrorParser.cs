@@ -69,6 +69,7 @@ namespace Armada.Core.Services
             RuntimeProviderError error = new RuntimeProviderError();
             error.HttpStatusCode = httpStatusCode;
             error.Message = message;
+            error.ErrorType = OpenModelErrorPatterns.Match(httpStatusCode, message);
             if (retryAfterSeconds.HasValue && retryAfterSeconds.Value > 0) error.RetryAfterSeconds = retryAfterSeconds.Value;
             return error;
         }
@@ -227,6 +228,7 @@ namespace Armada.Core.Services
             if (status.Success)
             {
                 error.HttpStatusCode = Int32.Parse(status.Groups["status"].Value, CultureInfo.InvariantCulture);
+                error.ErrorType = OpenModelErrorPatterns.Match(error.HttpStatusCode, text);
                 return error;
             }
 
@@ -236,6 +238,8 @@ namespace Armada.Core.Services
             if (text.Contains("DEADLINE_EXCEEDED", StringComparison.Ordinal)) { error.ErrorType = "llm_timeout"; return error; }
             if (text.Contains("UNAVAILABLE", StringComparison.Ordinal) && text.Contains("\"status\"", StringComparison.Ordinal)) { error.ErrorType = "server_error"; return error; }
             if (_CliNetworkError.IsMatch(text)) { error.ErrorType = "llm_connection_error"; return error; }
+            string? openModel = OpenModelErrorPatterns.Match(null, text);
+            if (openModel != null) { error.ErrorType = openModel; return error; }
             return null;
         }
 
@@ -301,6 +305,29 @@ namespace Armada.Core.Services
                 return cli;
             }
 
+            return error;
+        }
+
+        /// <summary>
+        /// Try to read a provider error from one line of <c>opencode run --format json</c> output. OpenCode writes a
+        /// failed model call as an <c>error</c> event on stdout (for example
+        /// <c>{"type":"error","error":{"type":"provider.no-route","message":"Model unavailable: ..."}}</c>), not on stderr.
+        /// The status comes from <c>data.statusCode</c> or <c>statusCode</c>; the error type is an open-model failure the
+        /// message names (RS-5.3), otherwise the event's own kind.
+        /// </summary>
+        /// <param name="line">One stdout line.</param>
+        /// <returns>The provider error, or null when the line is not an OpenCode error event.</returns>
+        public static RuntimeProviderError? TryParseOpenCodeJsonLine(string? line)
+        {
+            if (!OpenCodeStreamEvent.TryParse(line, out OpenCodeStreamEvent? evt) || evt == null) return null;
+            string? message = evt.ProviderFailureMessage();
+            if (message == null) return null;
+
+            RuntimeProviderError error = new RuntimeProviderError();
+            error.HttpStatusCode = evt.ProviderFailureStatus();
+            error.Message = Shorten(message);
+            error.ErrorType = OpenModelErrorPatterns.Match(error.HttpStatusCode, message) ?? evt.ProviderFailureKind();
+            error.Reason = "OpenCode reported a provider error: " + error.Message;
             return error;
         }
 

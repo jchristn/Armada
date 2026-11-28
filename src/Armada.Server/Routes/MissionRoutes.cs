@@ -40,7 +40,6 @@ namespace Armada.Server.Routes
         private readonly LandingPreviewService _landingPreview;
         private readonly GitHubIntegrationService _gitHub;
         private readonly Func<string, string, string?, string?, string?, string?, string?, string?, Task> _emitEvent;
-        private readonly Func<Mission, MissionStatusEnum?, string, Task> _emitMissionStatusChanged;
         private readonly Func<Mission, Dock, Task> _handleMissionComplete;
         private readonly ArmadaWebSocketHub? _webSocketHub;
         private readonly LoggingModule _logging;
@@ -84,7 +83,6 @@ namespace Armada.Server.Routes
         /// <param name="landingPreview">Mission landing-preview service.</param>
         /// <param name="gitHub">GitHub integration service.</param>
         /// <param name="emitEvent">Event broadcast callback.</param>
-        /// <param name="emitMissionStatusChanged">mission.status_changed callback (mission after the change, previous status, message).</param>
         /// <param name="handleMissionComplete">Mission completion callback.</param>
         /// <param name="webSocketHub">WebSocket hub for real-time notifications.</param>
         /// <param name="logging">Logging module.</param>
@@ -99,7 +97,6 @@ namespace Armada.Server.Routes
             LandingPreviewService landingPreview,
             GitHubIntegrationService gitHub,
             Func<string, string, string?, string?, string?, string?, string?, string?, Task> emitEvent,
-            Func<Mission, MissionStatusEnum?, string, Task> emitMissionStatusChanged,
             Func<Mission, Dock, Task> handleMissionComplete,
             ArmadaWebSocketHub? webSocketHub,
             LoggingModule logging,
@@ -114,7 +111,6 @@ namespace Armada.Server.Routes
             _landingPreview = landingPreview ?? throw new ArgumentNullException(nameof(landingPreview));
             _gitHub = gitHub ?? throw new ArgumentNullException(nameof(gitHub));
             _emitEvent = emitEvent;
-            _emitMissionStatusChanged = emitMissionStatusChanged ?? throw new ArgumentNullException(nameof(emitMissionStatusChanged));
             _handleMissionComplete = handleMissionComplete;
             _webSocketHub = webSocketHub;
             _logging = logging;
@@ -169,7 +165,7 @@ namespace Armada.Server.Routes
                 };
             }
 
-            string[] fallbackNames = { "CLAUDE.md", "CODEX.md", "CURSOR.md", "AGENTS.md", "GEMINI.md", "MUX.md" };
+            string[] fallbackNames = { "CLAUDE.md", "AGENTS.override.md", "ARMADA.md", "CODEX.md", "CURSOR.md", "AGENTS.md", "GEMINI.md", "MUX.md" };
             foreach (string fallbackName in fallbackNames)
             {
                 string fallbackPath = Path.Combine(dock.WorktreePath, fallbackName);
@@ -374,6 +370,23 @@ namespace Armada.Server.Routes
                 mission.TenantId = ctx.TenantId;
                 mission.UserId = ctx.UserId;
                 EntityUpdateMerger.ResetMissionConcurrencyMetadata(mission);
+
+                // The vessel and voyage must be visible to the caller, as they are for MCP; another tenant's are not
+                // found, so no work is created against them (RS-2.9).
+                if (!String.IsNullOrWhiteSpace(mission.VesselId)
+                    && await Armada.Server.Mcp.Tools.McpCallerScope.ReadVesselAsync(_database, ctx, mission.VesselId).ConfigureAwait(false) == null)
+                {
+                    req.Http.Response.StatusCode = 404;
+                    return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" };
+                }
+
+                if (!String.IsNullOrWhiteSpace(mission.VoyageId)
+                    && await Armada.Server.Mcp.Tools.McpCallerScope.ReadVoyageAsync(_database, ctx, mission.VoyageId).ConfigureAwait(false) == null)
+                {
+                    req.Http.Response.StatusCode = 404;
+                    return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Voyage not found" };
+                }
+
                 if (mission.WorkerEnvelope != null)
                 {
                     // A mission may only tighten its vessel's Worker envelope; a looser or invalid one is a 400 with the reason.
@@ -776,9 +789,6 @@ namespace Armada.Server.Routes
                 }
 
                 // Standard transition: no dock available or not transitioning to Complete
-                mission.Status = newStatus;
-                mission.LastUpdateUtc = DateTime.UtcNow;
-
                 if (newStatus == MissionStatusEnum.InProgress && mission.StartedUtc == null)
                 {
                     mission.StartedUtc = DateTime.UtcNow;
@@ -790,14 +800,17 @@ namespace Armada.Server.Routes
                     mission.CompletedUtc = DateTime.UtcNow;
                 }
 
-                await _database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                MissionTransitionRequest manual = new MissionTransitionRequest { To = newStatus, Operator = true, Message = "Mission " + id + " transitioned to " + newStatus };
+                manual.AllowedFrom.Add(previousStatus);
+                if (!await _admiral.Transitions.TryTransitionAsync(mission, manual).ConfigureAwait(false))
+                { req.Http.Response.StatusCode = 409; return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = "Mission " + id + " changed to " + mission.Status + " before the transition was recorded" }; }
                 await BlackBoxOperatorCapture.RecordTransitionAsync(BlackBox, mission, previousStatus, "REST").ConfigureAwait(false);
 
                 // Audit event: manual Complete without an active dock bypasses the landing pipeline.
                 // This is allowed (operators may need it after restarts/cleanup) but should be visible.
                 if (newStatus == MissionStatusEnum.Complete)
                 {
-                    _logging.Warn(_Header + "mission " + id + " manually completed without active dock — landing pipeline was skipped");
+                    _logging.Warn(_Header + "mission " + id + " manually completed without active dock, landing pipeline was skipped");
                     await _emitEvent("mission.manual_complete_no_dock",
                         "Mission " + id + " manually marked Complete without an active dock (landing pipeline skipped)",
                         "mission", id, mission.CaptainId, id, mission.VesselId, mission.VoyageId).ConfigureAwait(false);
@@ -806,10 +819,6 @@ namespace Armada.Server.Routes
                 Signal signal = new Signal(SignalTypeEnum.Progress, "Mission " + id + " transitioned to " + newStatus);
                 if (!String.IsNullOrEmpty(mission.CaptainId)) signal.FromCaptainId = mission.CaptainId;
                 await _database.Signals.CreateAsync(signal).ConfigureAwait(false);
-
-                // The black box capture already emitted mission.status_changed for a transition it captured.
-                if (!BlackBoxOperatorCapture.EmitsStatusChanged(BlackBox, mission.Status))
-                    await _emitMissionStatusChanged(mission, previousStatus, "Mission " + id + " transitioned to " + newStatus).ConfigureAwait(false);
 
                 // Broadcast specific mission change for dashboard toast notifications
                 if (_webSocketHub != null)
@@ -1439,7 +1448,7 @@ namespace Armada.Server.Routes
                 .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Missions")
                 .WithSummary("Get mission instructions")
-                .WithDescription("Returns the runtime-specific instruction file generated for a mission, such as CLAUDE.md, CODEX.md, CURSOR.md, AGENTS.md, GEMINI.md, or MUX.md.")
+                .WithDescription("Returns the runtime-specific instruction file generated for a mission, such as CLAUDE.md, AGENTS.override.md, AGENTS.md, ARMADA.md, CURSOR.md, GEMINI.md, or MUX.md.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));

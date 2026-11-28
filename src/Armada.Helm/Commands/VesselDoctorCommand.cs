@@ -42,7 +42,7 @@ namespace Armada.Helm.Commands
                 request.PageNumber = settings.Page ?? 1;
                 request.PageSize = settings.PageSize ?? 25;
                 request.WindowDays = settings.WindowDays;
-                BlackBoxDoctorPage? page = await client.GetVesselBlackBoxDoctorAsync(vessel.Id, request, cancellationToken).ConfigureAwait(false);
+                BlackBoxDoctorPage? page = await client.BlackBoxInsights.GetVesselDoctorAsync(vessel.Id, request, cancellationToken).ConfigureAwait(false);
                 if (settings.Json)
                 {
                     WritePureJson(page);

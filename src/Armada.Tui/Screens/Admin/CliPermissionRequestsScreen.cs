@@ -199,12 +199,12 @@ namespace Armada.Tui.Screens.Admin
             if (_Items.Count == 0) Grid.SetLoading();
             ScreenOps.Run(Context, async () =>
             {
-                List<CliPermissionRequest> list = (await Context.Client.ListCliPermissionRequestsAsync(query).ConfigureAwait(false))?.Objects ?? new List<CliPermissionRequest>();
+                List<CliPermissionRequest> list = (await Context.Client.CliPermissions.ListRequestsAsync(query).ConfigureAwait(false))?.Objects ?? new List<CliPermissionRequest>();
                 if (highlight != null && !list.Any(r => r.Id == highlight))
                 {
                     try
                     {
-                        CliPermissionRequest? linked = await Context.Client.GetCliPermissionRequestAsync(highlight).ConfigureAwait(false);
+                        CliPermissionRequest? linked = await Context.Client.CliPermissions.GetRequestAsync(highlight).ConfigureAwait(false);
                         if (linked != null && !String.IsNullOrEmpty(linked.Id)) list.Insert(0, linked);
                     }
                     catch (Armada.Client.ArmadaApiException)

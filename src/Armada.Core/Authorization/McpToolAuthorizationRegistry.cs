@@ -86,6 +86,11 @@ namespace Armada.Core.Authorization
             Add("list_prompt_templates", "PromptTemplate", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("mission_status", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("papercut_summary", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            // RS-6.2: a captain submits its own mission's output; the tool itself requires the mission-scoped token.
+            Add("armada_submit_plan", "Mission", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("armada_submit_verdict", "Mission", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("armada_submit_result", "Mission", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("get_mission_submissions", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("search_memory", "Memory", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("authorize_captain_selection_recovery", "Mission", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
             Add("get_captain_selection", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
@@ -148,6 +153,7 @@ namespace Armada.Core.Authorization
             Add("cancel_model_probe_run", "ModelProbeRun", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
             Add("get_model_profile", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("list_model_profiles", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("update_model_profile", "ModelProfile", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
             Add("get_model_scorecard", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("list_model_alerts", "ModelAlert", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("get_model_alert", "ModelAlert", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
@@ -167,6 +173,12 @@ namespace Armada.Core.Authorization
             Add("list_battery_packs", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("run_battery", "BatteryRun", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
             Add("get_battery_run", "BatteryRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_battery_runs", "BatteryRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_mission_attempts", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_reliability_summary", "StageOutcome", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_gate_reports", "GateReport", ResourceOperationEnum.Read, PermissionLevel.TenantAdmin);
+            Add("get_gate_report", "GateReport", ResourceOperationEnum.Read, PermissionLevel.TenantAdmin);
+            Add("cancel_battery_run", "BatteryRun", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
             Add("list_battery_results", "BatteryRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
 
             // Mission and voyage black box (entry visibility is checked by IBlackBoxService: an invisible entry is NotFound;

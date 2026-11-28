@@ -176,8 +176,8 @@ namespace Armada.Tui.Screens.Delivery
                 }
 
                 saved = existing != null
-                    ? await context.Client.UpdateIncidentAsync(existing.Id, payload, ct).ConfigureAwait(false)
-                    : await context.Client.CreateIncidentAsync(payload, ct).ConfigureAwait(false);
+                    ? await context.Client.Incidents.UpdateAsync(existing.Id, payload, ct).ConfigureAwait(false)
+                    : await context.Client.Incidents.CreateAsync(payload, ct).ConfigureAwait(false);
                 return null;
             }, () =>
             {

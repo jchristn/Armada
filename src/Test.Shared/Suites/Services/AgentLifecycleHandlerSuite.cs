@@ -554,7 +554,7 @@ namespace Test.Shared.Suites.Services
 
                     AssertEqual(1, admiral.ExitInfos.Count, "one typed exit outcome reaches the admiral");
                     AssertEqual(1, admiral.ExitInfos[0].ExitCode);
-                    AssertEqual(RuntimeFailureKindEnum.UsageLimit, admiral.ExitInfos[0].FailureKind);
+                    AssertEqual(RuntimeFailureKindEnum.Transient, admiral.ExitInfos[0].FailureKind, "a 429 with a short Retry-After is backpressure");
                     AssertEqual(120, admiral.ExitInfos[0].ProviderError!.RetryAfterSeconds);
                 }
             }));
@@ -575,10 +575,10 @@ namespace Test.Shared.Suites.Services
                     await handler.HandleAgentProcessExitedAsync(9103, 2, "cpt_test", "msn_test").ConfigureAwait(false);
 
                     AssertEqual(3, admiral.ExitInfos.Count);
-                    AssertEqual(RuntimeFailureKindEnum.Crash, admiral.ExitInfos[0].FailureKind, "output text never classifies");
+                    AssertEqual(RuntimeFailureKindEnum.Unclassified, admiral.ExitInfos[0].FailureKind, "output text never classifies");
                     AssertNull(admiral.ExitInfos[0].ProviderError);
                     AssertEqual(RuntimeFailureKindEnum.Clean, admiral.ExitInfos[1].FailureKind, "a zero exit is clean even with a provider error");
-                    AssertEqual(RuntimeFailureKindEnum.Crash, admiral.ExitInfos[2].FailureKind, "the provider error is consumed by the exit that read it");
+                    AssertEqual(RuntimeFailureKindEnum.Unclassified, admiral.ExitInfos[2].FailureKind, "the provider error is consumed by the exit that read it");
                 }
             }));
 
@@ -1521,11 +1521,13 @@ namespace Test.Shared.Suites.Services
             FieldInfo outputField = typeof(AgentLifecycleHandler).GetField("_MissionOutput", BindingFlags.Instance | BindingFlags.NonPublic)
                 ?? throw new InvalidOperationException("Could not find _MissionOutput field");
 
-            System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.StringBuilder> outputMap =
-                (System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.StringBuilder>)(outputField.GetValue(handler)
+            System.Collections.Concurrent.ConcurrentDictionary<string, BoundedTextBuffer> outputMap =
+                (System.Collections.Concurrent.ConcurrentDictionary<string, BoundedTextBuffer>)(outputField.GetValue(handler)
                 ?? throw new InvalidOperationException("Mission output map was null"));
 
-            outputMap[missionId] = new System.Text.StringBuilder(output);
+            BoundedTextBuffer buffer = new BoundedTextBuffer(262144);
+            buffer.Append(output);
+            outputMap[missionId] = buffer;
         }
 
         private static void RegisterFinalMessageArtifact(AgentLifecycleHandler handler, string missionId, string artifactPath)
@@ -1698,23 +1700,9 @@ namespace Test.Shared.Suites.Services
             public Func<Voyage, Task>? OnVoyageComplete { get; set; }
             public Func<Mission, Task<bool>>? OnReconcilePullRequest { get; set; }
             public Func<int, bool>? OnIsProcessExitHandled { get; set; }
+            public MissionTransitions Transitions => throw new NotImplementedException();
 
-            public Task<Voyage> DispatchVoyageAsync(string title, string description, string vesselId, List<MissionDescription> missionDescriptions, CancellationToken token = default)
-            {
-                throw new NotImplementedException();
-            }
-
-            public Task<Voyage> DispatchVoyageAsync(string title, string description, string vesselId, List<MissionDescription> missionDescriptions, List<SelectedPlaybook>? selectedPlaybooks, CancellationToken token = default)
-            {
-                throw new NotImplementedException();
-            }
-
-            public Task<Voyage> DispatchVoyageAsync(string title, string description, string vesselId, List<MissionDescription> missionDescriptions, string? pipelineId, CancellationToken token = default)
-            {
-                throw new NotImplementedException();
-            }
-
-            public Task<Voyage> DispatchVoyageAsync(string title, string description, string vesselId, List<MissionDescription> missionDescriptions, string? pipelineId, List<SelectedPlaybook>? selectedPlaybooks, string? captainOverridesJson = null, LandingModeEnum? landingMode = null, CancellationToken token = default, RunApprovalOptions? approvalOptions = null, bool isEvaluation = false)
+            public Task<Voyage> CreateVoyageAsync(AuthContext? caller, VoyageCreationRequest request, CancellationToken token = default)
             {
                 throw new NotImplementedException();
             }

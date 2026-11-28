@@ -8,6 +8,8 @@ import { blackBoxEntryFixture } from '../test/fixtures/blackbox';
 
 vi.mock('../api/client', () => ({
   getMission: vi.fn(),
+  getMissionAttempts: vi.fn(() => Promise.reject(new Error('not found'))),
+  listMissionSubmissions: vi.fn(() => Promise.resolve([])),
   getCaptainSelection: vi.fn((id: string) => Promise.resolve({ missionId: id, currentMode: 'Observe', currentStrategy: 'FirstAvailable', historyAvailable: false })),
   getMissionBlackBox: vi.fn(() => Promise.reject(Object.assign(new Error('not found'), { status: 404, data: { code: 'BlackBoxNotFound' } }))),
   getVoyageBlackBox: vi.fn(() => Promise.reject(Object.assign(new Error('not found'), { status: 404, data: { code: 'BlackBoxNotFound' } }))),
@@ -50,6 +52,7 @@ vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ isAdmin: true, isTe
 vi.mock('../context/WebSocketContext', () => ({
   useWebSocket: () => ({ connected: true, reconnectCount: 0, send: vi.fn(), subscribe: () => () => {} }),
   useCaptainSelectionRevision: () => 0,
+  useMissionAttemptRevision: () => 0,
 }));
 
 const emptyPage = { success: true, pageNumber: 1, pageSize: 1000, totalPages: 1, totalRecords: 0, totalMs: 1, objects: [] };

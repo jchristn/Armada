@@ -299,10 +299,17 @@ Guides: [INSTRUCTIONS_FOR_MUX.md](INSTRUCTIONS_FOR_MUX.md), [MUX_AS_ORCHESTRATOR
 ### OpenCode
 
 ```
-opencode run --format json [--model <model>] [--variant <variant>] [--thinking] [--auto] --dir <workingDirectory>
+opencode run --format json [--model <model>] [--variant <variant>] [--thinking] [--auto]
 ```
 
-`--auto` is omitted when the captain runs without auto-approve. OpenCode has no entry in the launch isolation planner, so `IsolateCaptainLaunch` does not isolate it (a mission with a
+The prompt goes to stdin and OpenCode runs in the dock working directory; there is no `--dir` flag, because OpenCode 2
+rejects it. `--auto` is omitted when the captain runs without auto-approve. The final message is rebuilt from the JSON
+events: the `text` events after the last `tool_use`, never `reasoning` or `error` events, with any leaked think block
+removed. A failed model call is an `error` event on stdout, read as a provider error (status, open-model message, or
+the event's own type such as `provider.no-route`); exit 0 after an error event with no later reply counts as a failure.
+OpenCode 2 also dropped `--variant` (the variant is now a `#variant` suffix on `--model`), so a captain with a reasoning
+effort set fails to launch on OpenCode 2 until Armada detects the CLI version; leave reasoning effort Off for an
+OpenCode 2 captain. OpenCode has no entry in the launch isolation planner, so `IsolateCaptainLaunch` does not isolate it (a mission with a
 mission-scoped token still gets the `OPENCODE_CONFIG_CONTENT` token binding); it always reads
 the user's `~/.config/opencode/opencode.json` (or `.jsonc`), where `armada mcp install` writes a `remote` entry under
 `mcp`. It is also missing from `armada doctor` runtime detection, as noted above.
@@ -341,6 +348,44 @@ process, and a task-plan pair. The model comes from the endpoint; a captain-leve
 supplies `ARMADA_MCP_URL` and `ARMADA_MCP_TOKEN`, the loop also connects to Armada's own MCP server as that caller and
 exposes its tools to the model. Ask turns always supply them; missions supply them while `Mcp.MissionScopedTokens` is
 on (the default), and otherwise a mission run by an API-endpoint captain has the coding tools only.
+
+A run ends when the model replies without calling a tool. The Admiral sets `ARMADA_REQUIRES_COMPLETION_LINE=1` on
+mission launches whose persona must end with `[ARMADA:RESULT] COMPLETE` (every persona except Judge, Architect and
+Recorder, which end with a verdict, a plan or a record). With it set, a reply without that line gets a nudge to finish;
+bold, backticked or bulleted forms of the line are accepted. The variable travels to Harbors in the launch environment.
+
+Since 1.5.0 a mission launch also names the stage's submit tool (`ARMADA_SUBMIT_TOOL`, with the persona in
+`ARMADA_SUBMIT_PERSONA`), and the loop offers it as a native tool: `armada_submit_plan` for the Architect,
+`armada_submit_verdict` for the Judge, `armada_submit_result` for the other contract personas (see
+[MCP API](MCP_API.md#stage-submissions)). The runtime checks each call with the Admiral's validator and returns the
+errors in the same turn, so the model fixes the submission instead of the stage being rerun. A valid call is forwarded to
+the Admiral's MCP tool when the run has MCP access, which stores it at once; without MCP it is written into the run's
+output as an `[ARMADA:SUBMISSION]` block, which the Admiral stores at completion. An accepted submission finishes the
+stage without a completion line. When the model stops calling tools without submitting and its reply does not meet the
+text contract either (no valid plan, verdict line, completion line or verifier block), the loop sends up to two forced
+turns that offer only the submit tool with `tool_choice` set to `required`; if the model still does not submit, the
+marker text decides as before. A structured-output (`response_format: json_schema`) final turn is not used: the
+inference client Armada uses does not expose it.
+
+Armada's MCP catalog has about 270 tools, and their schemas are resent on every model turn (about 62,000 input tokens
+for the whole catalog). A mission launch therefore names the few Armada tools its persona uses in
+`ARMADA_MCP_TOOL_SCOPE` (see [MCP API](MCP_API.md#mission-scoped-captain-calls)); those are sent up front (about 700 to
+900 tokens, 1,800 for the Recorder) and the rest stay available through `armada_discover_mcp_tools`. Without a scope
+(Ask turns), a catalog of more than 32 tools is deferred behind discovery as before. The context-window check that
+compacts earlier tool output counts the tool schemas sent, not only the messages.
+
+Since 1.5.0 the loop also absorbs three common open-model tool-calling failures:
+
+- **Tool calls written as text.** When a complete reply has no native tool calls but its text holds
+  `<tool_call>{json}</tool_call>`, `<function=name>...</function>` (with a JSON body or `<parameter=x>` tags), or a fenced
+  JSON block with a tool name and arguments, the calls are run as real calls and the markup is removed from the reply.
+  Only permitted tools are recovered, and never from a reply cut at the output-token limit or from a failed stream. Each
+  recovery is logged as a `[recovery]` diagnostic, and the run ends with a per-model count.
+- **Unknown tool names.** A call to a tool that does not exist gets `unknown_tool` with the names the captain can call;
+  `tool_not_allowed` is kept for a tool the endpoint's inference policy turns off.
+- **Repeated identical calls.** After `repeatedToolCallLimit` (default 3) identical calls in a row, each further result
+  carries a note that the result will not change; twice that many ends the run as `degenerate_output`, a task failure
+  that escalation can route to another captain.
 
 ## Mission progress streaming
 

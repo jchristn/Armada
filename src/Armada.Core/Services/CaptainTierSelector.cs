@@ -12,8 +12,8 @@ namespace Armada.Core.Services
     /// mission's required tier, resolve the captain to assign: prefer the lowest tier that can still
     /// handle the work (so strong captains are not consumed by cheap missions), falling back UPWARD only
     /// when no captain at the required tier is idle. A captain's effective tier is its explicit
-    /// <see cref="Captain.Tier"/> when set, otherwise auto-classified from its model name, otherwise
-    /// <see cref="CaptainTierEnum.Standard"/>. A Claude Code, Codex or Gemini captain with no model and no
+    /// <see cref="Captain.Tier"/> when set, otherwise its model profile's tier (<see cref="Captain.ProfileTier"/>, RS-8.5),
+    /// otherwise auto-classified from its model name, otherwise <see cref="CaptainTierEnum.Standard"/>. A Claude Code, Codex or Gemini captain with no model and no
     /// explicit tier runs its vendor's default model, so it ranks as Standard but can take work of any tier
     /// (<see cref="CanHandle"/>). Side-effect free so it can be unit tested in isolation.
     /// </summary>
@@ -24,11 +24,11 @@ namespace Armada.Core.Services
         // Anchored model-family patterns -> tier. Routine version bumps auto-register without config edits.
         private static readonly KeyValuePair<Regex, CaptainTierEnum>[] _ModelFamilies = new KeyValuePair<Regex, CaptainTierEnum>[]
         {
-            new KeyValuePair<Regex, CaptainTierEnum>(new Regex(@"opus|gpt-?5(\.\d+)?($|[^-])|o3|o4|gemini-\d*.*pro", RegexOptions.IgnoreCase | RegexOptions.Compiled), CaptainTierEnum.Premium),
+            new KeyValuePair<Regex, CaptainTierEnum>(new Regex(@"opus|gpt-?(?:[5-9]|[1-9]\d)(\.\d+)?($|[^-])|(^|[/:_\s])o[34]([-.:_]|$)|gemini-[\d.]+-pro", RegexOptions.IgnoreCase | RegexOptions.Compiled), CaptainTierEnum.Premium),
             // \bmini avoids matching "geMINI"; the others are distinctive enough to leave unanchored.
             new KeyValuePair<Regex, CaptainTierEnum>(new Regex(@"haiku|\bmini|nano|flash|gpt-?oss|small|-lite", RegexOptions.IgnoreCase | RegexOptions.Compiled), CaptainTierEnum.Economy),
             // OpenCode / OpenAI-compatible open model families default to Standard unless matched as economy above.
-            new KeyValuePair<Regex, CaptainTierEnum>(new Regex(@"sonnet|gpt-?4|gemini-\d*.*(?!pro)|glm|qwen|kimi|deepseek|\bllama|mistral|codestral|devstral|command-?r", RegexOptions.IgnoreCase | RegexOptions.Compiled), CaptainTierEnum.Standard),
+            new KeyValuePair<Regex, CaptainTierEnum>(new Regex(@"sonnet|gpt-?4|gemini|glm|qwen|kimi|deepseek|\bllama|mistral|codestral|devstral|command-?r", RegexOptions.IgnoreCase | RegexOptions.Compiled), CaptainTierEnum.Standard),
         };
 
         // A parameter count of 8B or less (qwen2.5-coder:7b, llama3.2:3b, gemma-2b, phi3:3.8b) is Economy whatever the family.
@@ -39,7 +39,8 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <summary>
-        /// The effective tier for a captain: explicit tier, else classified from the model, else Standard.
+        /// The effective tier for a captain: explicit tier, else its model profile's tier, else classified from the model,
+        /// else Standard.
         /// </summary>
         /// <param name="captain">The captain.</param>
         /// <returns>The resolved tier.</returns>
@@ -47,6 +48,7 @@ namespace Armada.Core.Services
         {
             if (captain == null) return CaptainTierEnum.Standard;
             if (captain.Tier.HasValue) return captain.Tier.Value;
+            if (captain.ProfileTier.HasValue) return captain.ProfileTier.Value;
             return ClassifyModel(captain.Model);
         }
 
@@ -58,7 +60,8 @@ namespace Armada.Core.Services
         public static CaptainTierEnum ClassifyModel(string? model)
         {
             if (String.IsNullOrWhiteSpace(model)) return CaptainTierEnum.Standard;
-            // Economy and Premium patterns are checked before the broad Standard fallback.
+            // Economy is checked first, so a mini, nano, flash, or small variant of a premium family stays Economy; the
+            // Premium pattern accepts GPT 5 and every later major version, anchors o3 and o4, and needs a Gemini "-pro".
             if (_SmallParameterCount.IsMatch(model) || _ModelFamilies[1].Key.IsMatch(model)) return CaptainTierEnum.Economy;
             if (_ModelFamilies[0].Key.IsMatch(model)) return CaptainTierEnum.Premium;
             return CaptainTierEnum.Standard;
@@ -111,7 +114,7 @@ namespace Armada.Core.Services
 
         private static bool RunsVendorDefaultModel(Captain captain)
         {
-            if (captain.Tier.HasValue || !String.IsNullOrWhiteSpace(captain.Model)) return false;
+            if (captain.Tier.HasValue || captain.ProfileTier.HasValue || !String.IsNullOrWhiteSpace(captain.Model)) return false;
             // Provider-neutral CLIs (OpenCode, Pi) have no single vendor default model, so they are not listed here.
             return captain.Runtime == AgentRuntimeEnum.ClaudeCode
                 || captain.Runtime == AgentRuntimeEnum.Codex

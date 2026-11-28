@@ -172,20 +172,20 @@ namespace Test.Shared.Suites.Services
 
         private static MethodInfo RequireForwardMethod()
         {
-            MethodInfo method = typeof(ArmadaTelemetryHost).GetMethod(
+            MethodInfo? method = typeof(ArmadaTelemetryHost).GetMethod(
                 "ForwardLogEntry",
                 BindingFlags.Instance | BindingFlags.NonPublic);
             AssertNotNull(method, "ForwardLogEntry is the log export path");
-            return method;
+            return method!;
         }
 
         private static void SetExportSink(ArmadaTelemetryHost host, CaptureLogger sink)
         {
-            FieldInfo field = typeof(ArmadaTelemetryHost).GetField(
+            FieldInfo? field = typeof(ArmadaTelemetryHost).GetField(
                 "_LokiLogger",
                 BindingFlags.Instance | BindingFlags.NonPublic);
             AssertNotNull(field, "the export sink is the telemetry logger");
-            field.SetValue(host, sink);
+            field!.SetValue(host, sink);
         }
 
         private static void InvokeForward(ArmadaTelemetryHost host, LogEntry entry)
@@ -203,22 +203,22 @@ namespace Test.Shared.Suites.Services
 
         private static void SetForwarder(ArmadaTelemetryHost host, Action<LogEntry> forwarder)
         {
-            FieldInfo field = typeof(ArmadaTelemetryHost).GetField(
+            FieldInfo? field = typeof(ArmadaTelemetryHost).GetField(
                 "_MessageForwarder",
                 BindingFlags.Instance | BindingFlags.NonPublic);
             AssertNotNull(field, "Dispose removes the stored export handler");
-            field.SetValue(host, forwarder);
+            field!.SetValue(host, forwarder);
         }
 
         private static long ReadForwardingFailures(ArmadaTelemetryHost host)
         {
-            PropertyInfo property = typeof(ArmadaTelemetryHost).GetProperty(
+            PropertyInfo? property = typeof(ArmadaTelemetryHost).GetProperty(
                 "LogForwardingFailures",
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             AssertNotNull(property, "forwarding failures are counted on the telemetry host");
-            object value = property.GetValue(host);
+            object? value = property!.GetValue(host);
             AssertNotNull(value, "the forwarding failure count has a value");
-            return (long)value;
+            return (long)value!;
         }
 
         private static TestCaseDescriptor Case(string caseId, string displayName, string tag, Action body)

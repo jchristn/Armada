@@ -120,7 +120,7 @@ namespace Armada.Tui.Approvals
                     {
                         MissionReviewApproveRequest req = new MissionReviewApproveRequest();
                         req.Comment = comment.Length > 0 ? comment : null;
-                        await client.ApproveMissionReviewAsync(id, req).ConfigureAwait(false);
+                        await client.Missions.ApproveReviewAsync(id, req).ConfigureAwait(false);
                         toast = "Review approved for \"{{title}}\".";
                         severity = NotificationSeverityEnum.Success;
                     }
@@ -129,7 +129,7 @@ namespace Armada.Tui.Approvals
                         MissionReviewApproveRequest req = new MissionReviewApproveRequest();
                         req.Comment = comment;
                         req.Conditional = true;
-                        await client.ApproveMissionReviewAsync(id, req).ConfigureAwait(false);
+                        await client.Missions.ApproveReviewAsync(id, req).ConfigureAwait(false);
                         toast = "Conditionally approved \"{{title}}\". The next step will consider your feedback.";
                         severity = NotificationSeverityEnum.Success;
                     }
@@ -138,7 +138,7 @@ namespace Armada.Tui.Approvals
                         MissionReviewDenyRequest req = new MissionReviewDenyRequest();
                         req.Comment = comment;
                         req.Action = "RetryStage";
-                        await client.DenyMissionReviewAsync(id, req).ConfigureAwait(false);
+                        await client.Missions.DenyReviewAsync(id, req).ConfigureAwait(false);
                         toast = "Sent \"{{title}}\" back for more work with your feedback.";
                         severity = NotificationSeverityEnum.Warning;
                     }
@@ -147,7 +147,7 @@ namespace Armada.Tui.Approvals
                         MissionReviewDenyRequest req = new MissionReviewDenyRequest();
                         req.Comment = comment.Length > 0 ? comment : null;
                         req.Action = "FailPipeline";
-                        await client.DenyMissionReviewAsync(id, req).ConfigureAwait(false);
+                        await client.Missions.DenyReviewAsync(id, req).ConfigureAwait(false);
                         toast = "Review denied for \"{{title}}\".";
                         severity = NotificationSeverityEnum.Warning;
                     }
@@ -187,8 +187,8 @@ namespace Armada.Tui.Approvals
                     try
                     {
                         Deployment? updated = approve
-                            ? await client.ApproveDeploymentAsync(item.EntityId).ConfigureAwait(false)
-                            : await client.DenyDeploymentAsync(item.EntityId).ConfigureAwait(false);
+                            ? await client.Deployments.ApproveAsync(item.EntityId).ConfigureAwait(false)
+                            : await client.Deployments.DenyAsync(item.EntityId).ConfigureAwait(false);
                         string name = updated?.Title ?? title;
                         _Context.Dispatcher.Post(() =>
                         {
@@ -219,7 +219,7 @@ namespace Armada.Tui.Approvals
             {
                 try
                 {
-                    await client.RetryMissionLandingAsync(item.EntityId).ConfigureAwait(false);
+                    await client.Missions.RetryLandingAsync(item.EntityId).ConfigureAwait(false);
                     _Context.Dispatcher.Post(() =>
                     {
                         _Context.Notifications.Toast(NotificationSeverityEnum.Success, _Context.Loc.T("Landing succeeded for \"{{title}}\"", LocalizationArgs.Of("title", title)));
@@ -282,17 +282,17 @@ namespace Armada.Tui.Approvals
                         NotificationSeverityEnum severity = NotificationSeverityEnum.Warning;
                         if (action == "stop")
                         {
-                            await client.StopCaptainAsync(item.EntityId).ConfigureAwait(false);
+                            await client.Captains.StopAsync(item.EntityId).ConfigureAwait(false);
                             toast = "Captain \"{{name}}\" stopped.";
                         }
                         else if (action == "recall")
                         {
-                            await client.RecallCaptainAsync(item.EntityId).ConfigureAwait(false);
+                            await client.Captains.RecallAsync(item.EntityId).ConfigureAwait(false);
                             toast = "Captain \"{{name}}\" recalled.";
                         }
                         else
                         {
-                            await client.RestartCaptainAsync(item.EntityId).ConfigureAwait(false);
+                            await client.Captains.RestartAsync(item.EntityId).ConfigureAwait(false);
                             toast = "Captain \"{{name}}\" restarted.";
                             severity = NotificationSeverityEnum.Success;
                         }
@@ -460,7 +460,7 @@ namespace Armada.Tui.Approvals
             {
                 try
                 {
-                    CliPermissionRequest? updated = await client.DecideCliPermissionRequestAsync(item.EntityId, decision).ConfigureAwait(false);
+                    CliPermissionRequest? updated = await client.CliPermissions.DecideRequestAsync(item.EntityId, decision).ConfigureAwait(false);
                     string toast = "Denied {{tool}}.";
                     NotificationSeverityEnum severity = NotificationSeverityEnum.Warning;
                     if (decision.Decision == CliPermissionDecisionEnum.AllowOnce)

@@ -1,4 +1,4 @@
-import { createVoyage, getSettings, listPipelines, listVessels } from '@dashboard/api/client';
+import { createVoyage, getSettings, listPersonas, listPipelines, listVessels } from '@dashboard/api/client';
 import { sortByName } from '@dashboard/lib/sortByName';
 import { findLandingMode, getVoyageLandingModes } from '@dashboard/lib/vesselForm';
 import {
@@ -9,7 +9,7 @@ import {
   type VoyageFormState,
   type VoyageMissionRow,
 } from '@dashboard/lib/voyageForm';
-import type { Pipeline, Vessel } from '@dashboard/types/models';
+import type { Persona, Pipeline, Vessel } from '@dashboard/types/models';
 import { Stack, useRouter, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -42,6 +42,7 @@ export function VoyageCreateScreen() {
   const [form, setForm] = useState<VoyageFormState>(emptyVoyageForm);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
+  const [personas, setPersonas] = useState<Persona[]>([]);
   const [globalLanding, setGlobalLanding] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -51,6 +52,7 @@ export function VoyageCreateScreen() {
     let mounted = true;
     listVessels({ pageSize: 1000 }).then((r) => { if (mounted) setVessels(sortByName(r?.objects)); }).catch(() => undefined);
     listPipelines({ pageSize: 1000 }).then((r) => { if (mounted) setPipelines(r?.objects ?? []); }).catch(() => undefined);
+    listPersonas({ pageSize: 1000 }).then((r) => { if (mounted) setPersonas(r?.objects ?? []); }).catch(() => undefined);
     getSettings().then((s) => { if (mounted) setGlobalLanding(globalLandingModeFrom(s)); }).catch(() => undefined);
     return () => { mounted = false; };
   }, []);
@@ -190,6 +192,30 @@ export function VoyageCreateScreen() {
                 onChangeText={(description) => updateMission(i, { description })}
                 placeholder={t('Detailed instructions for the AI captain...')}
                 multiline
+              />
+              <SelectField
+                testID={`voyage-mission-persona-${i}`}
+                label={t('Persona')}
+                value={m.persona ?? ''}
+                onChange={(persona) => updateMission(i, { persona })}
+                allowEmpty
+                placeholder={t('From the pipeline')}
+                closeLabel={t('Close')}
+                options={[...new Set(personas.map((p) => p.name))].map((name) => ({ value: name, label: name }))}
+                hint={t('When every mission names a persona and no pipeline is chosen, each runs as one step with its persona. A multi-step pipeline picks its own personas.')}
+              />
+              <SelectField
+                testID={`voyage-mission-mode-${i}`}
+                label={t('Mode')}
+                value={m.mode ?? ''}
+                onChange={(mode) => updateMission(i, { mode: mode as VoyageMissionRow['mode'] })}
+                allowEmpty
+                placeholder={t('Implementation (changes code)')}
+                closeLabel={t('Close')}
+                options={[
+                  { value: 'Audit', label: t('Audit (read-only report)') },
+                  { value: 'Research', label: t('Research (read-only report)') },
+                ]}
               />
               <MissionRowPreview vesselId={form.vesselId} title={m.title} description={m.description} testID={`voyage-mission-preview-${i}`} />
             </View>

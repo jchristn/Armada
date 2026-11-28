@@ -114,7 +114,7 @@ namespace Test.Shared.Suites.Database
                 Mission running = (await fixture.Database.Missions.ReadAsync(fixture.Missions[0].Id, token).ConfigureAwait(false))!;
                 ArmadaSettings settings = new ArmadaSettings();
                 UsageSelectionCooldownService service = new UsageSelectionCooldownService(fixture.Database, settings);
-                RuntimeExitInfo limit = RuntimeFailureClassifier.Decide(1, new RuntimeProviderError { ErrorType = "rate_limit_error", RetryAfterSeconds = 180 });
+                RuntimeExitInfo limit = RuntimeFailureClassifier.Decide(1, new RuntimeProviderError { ErrorType = "usage_limit_reached", RetryAfterSeconds = 180 });
                 DateTime observed = DateTime.UtcNow;
                 AssertTrue(await service.RecordAsync(running, limit, admitted.Decision.ExecutionAttemptId, observed, token).ConfigureAwait(false));
                 AssertFalse(await service.RecordAsync(running, limit, admitted.Decision.ExecutionAttemptId, observed.AddSeconds(20), token).ConfigureAwait(false), "duplicate exits never extend a cooldown");

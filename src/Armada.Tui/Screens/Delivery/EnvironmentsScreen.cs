@@ -138,7 +138,7 @@ namespace Armada.Tui.Screens.Delivery
             if (Enum.TryParse<EnvironmentKindEnum>(Filter("kind"), true, out EnvironmentKindEnum kind)) q.Kind = kind;
             if (Filter("active") == "true") q.Active = true;
             else if (Filter("active") == "false") q.Active = false;
-            return PageOf(await Context.Client.ListEnvironmentsAsync(q, token).ConfigureAwait(false));
+            return PageOf(await Context.Client.Environments.ListAsync(q, token).ConfigureAwait(false));
         }
 
         /// <inheritdoc />
@@ -213,7 +213,7 @@ namespace Armada.Tui.Screens.Delivery
         /// <inheritdoc />
         protected override Task DeleteAsync(DeploymentEnvironment row, CancellationToken token)
         {
-            return Context.Client.DeleteEnvironmentAsync(row.Id, token);
+            return Context.Client.Environments.DeleteAsync(row.Id, token);
         }
 
         /// <inheritdoc />

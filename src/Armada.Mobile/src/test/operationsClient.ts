@@ -9,6 +9,7 @@ const OPERATIONS_CALLS = [
   'getStatus', 'getHealth', 'getDoctor', 'getSettings',
   'getVoyageTree', 'getMissionWaits', 'getVesselConcurrency',
   'listMissions', 'listMissionSummaries', 'getMission', 'getMissionHistory', 'getTokenUsage', 'getMissionLandingPreview',
+  'getMissionAttempts', 'listMissionSubmissions', 'listModelProfiles', 'getModelProfile',
   'getMissionGitHubPullRequest', 'enumerateMissionPullRequestReviews', 'enumerateMissionPullRequestChecks', 'createMission', 'updateMission', 'deleteMission', 'purgeMission', 'dispatchMission',
   'restartMission', 'retryMissionLanding', 'transitionMission', 'approveMissionReview', 'denyMissionReview',
   'getMissionDiff', 'getMissionLog', 'getMissionInstructions', 'getEntity',

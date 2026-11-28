@@ -73,8 +73,8 @@ namespace Armada.Tui.Screens.Configuration
                 payload.Tags = EntityUi.SplitLines(tags.Value);
                 payload.Scope = ScopeRules.ResolveCreateScope(context.Session, EntityForm.EnumValue(scope, ScopeEnum.TenantWide));
                 saved = existing != null
-                    ? await context.Client.UpdateMemoryAsync(existing.Id, payload, ct).ConfigureAwait(false)
-                    : await context.Client.CreateMemoryAsync(payload, ct).ConfigureAwait(false);
+                    ? await context.Client.Memories.UpdateAsync(existing.Id, payload, ct).ConfigureAwait(false)
+                    : await context.Client.Memories.CreateAsync(payload, ct).ConfigureAwait(false);
                 return null;
             }, () =>
             {

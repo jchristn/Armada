@@ -90,8 +90,8 @@ namespace Armada.Tui.Screens.Build
             bool initial = !Loaded;
             Call(async (c, t) =>
             {
-                Task<Vessel?> vessel = c.GetVesselAsync(VesselId, t);
-                Task<VesselReadinessResult?> readiness = c.GetVesselReadinessAsync(VesselId, null, t);
+                Task<Vessel?> vessel = c.Vessels.GetAsync(VesselId, t);
+                Task<VesselReadinessResult?> readiness = c.Vessels.GetReadinessAsync(VesselId, null, t);
                 await Task.WhenAll(vessel, readiness).ConfigureAwait(false);
                 return new KeyValuePair<Vessel?, VesselReadinessResult?>(vessel.Result, readiness.Result);
             }, r =>

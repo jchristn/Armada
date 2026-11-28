@@ -1,5 +1,6 @@
 namespace Armada.Core.Client
 {
+    using System.Globalization;
     using System.Net.Http;
     using System.Net.Http.Json;
     using System.Text.Json;
@@ -11,7 +12,7 @@ namespace Armada.Core.Client
     /// Typed HTTP client for the Armada Admiral REST API.
     /// Auto-generated style client covering all /api/v1/ endpoints.
     /// </summary>
-    public partial class ArmadaApiClient : IDisposable
+    public class ArmadaApiClient : IDisposable
     {
         #region Private-Members
 
@@ -1802,6 +1803,42 @@ namespace Armada.Core.Client
 
         #endregion
 
+        #region Public-Methods-CaptainSelection
+
+        /// <summary>Authorize or revoke mission recovery with a required audit reason and optimistic revision. Requires administrator.</summary>
+        public Task<UsageSelectionRecovery?> AuthorizeCaptainSelectionRecoveryAsync(string missionId, UsageSelectionRecoveryRequest request, CancellationToken token = default)
+            => PostAsync<UsageSelectionRecovery>("/api/v1/missions/" + Uri.EscapeDataString(missionId) + "/captain-selection/recovery", request, token);
+
+        /// <summary>Read current attempt separately from the mission's latest retained decision.</summary>
+        public Task<CaptainSelectionSummary?> GetCaptainSelectionAsync(string missionId, CancellationToken token = default)
+            => GetAsync<CaptainSelectionSummary>("/api/v1/missions/" + Uri.EscapeDataString(missionId) + "/captain-selection", token);
+
+        /// <summary>Read a scoped decision page, with filters evaluated before counts.</summary>
+        public Task<EnumerationResult<CaptainSelectionDecisionView>?> GetCaptainSelectionHistoryAsync(string missionId, CaptainSelectionHistoryQuery? query = null, CancellationToken token = default)
+        {
+            query ??= new CaptainSelectionHistoryQuery();
+            List<string> parts = new List<string> { "pageNumber=" + query.PageNumber.ToString(CultureInfo.InvariantCulture), "pageSize=" + query.PageSize.ToString(CultureInfo.InvariantCulture) };
+            if (query.Trigger != null) parts.Add("trigger=" + Uri.EscapeDataString(query.Trigger));
+            if (query.Outcome != null) parts.Add("outcome=" + Uri.EscapeDataString(query.Outcome));
+            if (query.FromUtc.HasValue) parts.Add("from=" + Uri.EscapeDataString(query.FromUtc.Value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)));
+            if (query.ToUtc.HasValue) parts.Add("to=" + Uri.EscapeDataString(query.ToUtc.Value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)));
+            return GetAsync<EnumerationResult<CaptainSelectionDecisionView>>("/api/v1/missions/" + Uri.EscapeDataString(missionId) + "/captain-selection/history?" + String.Join("&", parts), token);
+        }
+
+        /// <summary>Preview current routing/evidence without captures, history writes, claims or launches.</summary>
+        public Task<CaptainSelectionPreview?> PreviewCaptainSelectionAsync(string missionId, int pageNumber = 1, int pageSize = 25, CancellationToken token = default)
+            => PostAsync<CaptainSelectionPreview>("/api/v1/missions/" + Uri.EscapeDataString(missionId) + "/captain-selection/preview?" + SelectionPaging(pageNumber, pageSize, null), new object(), token);
+
+        /// <summary>Read retained immutable decision detail. Explicit cross-tenant scope requires a global administrator.</summary>
+        public Task<CaptainSelectionDecisionDetail?> GetCaptainSelectionDecisionAsync(string decisionId, string? tenantId = null, int pageNumber = 1, int pageSize = 25, CancellationToken token = default)
+            => GetAsync<CaptainSelectionDecisionDetail>("/api/v1/captain-selection-decisions/" + Uri.EscapeDataString(decisionId) + "?" + SelectionPaging(pageNumber, pageSize, tenantId), token);
+
+        /// <summary>Page visible candidate explanations, excluding internal account identities.</summary>
+        public Task<EnumerationResult<CaptainSelectionCandidateView>?> GetCaptainSelectionCandidatesAsync(string decisionId, string? tenantId = null, int pageNumber = 1, int pageSize = 25, CancellationToken token = default)
+            => GetAsync<EnumerationResult<CaptainSelectionCandidateView>>("/api/v1/captain-selection-decisions/" + Uri.EscapeDataString(decisionId) + "/candidates?" + SelectionPaging(pageNumber, pageSize, tenantId), token);
+
+        #endregion
+
         #region Public-Methods-Dispose
 
         /// <summary>
@@ -1818,6 +1855,10 @@ namespace Armada.Core.Client
         #endregion
 
         #region Private-Methods
+
+        private static string SelectionPaging(int pageNumber, int pageSize, string? tenantId)
+            => "pageNumber=" + pageNumber.ToString(CultureInfo.InvariantCulture) + "&pageSize=" + pageSize.ToString(CultureInfo.InvariantCulture)
+                + (tenantId == null ? "" : "&tenantId=" + Uri.EscapeDataString(tenantId));
 
         // A failed response becomes an HttpRequestException that keeps the status code and carries the server's own
         // explanation (the error envelope's Message, plus Data.Code when present), never a raw JSON body.

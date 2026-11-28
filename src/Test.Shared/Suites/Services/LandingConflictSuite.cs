@@ -448,14 +448,14 @@ namespace Test.Shared.Suites.Services
 
             cases.Add(CaseAsync("classifier_only_conflicts_are_landing_conflicts", "Only a merge conflict git reports classifies as LandingConflict; process-start and other failures are Infra", TestTags.Positive, async () =>
             {
-                AssertEqual(MissionFailureKindEnum.LandingConflict, LandingFailureClassifier.Classify(new GitMergeConflictException("conflict", new[] { "a.txt" })));
-                AssertEqual(MissionFailureKindEnum.LandingConflict, LandingFailureClassifier.Classify(new InvalidOperationException("wrapped", new GitMergeConflictException("conflict"))));
-                AssertEqual(MissionFailureKindEnum.Infra, LandingFailureClassifier.Classify(new Win32Exception(2, "An error occurred trying to start process '/usr/bin/git'. No such file or directory")));
-                AssertEqual(MissionFailureKindEnum.Infra, LandingFailureClassifier.Classify(new DirectoryNotFoundException("gone")));
-                AssertEqual(MissionFailureKindEnum.Infra, LandingFailureClassifier.Classify(new IOException("io")));
-                AssertEqual(MissionFailureKindEnum.Infra, LandingFailureClassifier.Classify(new InvalidOperationException("An error occurred trying to start process 'git' with working directory '/x'.")));
-                AssertEqual(MissionFailureKindEnum.Infra, LandingFailureClassifier.Classify(new GitDirtyCheckoutException("/w", " M a.txt")));
-                AssertEqual(MissionFailureKindEnum.Infra, LandingFailureClassifier.Classify(new InvalidOperationException("push rejected")));
+                AssertEqual(MissionFailureKindEnum.LandingConflict, FailureKindMapper.FromLandingException(new GitMergeConflictException("conflict", new[] { "a.txt" })));
+                AssertEqual(MissionFailureKindEnum.LandingConflict, FailureKindMapper.FromLandingException(new InvalidOperationException("wrapped", new GitMergeConflictException("conflict"))));
+                AssertEqual(MissionFailureKindEnum.Infra, FailureKindMapper.FromLandingException(new Win32Exception(2, "An error occurred trying to start process '/usr/bin/git'. No such file or directory")));
+                AssertEqual(MissionFailureKindEnum.Infra, FailureKindMapper.FromLandingException(new DirectoryNotFoundException("gone")));
+                AssertEqual(MissionFailureKindEnum.Infra, FailureKindMapper.FromLandingException(new IOException("io")));
+                AssertEqual(MissionFailureKindEnum.Infra, FailureKindMapper.FromLandingException(new InvalidOperationException("An error occurred trying to start process 'git' with working directory '/x'.")));
+                AssertEqual(MissionFailureKindEnum.Infra, FailureKindMapper.FromLandingException(new GitDirtyCheckoutException("/w", " M a.txt")));
+                AssertEqual(MissionFailureKindEnum.Infra, FailureKindMapper.FromLandingException(new InvalidOperationException("push rejected")));
                 await Task.CompletedTask;
             }));
 
@@ -490,7 +490,7 @@ namespace Test.Shared.Suites.Services
                 AssertContains("Dock missing", failed.FailureReason ?? "");
                 AssertContains(dock.WorktreePath!, failed.FailureReason ?? "");
                 AssertContains(dock.BranchName!, failed.FailureReason ?? "");
-                AssertFalse(MissionFailureClassifier.IsRecoverable(MissionFailureClassifier.Classify(failed)), "no autonomous rescue re-implements it");
+                AssertFalse(FailureKindMapper.IsRecoverable(FailureKindMapper.FromMission(failed)), "no autonomous rescue re-implements it");
                 AssertEqual(0, git.PushCalls.Count, "nothing published");
             }));
 

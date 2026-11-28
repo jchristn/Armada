@@ -21,7 +21,7 @@ namespace Armada.Helm.Commands
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             return await RunBlackBoxAsync(settings.Json, async client =>
             {
-                BlackBoxGcReport? report = await client.RunBlackBoxGcAsync(settings.DryRun, cancellationToken).ConfigureAwait(false);
+                BlackBoxGcReport? report = await client.BlackBox.RunGcAsync(settings.DryRun, cancellationToken).ConfigureAwait(false);
                 if (settings.Json)
                 {
                     WritePureJson(report);

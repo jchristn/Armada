@@ -48,6 +48,7 @@ namespace Test.Shared.Suites.Services
                 displayName: "A crashed pi mission cleans stale runtime files and resumes its durable assignment without losing work",
                 executeAsync: (CancellationToken ct) => RunAsync(),
                 tags: new List<string> { TestTags.Reliability },
+                skip: OperatingSystem.IsWindows(),
                 skipReason: OperatingSystem.IsWindows() ? "The recording pi stub is a POSIX shell script." : null));
             return new TestSuiteDescriptor(SuiteId, "pi crash recovery", cases);
         }

@@ -27,6 +27,12 @@ namespace Test.Shared.Suites.Services
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
+            cases.Add(Case("truncation_marker_closes_fence", "A fence cut open by output truncation ends at the truncation marker", TestTags.Positive, () =>
+            {
+                AssertEqual(JudgeVerdictEnum.Pass, JudgeVerdictParser.Parse("Log:\n```\nline\n[...output truncated...]\n\n[ARMADA:VERDICT] PASS"));
+                AssertEqual(JudgeVerdictEnum.None, JudgeVerdictParser.Parse("Log:\n```\nline\n\n[ARMADA:VERDICT] PASS"), "without the marker the line is still fenced");
+            }));
+
             cases.Add(Case("protocol_line_is_read", "The [ARMADA:VERDICT] protocol line is the verdict", TestTags.Positive, () =>
             {
                 AssertEqual(JudgeVerdictEnum.Pass, JudgeVerdictParser.Parse("## Verdict\n[ARMADA:VERDICT] PASS\n"));

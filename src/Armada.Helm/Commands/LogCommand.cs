@@ -145,13 +145,13 @@ namespace Armada.Helm.Commands
                 if (File.Exists(missionLog)) return missionLog;
             }
 
-            // 2. Direct captain ID (cpt_ prefix) — check .current pointer first, then .log
+            // 2. Direct captain ID (cpt_ prefix): check .current pointer first, then .log
             if (identifier.StartsWith("cpt_"))
             {
                 return logPaths.ResolveCaptainLog(identifier);
             }
 
-            // 3. Captain name match — look up via API
+            // 3. Captain name match: look up via API
             try
             {
                 EnumerationResult<Captain>? captainResult = await GetAsync<EnumerationResult<Captain>>("/api/v1/captains").ConfigureAwait(false);
@@ -171,7 +171,7 @@ namespace Armada.Helm.Commands
             }
             catch { }
 
-            // 4. Mission title match — look up via API, get mission ID
+            // 4. Mission title match: look up via API, get mission ID
             try
             {
                 EnumerationResult<Mission>? missionResult = await GetAsync<EnumerationResult<Mission>>("/api/v1/missions").ConfigureAwait(false);

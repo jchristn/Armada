@@ -260,9 +260,9 @@ namespace Armada.Tui.Screens.Build
         {
             ArmadaPageQuery q = new ArmadaPageQuery(1, 9999);
             q.With("userId", UserScope?.Value);
-            Task<EnumerationResult<Vessel>?> vessels = Context.Client.ListVesselsAsync(q, token);
-            Task<EnumerationResult<Fleet>?> fleets = Context.Client.ListFleetsAsync(new ArmadaPageQuery(1, 9999), token);
-            Task<List<Pipeline>> pipelines = ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => Context.Client.ListPipelinesAsync(new ArmadaPageQuery(p, 1000), ct), ArmadaPaging.DefaultMaxPages, token);
+            Task<EnumerationResult<Vessel>?> vessels = Context.Client.Vessels.ListAsync(q, token);
+            Task<EnumerationResult<Fleet>?> fleets = Context.Client.Fleets.ListAsync(new ArmadaPageQuery(1, 9999), token);
+            Task<List<Pipeline>> pipelines = ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => Context.Client.Pipelines.ListAsync(new ArmadaPageQuery(p, 1000), ct), ArmadaPaging.DefaultMaxPages, token);
             await Task.WhenAll(vessels, fleets, pipelines).ConfigureAwait(false);
             _LoadedFleets = fleets.Result?.Objects ?? new List<Fleet>();
             _LoadedPipelines = pipelines.Result;
@@ -355,9 +355,9 @@ namespace Armada.Tui.Screens.Build
                             await gate.WaitAsync().ConfigureAwait(false);
                             try
                             {
-                                try { GitStatus[id] = await client.GetVesselGitStatusAsync(id).ConfigureAwait(false); }
+                                try { GitStatus[id] = await client.Vessels.GetGitStatusAsync(id).ConfigureAwait(false); }
                                 catch (Exception) { GitStatus[id] = null; }
-                                try { BranchCounts[id] = await client.GetVesselBranchCountAsync(id).ConfigureAwait(false); }
+                                try { BranchCounts[id] = await client.Vessels.GetBranchCountAsync(id).ConfigureAwait(false); }
                                 catch (Exception) { BranchCounts[id] = null; }
                             }
                             finally
@@ -410,7 +410,7 @@ namespace Armada.Tui.Screens.Build
 
         private void Duplicate(Vessel vessel)
         {
-            Call((c, t) => c.CreateVesselAsync(VesselForm.DuplicatePayload(vessel), t), created =>
+            Call((c, t) => c.Vessels.CreateAsync(VesselForm.DuplicatePayload(vessel), t), created =>
             {
                 if (created == null) return;
                 Toast(NotificationSeverityEnum.Success, Tr("Vessel \"{{name}}\" duplicated.", LocalizationArgs.Of("name", created.Name)));
@@ -422,7 +422,7 @@ namespace Armada.Tui.Screens.Build
         {
             Confirm("Delete Vessel", Tr("Delete vessel \"{{name}}\"? This cannot be undone.", LocalizationArgs.Of("name", vessel.Name)), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting vessel", t => Context.Client.DeleteVesselAsync(vessel.Id, t), () =>
+                DeleteProgress.RunVoid(Context, "Deleting vessel", t => Context.Client.Vessels.DeleteAsync(vessel.Id, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Vessel \"{{name}}\" deleted.", LocalizationArgs.Of("name", vessel.Name)));
                     Refresh();
@@ -442,7 +442,7 @@ namespace Armada.Tui.Screens.Build
                     int failed = 0;
                     foreach (string id in ids)
                     {
-                        try { await Context.Client.DeleteVesselAsync(id, t).ConfigureAwait(false); }
+                        try { await Context.Client.Vessels.DeleteAsync(id, t).ConfigureAwait(false); }
                         catch (ArmadaApiException) { failed++; }
                     }
 

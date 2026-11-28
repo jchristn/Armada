@@ -54,7 +54,7 @@ namespace Armada.Tui.Screens.Build
             notes.ExternalEditor = (text, done) => screen.EditExternally(text, done);
             dialog.AddField("Captain", captain);
             dialog.AddField("Focus / guidance (optional)", notes, null, 4);
-            screen.Call((c, t) => c.ListCaptainsAsync(new ArmadaPageQuery(1, 200), t), result =>
+            screen.Call((c, t) => c.Captains.ListAsync(new ArmadaPageQuery(1, 200), t), result =>
             {
                 List<Captain> captains = result?.Objects ?? new List<Captain>();
                 captain.Options = captains.Select(c => new SelectOption<string>(c.Id, c.Name + " (" + (String.IsNullOrEmpty(c.Model) ? c.Runtime.ToString() : c.Model) + ")")).ToList();
@@ -66,7 +66,7 @@ namespace Armada.Tui.Screens.Build
                 request.CaptainId = captain.Value ?? "";
                 request.Notes = String.IsNullOrWhiteSpace(notes.Text) ? null : notes.Text.Trim();
                 d.Notes.Add(refine ? screen.Tr("Refining Model Context... this can take a few minutes.") : screen.Tr("Building Model Context... this can take a few minutes."));
-                screen.Call((c, t) => c.BuildVesselContextAsync(vessel.Id, request, t), updated =>
+                screen.Call((c, t) => c.Vessels.BuildContextAsync(vessel.Id, request, t), updated =>
                 {
                     d.Complete();
                     if (updated == null) return;

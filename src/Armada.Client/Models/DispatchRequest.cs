@@ -50,6 +50,17 @@ namespace Armada.Client.Models
         /// </summary>
         public Armada.Core.Enums.MissionBranchStrategyEnum? BranchStrategy { get; set; } = null;
 
+        /// <summary>
+        /// Optional persona (for example Worker, Judge, Test Engineer). When every mission of a voyage names one and no
+        /// pipeline is given, each runs as a single stage with its persona; a multi-stage pipeline ignores it.
+        /// </summary>
+        public string? Persona { get; set; } = null;
+
+        /// <summary>
+        /// Optional mode: Implementation (default), or the read-only report modes Audit and Research.
+        /// </summary>
+        public Armada.Core.Enums.MissionModeEnum? Mode { get; set; } = null;
+
         #endregion
 
         #region Constructors-and-Factories

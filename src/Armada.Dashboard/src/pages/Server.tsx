@@ -24,6 +24,7 @@ import type { Vessel } from '../types/models';
 import ImportFleetActionSettings from '../components/settings/ImportFleetActionSettings';
 import RetentionSettings from '../components/settings/RetentionSettings';
 import AskSettings from '../components/settings/AskSettings';
+import ReliabilitySettings, { type ReliabilitySettingsData } from '../components/settings/ReliabilitySettings';
 import BlackBoxSettings from '../components/settings/BlackBoxSettings';
 import CliPermissionSettings from '../components/settings/CliPermissionSettings';
 import UsageSelectionSettingsPanel from '../components/usage/UsageSelectionSettingsPanel';
@@ -275,6 +276,8 @@ export default function Server() {
         landingMode: settings.landingMode || DEFAULT_GLOBAL_LANDING_MODE,
         ...(settings.requireHarborForLaunch !== undefined ? { requireHarborForLaunch: settings.requireHarborForLaunch } : {}),
         ...(settings.blockDependentsOfFailedStages !== undefined ? { blockDependentsOfFailedStages: settings.blockDependentsOfFailedStages } : {}),
+        ...(settings.acceptLegacyMissionMarkers !== undefined ? { acceptLegacyMissionMarkers: settings.acceptLegacyMissionMarkers } : {}),
+        ...(settings.outputRepairNormalizerCaptainId !== undefined ? { outputRepairNormalizerCaptainId: settings.outputRepairNormalizerCaptainId.trim() } : {}),
       };
       const updated = await updateSettings(sent);
       applyIncomingSettings(updated as unknown as ServerSettings, sent);
@@ -859,6 +862,34 @@ export default function Server() {
                   <small className="text-dim">{t('On: stages after a failed one show Blocked until it is restarted. Off: they are cancelled.')}</small>
                 </div>
               )}
+              {settings.acceptLegacyMissionMarkers !== undefined && (
+                <div className="form-group">
+                  <label className="settings-checkbox-label" title={t('Deprecated, removed in 2.0. On (the default): an Architect plan written as [ARMADA:MISSION] markers is still accepted and logs a warning. Off: such output gets the format repair turn and must use an armada-plan block.')}>
+                    <input
+                      type="checkbox"
+                      title={t('Deprecated, removed in 2.0. On (the default): an Architect plan written as [ARMADA:MISSION] markers is still accepted and logs a warning. Off: such output gets the format repair turn and must use an armada-plan block.')}
+                      checked={settings.acceptLegacyMissionMarkers}
+                      onChange={(e) => setSettings({ ...settings, acceptLegacyMissionMarkers: e.target.checked })}
+                    />
+                    <span>{t('Accept Legacy Mission Markers')}</span>
+                  </label>
+                  <small className="text-dim">{t('Deprecated. On: [ARMADA:MISSION] plans still work. Off: the Architect must emit an armada-plan block.')}</small>
+                </div>
+              )}
+              {settings.outputRepairNormalizerCaptainId !== undefined && (
+                <div className="form-group">
+                  <label htmlFor="output-repair-normalizer">{t('Format Repair Captain')}</label>
+                  <input
+                    id="output-repair-normalizer"
+                    type="text"
+                    placeholder={t('Captain ID (blank: the stage\'s own captain)')}
+                    title={t('Captain that restates a stage\'s report in its contract\'s format when the work is done but the format is wrong. It runs without tools and cannot add a verdict, evidence or findings.')}
+                    value={settings.outputRepairNormalizerCaptainId}
+                    onChange={(e) => setSettings({ ...settings, outputRepairNormalizerCaptainId: e.target.value })}
+                  />
+                  <small className="text-dim">{t('Blank uses the captain that wrote the report.')}</small>
+                </div>
+              )}
             </div>
             <button
               className="btn-primary btn-sm"
@@ -970,6 +1001,15 @@ export default function Server() {
       {settings && isAdmin && settings.blackBox && (
         <BlackBoxSettings
           blackBox={settings.blackBox}
+          locked={remoteSettingsLocked}
+          onSaved={(updated) => applyIncomingSettings(updated as unknown as ServerSettings)}
+          notify={showToast}
+        />
+      )}
+
+      {settings && isAdmin && (
+        <ReliabilitySettings
+          settings={settings as unknown as ReliabilitySettingsData}
           locked={remoteSettingsLocked}
           onSaved={(updated) => applyIncomingSettings(updated as unknown as ServerSettings)}
           notify={showToast}

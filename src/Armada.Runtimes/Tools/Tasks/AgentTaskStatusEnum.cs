@@ -34,7 +34,7 @@ namespace Armada.Runtimes.Tools.Tasks
         Failed,
 
         /// <summary>
-        /// The task was intentionally not done — no longer needed or superseded by a re-plan.
+        /// The task was intentionally not done: no longer needed or superseded by a re-plan.
         /// </summary>
         [EnumMember(Value = "skipped")]
         Skipped,

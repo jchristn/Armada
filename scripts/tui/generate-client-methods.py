@@ -2,11 +2,11 @@
 """Emit C# method stubs for Armada.Client from the dashboard's api/client.ts.
 
 Usage:
-  python3 scripts/tui/generate-client-methods.py --out <dir>      # write ArmadaClient.<Area>.cs files into <dir>
+  python3 scripts/tui/generate-client-methods.py --out <dir>      # write <Area>Client.cs sub-client files into <dir>
   python3 scripts/tui/generate-client-methods.py --missing        # list exports with no C# method yet
 
-The generated files are a starting point: the committed partial classes under src/Armada.Client were produced by this
-script and then hand-finished (irregular exports are emitted as NotImplementedException stubs marked HAND-FINISH).
+The generated files are a starting point: the committed sub-clients under src/Armada.Client (one <Area>Client class per
+area, reached as client.<Area>) were first produced by this script and then hand-finished (irregular exports are emitted as NotImplementedException stubs marked HAND-FINISH).
 Re-run with --missing after dashboard changes to see which exports still need a C# method.
 """
 import os
@@ -127,13 +127,13 @@ def cs_path(path):
         return None
     inner = path[1:-1]
     inner = inner.replace("${ASK}", "/api/v1/ask")
-    inner = re.sub(r"\$\{askThreadPath\((\w+)\)\}", r"/api/v1/ask/threads/{E(\1)}", inner)
-    inner = re.sub(r"\$\{encodeURIComponent\((\w+)\)\}", r"{E(\1)}", inner)
+    inner = re.sub(r"\$\{askThreadPath\((\w+)\)\}", r"/api/v1/ask/threads/{ArmadaQueryString.Escape(\1)}", inner)
+    inner = re.sub(r"\$\{encodeURIComponent\((\w+)\)\}", r"{ArmadaQueryString.Escape(\1)}", inner)
     inner = re.sub(r"\$\{buildQuery\(params\)\}", r"{ArmadaQueryString.FromPage(query)}", inner)
     inner = re.sub(r"\$\{build\w+Query\(params\)\}", r"{ArmadaQueryString.FromObject(query)}", inner)
     inner = re.sub(r"\$\{encodeWorkspaceQueryPath\((\w+)\)\}", r"{ArmadaQueryString.EscapePath(\1)}", inner)
     inner = re.sub(r"\$\{(lines|maxResults)\}", r"{\1}", inner)
-    inner = re.sub(r"\$\{(\w+)\}", r"{E(\1)}", inner)
+    inner = re.sub(r"\$\{(\w+)\}", r"{ArmadaQueryString.Escape(\1)}", inner)
     if "${" in inner or "?" in inner and ":" in inner and "'" in inner:
         return None
     return '$"' + inner + '"'
@@ -223,6 +223,7 @@ def generate(area, name, kind, text):
     http = {"get": "Get", "post": "Post", "put": "Put", "del": "Delete"}[verb]
     doc_path = args[0].strip().replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     lines = [f"        /// <summary>", f"        /// Dashboard <c>{name}</c>: {verb.upper()} {doc_path}.", f"        /// </summary>"]
+    attr = f"        [DashboardExport(\"{name}\")]"
     for pname in names:
         lines.append(f"        /// <param name=\"{pname}\">{pname}.</param>")
     lines.append("        /// <param name=\"token\">Cancellation token.</param>")
@@ -232,17 +233,19 @@ def generate(area, name, kind, text):
     if ret is None:
         call_method = {"get": "HttpMethod.Get", "post": "HttpMethod.Post", "put": "HttpMethod.Put", "del": "HttpMethod.Delete"}[verb]
         b = body_arg if body_arg is not None else "null"
+        lines.append(attr)
         lines.append(f"        public Task {method}({sig})")
         lines.append("        {")
-        lines.append(f"            return SendNoResultAsync({call_method}, {path}, {b}, {opts_arg}, token);")
+        lines.append(f"            return _Transport.SendNoResultAsync({call_method}, {path}, {b}, {opts_arg}, token);")
         lines.append("        }")
     else:
+        lines.append(attr)
         lines.append(f"        public Task<{ret}?> {method}({sig})")
         lines.append("        {")
         if verb in ("post", "put"):
-            lines.append(f"            return {http}Async<{ret}>({path}, {body_arg}, {opts_arg}, token);")
+            lines.append(f"            return _Transport.{http}Async<{ret}>({path}, {body_arg}, {opts_arg}, token);")
         else:
-            lines.append(f"            return {http}Async<{ret}>({path}, {opts_arg}, token);")
+            lines.append(f"            return _Transport.{http}Async<{ret}>({path}, {opts_arg}, token);")
         lines.append("        }")
     return "\n".join(lines) + "\n"
 
@@ -262,8 +265,23 @@ HEADER = """namespace Armada.Client
     /// <summary>
     /// {area} API calls (dashboard <c>api/client.ts</c> parity).
     /// </summary>
-    public partial class ArmadaClient
+    public sealed class {area}Client
     {{
+        #region Private-Members
+
+        private readonly ArmadaTransport _Transport;
+
+        #endregion
+
+        #region Constructors-and-Factories
+
+        internal {area}Client(ArmadaTransport transport)
+        {{
+            _Transport = transport ?? throw new ArgumentNullException(nameof(transport));
+        }}
+
+        #endregion
+
         #region Public-Methods
 
 """
@@ -280,10 +298,10 @@ def main():
         client_dir = os.path.join(ROOT, "src", "Armada.Client")
         source = ""
         for fname in os.listdir(client_dir):
-            if fname.startswith("ArmadaClient") and fname.endswith(".cs"):
+            if fname.endswith("Client.cs"):
                 with open(os.path.join(client_dir, fname), encoding="utf-8") as f:
                     source += f.read()
-        missing = [n for (_, n, _, _) in exports if (" " + pascal(n) + "Async(") not in source]
+        missing = [n for (_, n, _, _) in exports if ('[DashboardExport("' + n + '")]') not in source]
         for n in missing:
             print(n)
         print(f"{len(missing)} of {len(exports)} exports have no C# method")
@@ -297,7 +315,7 @@ def main():
     for fname, methods in files.items():
         body = "\n".join(methods)
         hand += body.count("HAND-FINISH")
-        with open(os.path.join(out, f"ArmadaClient.{fname}.cs"), "w", encoding="utf-8") as f:
+        with open(os.path.join(out, f"{fname}Client.cs"), "w", encoding="utf-8") as f:
             f.write(HEADER.format(area=fname) + body + "\n" + FOOTER)
     print(f"wrote {len(files)} files, {len(exports)} methods, {hand} need hand-finishing")
     return 0

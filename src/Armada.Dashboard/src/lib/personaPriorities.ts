@@ -5,6 +5,8 @@ export const PERSONA_PRIORITY_RUNTIMES = [...CAPTAIN_RUNTIMES, { value: 'Custom'
 
 export interface PersonaRoutingForm {
   captainPriorities: PersonaCaptainPriority[];
+  /** Escalation ladder, lowest rung first (RS-5.6). */
+  escalationLadder: PersonaCaptainPriority[];
   priorityAvailability: PersonaPriorityAvailability;
   priorityExhaustion: PersonaPriorityExhaustion;
 }
@@ -12,6 +14,7 @@ export interface PersonaRoutingForm {
 export function personaRoutingForm(persona?: Partial<Persona>): PersonaRoutingForm {
   return {
     captainPriorities: (persona?.captainPriorities ?? []).map(p => ({ ...p })),
+    escalationLadder: (persona?.escalationLadder ?? []).map(p => ({ ...p })),
     priorityAvailability: persona?.priorityAvailability ?? 'FallThrough',
     priorityExhaustion: persona?.priorityExhaustion ?? 'Wait',
   };

@@ -42,7 +42,7 @@ namespace Test.Shared.Suites.Client
                 VesselSetup setup = await CreateHistoryVesselAsync(c, "hist-activity").ConfigureAwait(false);
                 string id = setup.Vessel.Id;
 
-                VesselCommitActivity utc = (await c.GetVesselCommitActivityAsync(id, new VesselCommitActivityQuery { From = "2026-02-09", To = "2026-02-12", UtcOffsetMinutes = 0 }))!;
+                VesselCommitActivity utc = (await c.Vessels.GetCommitActivityAsync(id, new VesselCommitActivityQuery { From = "2026-02-09", To = "2026-02-12", UtcOffsetMinutes = 0 }))!;
                 AssertNull(utc.Error, "no error");
                 AssertEqual(id, utc.VesselId);
                 AssertEqual("main", utc.Branch, "the vessel's default branch");
@@ -52,17 +52,17 @@ namespace Test.Shared.Suites.Client
                 AssertNotNull(utc.FirstCommitUtc);
                 AssertEqual(At("2026-02-11T03:00:00Z"), utc.LastCommitUtc, "the newest commit");
 
-                VesselCommitActivity east = (await c.GetVesselCommitActivityAsync(id, new VesselCommitActivityQuery { From = "2026-02-09", To = "2026-02-12", UtcOffsetMinutes = -240 }))!;
+                VesselCommitActivity east = (await c.Vessels.GetCommitActivityAsync(id, new VesselCommitActivityQuery { From = "2026-02-09", To = "2026-02-12", UtcOffsetMinutes = -240 }))!;
                 AssertEqual("0,3,0,0", String.Join(",", east.Days.Select(d => d.Count)), "UTC-4 moves the 03:00Z commit to the 10th");
                 AssertEqual(-240, east.UtcOffsetMinutes);
 
                 string todayBefore = DateTime.UtcNow.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-                VesselCommitActivity defaults = (await c.GetVesselCommitActivityAsync(id))!;
+                VesselCommitActivity defaults = (await c.Vessels.GetCommitActivityAsync(id))!;
                 string todayAfter = DateTime.UtcNow.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
                 AssertEqual(365, defaults.Days.Count, "default range is the last 365 days");
                 AssertTrue(defaults.To == todayBefore || defaults.To == todayAfter, "to defaults to today in UTC: " + defaults.To);
 
-                VesselCommitActivity unknown = (await c.GetVesselCommitActivityAsync(id, new VesselCommitActivityQuery { Branch = "no-such-branch", From = "2026-02-09", To = "2026-02-10" }))!;
+                VesselCommitActivity unknown = (await c.Vessels.GetCommitActivityAsync(id, new VesselCommitActivityQuery { Branch = "no-such-branch", From = "2026-02-09", To = "2026-02-10" }))!;
                 AssertNotNull(unknown.Error, "unknown branch is a 200 with Error");
                 AssertEqual(2, unknown.Days.Count);
             }));
@@ -74,7 +74,7 @@ namespace Test.Shared.Suites.Client
                 string work = setup.Vessel.WorkingDirectory!;
                 int total = Int32.Parse(DatedGitRepo.Git(work, null, "rev-list", "--count", "main").Trim(), CultureInfo.InvariantCulture);
 
-                VesselCommitPage first = (await c.GetVesselCommitsAsync(id, new VesselCommitQuery { Limit = 2 }))!;
+                VesselCommitPage first = (await c.Vessels.GetCommitsAsync(id, new VesselCommitQuery { Limit = 2 }))!;
                 AssertNull(first.Error);
                 AssertEqual("main", first.Branch);
                 AssertEqual("h3,h2", String.Join(",", first.Commits.Select(x => x.Subject)), "newest first");
@@ -88,7 +88,7 @@ namespace Test.Shared.Suites.Client
                 string? cursor = first.NextCursor;
                 while (cursor != null)
                 {
-                    VesselCommitPage page = (await c.GetVesselCommitsAsync(id, new VesselCommitQuery { Cursor = cursor, Limit = 2, Branch = "ignored-with-cursor", Before = "2000-01-01" }))!;
+                    VesselCommitPage page = (await c.Vessels.GetCommitsAsync(id, new VesselCommitQuery { Cursor = cursor, Limit = 2, Branch = "ignored-with-cursor", Before = "2000-01-01" }))!;
                     AssertNull(page.Error, page.Error);
                     AssertEqual("main", page.Branch, "the cursor carries the branch");
                     seen.AddRange(page.Commits.Select(x => x.Sha));
@@ -97,17 +97,17 @@ namespace Test.Shared.Suites.Client
                 AssertEqual(total, seen.Count, "every commit that existed at the first page, once");
                 AssertEqual(total, seen.Distinct().Count(), "no duplicates");
 
-                VesselCommitPage fresh = (await c.GetVesselCommitsAsync(id, new VesselCommitQuery { Limit = 1 }))!;
+                VesselCommitPage fresh = (await c.Vessels.GetCommitsAsync(id, new VesselCommitQuery { Limit = 1 }))!;
                 AssertEqual("h4 landed later", fresh.Commits[0].Subject, "a new first page sees the new commit");
 
-                VesselCommitPage beforeDay = (await c.GetVesselCommitsAsync(id, new VesselCommitQuery { Before = "2026-02-11", Limit = 1 }))!;
+                VesselCommitPage beforeDay = (await c.Vessels.GetCommitsAsync(id, new VesselCommitQuery { Before = "2026-02-11", Limit = 1 }))!;
                 AssertEqual("h2", beforeDay.Commits[0].Subject, "a bare date is the start of that day in UTC");
-                VesselCommitPage beforeInstant = (await c.GetVesselCommitsAsync(id, new VesselCommitQuery { Before = "2026-02-10T18:00:00Z", Limit = 1 }))!;
+                VesselCommitPage beforeInstant = (await c.Vessels.GetCommitsAsync(id, new VesselCommitQuery { Before = "2026-02-10T18:00:00Z", Limit = 1 }))!;
                 AssertEqual("h1", beforeInstant.Commits[0].Subject, "strictly before: the commit at exactly that instant is excluded");
-                VesselCommitPage beforeOffset = (await c.GetVesselCommitsAsync(id, new VesselCommitQuery { Before = "2026-02-10T20:00:00+02:00", Limit = 1 }))!;
+                VesselCommitPage beforeOffset = (await c.Vessels.GetCommitsAsync(id, new VesselCommitQuery { Before = "2026-02-10T20:00:00+02:00", Limit = 1 }))!;
                 AssertEqual("h1", beforeOffset.Commits[0].Subject, "an offset instant is converted to UTC");
 
-                VesselCommitPage unknown = (await c.GetVesselCommitsAsync(id, new VesselCommitQuery { Branch = "no-such-branch" }))!;
+                VesselCommitPage unknown = (await c.Vessels.GetCommitsAsync(id, new VesselCommitQuery { Branch = "no-such-branch" }))!;
                 AssertNotNull(unknown.Error);
                 AssertEqual(0, unknown.Commits.Count);
                 AssertNull(unknown.NextCursor);
@@ -130,10 +130,10 @@ namespace Test.Shared.Suites.Client
                 };
                 foreach (VesselCommitActivityQuery query in badActivity)
                 {
-                    ArmadaApiException ex = await ClientContract.ExpectErrorAsync(() => c.GetVesselCommitActivityAsync(id, query), "activity " + JsonSerializer.Serialize(query), 400, 400);
+                    ArmadaApiException ex = await ClientContract.ExpectErrorAsync(() => c.Vessels.GetCommitActivityAsync(id, query), "activity " + JsonSerializer.Serialize(query), 400, 400);
                     AssertEqual("BadRequest", ex.ErrorName, "typed BadRequest");
                 }
-                AssertNull((await c.GetVesselCommitActivityAsync(id, new VesselCommitActivityQuery { From = "2021-01-01", To = "2026-01-05" }))!.Error, "exactly 1830 days is allowed");
+                AssertNull((await c.Vessels.GetCommitActivityAsync(id, new VesselCommitActivityQuery { From = "2021-01-01", To = "2026-01-05" }))!.Error, "exactly 1830 days is allowed");
 
                 string tamperedCursor = Base64Url("{\"V\":9,\"Branch\":\"main\",\"Tip\":\"" + new string('a', 40) + "\",\"Skip\":0}");
                 List<VesselCommitQuery> badCommits = new List<VesselCommitQuery>
@@ -147,12 +147,12 @@ namespace Test.Shared.Suites.Client
                 };
                 foreach (VesselCommitQuery query in badCommits)
                 {
-                    ArmadaApiException ex = await ClientContract.ExpectErrorAsync(() => c.GetVesselCommitsAsync(id, query), "commits " + JsonSerializer.Serialize(query), 400, 400);
+                    ArmadaApiException ex = await ClientContract.ExpectErrorAsync(() => c.Vessels.GetCommitsAsync(id, query), "commits " + JsonSerializer.Serialize(query), 400, 400);
                     AssertEqual("BadRequest", ex.ErrorName, "typed BadRequest");
                 }
 
-                await ClientContract.ExpectErrorAsync(() => c.GetVesselCommitActivityAsync("vsl_does_not_exist"), "unknown vessel activity", 404, 404);
-                await ClientContract.ExpectErrorAsync(() => c.GetVesselCommitsAsync("vsl_does_not_exist"), "unknown vessel commits", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.Vessels.GetCommitActivityAsync("vsl_does_not_exist"), "unknown vessel activity", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.Vessels.GetCommitsAsync("vsl_does_not_exist"), "unknown vessel commits", 404, 404);
             }));
 
             cases.Add(ClientContract.Case(Suite, this, "cli", "armada vessel history against the server as a remote target: list by day, heatmap, --json --all, unknown vessel", async (c, fx) =>

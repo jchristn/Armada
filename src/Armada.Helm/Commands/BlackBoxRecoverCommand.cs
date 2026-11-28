@@ -27,7 +27,7 @@ namespace Armada.Helm.Commands
             return await RunBlackBoxAsync(settings.Json, async client =>
             {
                 BlackBoxRecoveryRunRequest dry = new BlackBoxRecoveryRunRequest { DryRun = true, AuthorKind = BlackBoxNoteAuthorKindEnum.Operator };
-                BlackBoxRecoveryRunResult? plan = await client.RunBlackBoxRecoveryAsync(settings.Id, settings.PathId, dry, cancellationToken).ConfigureAwait(false);
+                BlackBoxRecoveryRunResult? plan = await client.BlackBox.RunRecoveryAsync(settings.Id, settings.PathId, dry, cancellationToken).ConfigureAwait(false);
                 if (plan == null)
                 {
                     Status("Error: the server returned no plan.");
@@ -73,7 +73,7 @@ namespace Armada.Helm.Commands
                     AcknowledgeDataLoss = settings.AcknowledgeDataLoss,
                     AuthorKind = BlackBoxNoteAuthorKindEnum.Operator
                 };
-                BlackBoxRecoveryRunResult? result = await client.RunBlackBoxRecoveryAsync(settings.Id, settings.PathId, run, cancellationToken).ConfigureAwait(false);
+                BlackBoxRecoveryRunResult? result = await client.BlackBox.RunRecoveryAsync(settings.Id, settings.PathId, run, cancellationToken).ConfigureAwait(false);
                 if (result == null)
                 {
                     Status("Error: the server returned no result.");

@@ -524,7 +524,7 @@ namespace Armada.Server.Mcp.Tools
         private static McpToolError FromArgumentException(ArgumentException ex)
         {
             // A captain the caller cannot see is reported the same way as one that does not exist.
-            if (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+            if (ex is Armada.Core.Services.Ask.AskReferenceNotFoundException)
                 return McpToolError.NotFound(ex.Message.Split(" (Parameter", StringSplitOptions.None)[0]);
             return McpToolError.FromException(ex);
         }

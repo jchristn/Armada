@@ -36,13 +36,6 @@ namespace Armada.Core.BlackBox
         /// </summary>
         public Armada.Core.Services.HarborConnectionManager? Harbors { get; set; } = null;
 
-        /// <summary>
-        /// Records and broadcasts mission.status_changed (mission after the change, previous status, message), or null
-        /// to record the event row only. Every mission capture whose status changed emits it with the previous status, so
-        /// the status timeline is complete; it runs whether or not the black box is enabled and never throws.
-        /// </summary>
-        public Func<Mission, MissionStatusEnum?, string, Task>? MissionStatusChanged { get; set; } = null;
-
         #endregion
 
         #region Private-Members
@@ -55,10 +48,6 @@ namespace Armada.Core.BlackBox
         private readonly IBlackBoxVersionProvider _Version;
         private readonly BlackBoxRedactor _Redactor;
         private readonly LoggingModule _Logging;
-        private static readonly System.Text.Json.JsonSerializerOptions _StatusPayloadOptions = new System.Text.Json.JsonSerializerOptions
-        {
-            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
-        };
 
         #endregion
 
@@ -95,7 +84,6 @@ namespace Armada.Core.BlackBox
         {
             if (context == null || context.Mission == null) return null;
             Mission mission = context.Mission;
-            await EmitStatusChangedAsync(mission, context.StatusBefore, context.Step).ConfigureAwait(false);
             if (!_Settings.BlackBox.Enabled) return null;
             try
             {
@@ -387,36 +375,6 @@ namespace Armada.Core.BlackBox
             catch (Exception e) when (!(e is OperationCanceledException))
             {
                 _Logging.Warn(_Header + "could not read captain.process_exited for " + mission.Id + ": " + e.Message);
-            }
-        }
-
-        private async Task EmitStatusChangedAsync(Mission mission, MissionStatusEnum? previous, BlackBoxStepEnum step)
-        {
-            if (previous.HasValue && previous.Value == mission.Status) return;
-            string message = "Mission " + mission.Status + " (" + step + "): " + mission.Title;
-            try
-            {
-                if (MissionStatusChanged != null)
-                {
-                    await MissionStatusChanged(mission, previous, message).ConfigureAwait(false);
-                    return;
-                }
-
-                ArmadaEvent evt = new ArmadaEvent("mission.status_changed", message);
-                evt.TenantId = mission.TenantId;
-                evt.UserId = mission.UserId;
-                evt.EntityType = "mission";
-                evt.EntityId = mission.Id;
-                evt.CaptainId = mission.CaptainId;
-                evt.MissionId = mission.Id;
-                evt.VesselId = mission.VesselId;
-                evt.VoyageId = mission.VoyageId;
-                evt.Payload = System.Text.Json.JsonSerializer.Serialize(new MissionStatusChangedPayload { Status = mission.Status, PreviousStatus = previous }, _StatusPayloadOptions);
-                await _Database.Events.CreateAsync(evt, CancellationToken.None).ConfigureAwait(false);
-            }
-            catch (Exception e)
-            {
-                _Logging.Warn(_Header + "mission.status_changed for " + mission.Id + " could not be emitted: " + e.Message);
             }
         }
 

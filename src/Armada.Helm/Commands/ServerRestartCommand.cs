@@ -145,7 +145,7 @@ namespace Armada.Helm.Commands
                 {
                     using HttpClient pollClient = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
                     await pollClient.GetAsync(GetBaseUrl() + "/api/v1/status/health", cancellationToken).ConfigureAwait(false);
-                    // Still responding — keep waiting.
+                    // Still responding: keep waiting.
                 }
                 catch
                 {

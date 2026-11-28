@@ -29,7 +29,7 @@ namespace Armada.Server
     /// <summary>
     /// Admiral server orchestrating REST API, MCP server, and agent coordination.
     /// Routes, MCP tools, WebSocket commands, agent lifecycle, and mission landing
-    /// are each handled by dedicated classes — this class wires them together.
+    /// are each handled by dedicated classes: this class wires them together.
     /// </summary>
     public class ArmadaServer
     {
@@ -157,6 +157,7 @@ namespace Armada.Server
         private ArmadaWebSocketHub _WebSocketHub = null!;
 
         private IMergeQueueService _MergeQueue = null!;
+        private MissionTransitions _Transitions = null!;
         private Armada.Core.Services.JobService _JobService = null!;
         private Armada.Core.Services.MissionRecoveryCoordinator _MissionRecovery = null!;
         private LandingService _LandingService = null!;
@@ -319,6 +320,10 @@ namespace Armada.Server
 
             IDefinitionOfDoneGate definitionOfDoneGate = new DefinitionOfDoneGate(_Logging);
             MissionService missionService = new MissionService(_Logging, _Database, _Settings, dockService, captainService, _PromptTemplateService, _Git, definitionOfDoneGate);
+            // One transition path for every mission status change (RS-3.5): it broadcasts mission.status_changed and settles voyages.
+            _Transitions = missionService.Transitions;
+            _Transitions.StatusChanged = (mission, previous, message) => EmitMissionStatusChangedAsync(mission, previous, message);
+            if (captainService is CaptainService transitionCaptains) transitionCaptains.Transitions = _Transitions;
             _MissionService = missionService;
 
             // Mission and voyage black box: one runtime shared by capture sites, background loops and every surface.
@@ -333,17 +338,25 @@ namespace Armada.Server
             IVoyageService voyageService = new VoyageService(_Logging, _Database);
             IEscalationService escalationService = new EscalationService(_Logging, _Database, _Settings);
             AdmiralService admiralService = new AdmiralService(_Logging, _Database, _Settings, captainService, missionService, voyageService, dockService, escalationService);
+            admiralService.Transitions = _Transitions;
             // Dispatch returns once a mission is admitted; dock provisioning and launch continue in the background, so neither
             // create requests nor the health check wait on per-repository git work.
             admiralService.LaunchInBackground = true;
+            // One dispatcher (RS-4.5): status changes wake it, and background launches stop with the server.
+            missionService.ShutdownToken = _TokenSource.Token;
+            _Transitions.DispatchWake = admiralService.RequestDispatch;
             // Concurrency limit overruns reach the owning tenant's sockets; one without a tenant reaches only global admins.
             admiralService.OnConcurrencyEvent = evt => _WebSocketHub?.BroadcastToTenant(evt.TenantId, evt.EventType, evt.Message, evt);
             _Admiral = admiralService;
             _MergeQueue = new MergeQueueService(_Logging, _Database, _Settings, _Git);
+            if (_MergeQueue is MergeQueueService transitionQueue) transitionQueue.Transitions = _Transitions;
             _JobService = new Armada.Core.Services.JobService(_Database, _Logging);
             _VesselService = new VesselService(_Database);
             _MissionRecovery = new Armada.Core.Services.MissionRecoveryCoordinator(_Logging, _Database, _Settings);
+            _MissionRecovery.Transitions = _Transitions;
+            _MissionRecovery.Escalation = escalationService;
             _LandingService = new LandingService(_Logging, _Database, _Settings, _Git);
+            _LandingService.Transitions = _Transitions;
             _TemplateService = new MessageTemplateService(_Logging, _PromptTemplateService);
             _RuntimeFactory = new AgentRuntimeFactory(_Logging, ResolveInferenceEndpoint);
             _FleetCategorizationService = new FleetCategorizationService(_Database, _Settings, _JobService, new CaptainPromptRunner(_RuntimeFactory, _Logging) { Settings = _Settings }, _PromptTemplateService, _Logging);
@@ -373,6 +386,7 @@ namespace Armada.Server
                 _Logging);
             _VesselHealthService = new Armada.Core.Services.Health.VesselHealthService(_Database, _Settings, healthEvaluator, _JobService, _Logging);
             _ObjectiveService = new ObjectiveService(_Database, _Logging);
+            admiralService.Objectives = _ObjectiveService;
             _ReleaseService = new ReleaseService(_Database, _WorkflowProfileService, _Logging);
             _DeploymentService = new DeploymentService(_Database, _WorkflowProfileService, _EnvironmentService, _CheckRunService, _Logging);
             _IncidentService = new IncidentService(_Database);
@@ -380,16 +394,19 @@ namespace Armada.Server
             _GitHubIntegrationService = new GitHubIntegrationService(_Database, _ObjectiveService, _CheckRunService, _DeploymentService, _Settings, _Logging);
             _LandingPreviewService = new LandingPreviewService(_Database, _Logging, _Settings);
             _ManualLandingReconciler = new ManualLandingReconciler(_Database, _Settings, _Git, _Logging);
-            _ManualLandingReconciler.OnMissionReconciled = async (mission) =>
+            _ManualLandingReconciler.Transitions = _Transitions;
+            _ManualLandingReconciler.OnMissionReconciled = (mission) =>
             {
-                await EmitMissionStatusChangedAsync(mission, MissionStatusEnum.WorkProduced, "Mission completed (branch merged by hand): " + mission.Title).ConfigureAwait(false);
                 _WebSocketHub?.BroadcastMissionChange(mission, mission.Status.ToString());
+                return Task.CompletedTask;
             };
-            admiralService.OnReconcileManualLandings = (ct) => _ManualLandingReconciler.ReconcileAsync(null, ct);
+            // The one landing reconciler (RS-9.2): its sweep runs every landing case on one scan per health tick.
             _LandingReconciler = new LandingReconciler(_Database, _Git, _Logging);
-            _LandingReconciler.OnMissionReconciled = async (mission, evt) =>
+            _LandingReconciler.Transitions = _Transitions;
+            _LandingReconciler.Manual = _ManualLandingReconciler;
+            _LandingReconciler.MergeQueue = _MergeQueue as MergeQueueService;
+            _LandingReconciler.OnMissionReconciled = (mission, evt) =>
             {
-                await EmitMissionStatusChangedAsync(mission, MissionStatusEnum.LandingFailed, "Mission completed (landing reconciled: work is on the target branch): " + mission.Title).ConfigureAwait(false);
                 _WebSocketHub?.BroadcastMissionChange(mission, mission.Status.ToString());
                 _WebSocketHub?.BroadcastToTenant(mission.TenantId, evt.EventType, evt.Message, new
                 {
@@ -399,8 +416,9 @@ namespace Armada.Server
                     vesselId = mission.VesselId,
                     voyageId = mission.VoyageId
                 });
+                return Task.CompletedTask;
             };
-            admiralService.OnReconcileLandingFailures = (ct) => _LandingReconciler.ReconcileAsync(ct);
+            admiralService.OnLandingReconciliation = (ct) => _LandingReconciler.SweepAsync(ct);
             _HistoricalTimelineService = new HistoricalTimelineService(_Database);
             _ModelEndpointService = new ModelEndpointService(_Database, _Logging);
             _HarborService = new HarborService(_Database, _Logging, _Settings.Harbor);
@@ -411,6 +429,10 @@ namespace Armada.Server
             _HarborMetricsRecorder = new HarborMetricsRecorder(_Database, _Logging, _Settings.Harbor);
             _HarborConnectionManager.RestoredJobReconnectGrace = TimeSpan.FromSeconds(_Settings.Harbor.HeartbeatTimeoutSeconds);
             _HarborConnectionManager.Metrics = _HarborMetricsRecorder;
+            // RS-7.8: the Admiral discovers the context window of in-process API captains, and stores what Harbors report.
+            ModelContextDiscoveryService contextDiscovery = new ModelContextDiscoveryService(_Database, _Logging);
+            _RuntimeFactory.ContextDiscovery = contextDiscovery.EnsureAsync;
+            _HarborMetricsRecorder.ContextDiscovery = contextDiscovery;
             _StorageInventory = new StorageInventoryService(_Database, _Settings, _HarborConnectionManager.IsConnected);
             _HarborConnectionManager.StorageReportReceived = _StorageInventory.Receive;
 
@@ -459,7 +481,7 @@ namespace Armada.Server
 
             // Fleet actions: runner (owned here, started below) and service; seed built-ins into every tenant.
             FleetActionSeedService fleetActionSeeder = new FleetActionSeedService(_Database, _Logging);
-            _FleetActionRunner = new FleetActionRunner(_Database, _Settings, _Logging, new AdmiralFleetActionMissionDispatcher(_Database, _Admiral), new LocalHostCommandExecutor(), _HarborConnectionManager);
+            _FleetActionRunner = new FleetActionRunner(_Database, _Settings, _Logging, new AdmiralFleetActionMissionDispatcher(_Database, _Admiral) { Transitions = _Transitions }, new LocalHostCommandExecutor(), _HarborConnectionManager);
 
             // Account usage capture (disabled by default): the Admiral host runs the probe helper in-process
             // for local captures, Harbor captures go over the link, and every attempt owns its own dedicated
@@ -535,9 +557,11 @@ namespace Armada.Server
             // Initialize handler classes (WebSocketHub is created later, so pass null initially)
             _MissionLanding = new MissionLandingHandler(
                 _Logging, _Database, _Settings, _Git, _MergeQueue, _TemplateService, _PromptTemplateService, _Docks, null);
+            _MissionLanding.Transitions = _Transitions;
 
             _AgentLifecycle = new AgentLifecycleHandler(
                 _Logging, _Database, _Settings, _RuntimeFactory, _Admiral, _TemplateService, _PromptTemplateService, null, EmitEventAsync);
+            _AgentLifecycle.Transitions = _Transitions;
 
             // Delegate captain launches to a connected Harbor by default; falls back to local when none is eligible.
             _AgentLifecycle.SetHarborConnections(_HarborConnectionManager);
@@ -598,14 +622,13 @@ namespace Armada.Server
                 Hosts = dockHosts,
                 IsCompletionInFlight = missionService.IsCompletionInFlight
             };
-            admiralService.OnLandingIntegritySweep = landingIntegrity.SweepAsync;
+            _LandingReconciler.Integrity = landingIntegrity;
 
             // Every service that writes a mission or voyage failure records it in the black box.
             Armada.Core.BlackBox.IBlackBoxCapture blackBoxCapture = _BlackBox!.Capture;
             if (blackBoxCapture is Armada.Core.BlackBox.BlackBoxCapture concreteCapture)
             {
                 concreteCapture.Harbors = _HarborConnectionManager;
-                concreteCapture.MissionStatusChanged = EmitMissionStatusChangedAsync;
             }
             admiralService.BlackBox = blackBoxCapture;
             admiralService.DispatchAdvisor = _BlackBox.Insights.DispatchAdvisor;
@@ -624,6 +647,8 @@ namespace Armada.Server
                 LaunchRouter = _LaunchRouter,
                 OverrideSource = () => ModelProbeExecutorOverride
             };
+            // RS-6.4: the format-only repair turn runs through the same executor, in a scratch directory.
+            if (_MissionService is MissionService formatRepairMissions) formatRepairMissions.FormatRepairExecutor = modelProbeExecutor;
             StageProvenanceProbe modelProbeProvenance = new StageProvenanceProbe(_Logging, harborId =>
             {
                 if (String.IsNullOrEmpty(harborId)) return dockHosts.Local.Commands;
@@ -632,8 +657,8 @@ namespace Armada.Server
             });
             _ModelProbeService = new ModelProbeService(_Database, _Logging, modelProbeExecutor, () => _Settings.Evaluation, modelProbeProvenance);
             _ModelProbeAccess = new ModelProbeAccessService(_Database, _ModelProbeService, _ModelEndpointService, _Logging);
-            _ModelProfileAccess = new ModelProfileAccessService(_Database, _Logging);
-            _ModelAlertService = new ModelAlertService(_Database, _Logging, () => _Settings.ModelAlerts);
+            _ModelProfileAccess = new ModelProfileAccessService(_Database, _Logging, _Settings);
+            _ModelAlertService = new ModelAlertService(_Database, _Logging, () => _Settings.ModelAlerts); _ModelAlertService.RoutingData = () => _Settings.RoutingData;
             _ModelAlertAccess = new ModelAlertAccessService(_Database, _ModelAlertService, () => _Settings.ModelAlerts, () => _Settings.SaveAsync(), _ModelProbeAccess, _Logging);
             try
             {
@@ -876,6 +901,8 @@ namespace Armada.Server
                 _AskTurns.HarborCheckouts = harborCheckouts;
                 _HarborConnectionManager.OnLinked = harborCheckouts.Warm;
             }
+            Action<string>? onLinked = _HarborConnectionManager.OnLinked;
+            _HarborConnectionManager.OnLinked = harborId => { onLinked?.Invoke(harborId); admiralService.RequestDispatch(); };
             _AgentLifecycle.SetCliPermissionService(_CliPermissions);
             _WebSocketHub.SetCliPermissionService(_CliPermissions);
             _WebSocketHub.SetMissionService(_MissionService);
@@ -900,6 +927,9 @@ namespace Armada.Server
                 if (_Settings.ModelAlerts.PushEnabled) pushNotifications.OnModelAlertRaised(alert);
             };
             _AskThreads.OnProposalCreated = proposal => pushNotifications.OnAskProposalCreated(proposal);
+            if (_Admiral is AdmiralService escalatingAdmiral)
+                escalatingAdmiral.OnMissionEscalated = (mission, captain) => pushNotifications.OnMissionEscalated(mission, captain?.Name);
+            _MissionRecovery.OnRecoveryExhausted = (original, incident) => pushNotifications.OnRecoveryExhausted(original, incident.Id, incident.RecoveryAttempts);
             _PushNotifications.Start();
             _AskTracker.ExpireProposals = async (CancellationToken expireToken) =>
             {
@@ -927,6 +957,11 @@ namespace Armada.Server
 
             // Watson 7 StartAsync is long-running; Start() binds and returns after
             // scheduling the accept loop.
+            // Endpoint breakers, launch backoff, outage starts and escalation cooldowns from the previous run (RS-3.7).
+            await missionService.LoadRecoveryStateAsync(_TokenSource.Token).ConfigureAwait(false);
+            await admiralService.LoadRecoveryStateAsync(_TokenSource.Token).ConfigureAwait(false);
+            if (escalationService is EscalationService recoveringEscalation) await recoveringEscalation.LoadRecoveryStateAsync(_TokenSource.Token).ConfigureAwait(false);
+
             int restoredJobs = await _AgentLifecycle.RestoreHarborMissionsAsync(_TokenSource.Token).ConfigureAwait(false);
             _Logging.Info(_Header + "restored ownership of " + restoredJobs + " Harbor mission job(s) before accepting links");
             _App.Start(_TokenSource.Token);
@@ -1055,6 +1090,7 @@ namespace Armada.Server
 
             // Start health check loop
             _HealthCheckTask = HealthCheckLoopAsync(_TokenSource.Token);
+            admiralService.StartDispatcher(_TokenSource.Token);
             // Usage capture runs on its own loop: captures must stay fresh even while a health check is busy, because
             // captain selection treats stale usage as unknown.
             _UsageCaptureTask = UsageCaptureLoopAsync(_TokenSource.Token);
@@ -1574,7 +1610,7 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Status, health, doctor, settings, server control
-            SlotManager slotManager = new SlotManager(Path.Combine(_Settings.DataDirectory, "bin"), retentionCount: _Settings.RebuildSlotRetentionCount);
+            RebuildSlotManager slotManager = new RebuildSlotManager(Path.Combine(_Settings.DataDirectory, "bin"), retentionCount: _Settings.RebuildSlotRetentionCount);
             ServerRebuildService rebuildService = new ServerRebuildService(_Database, _Settings, slotManager, new LocalHostCommandExecutor(), _Logging, () => Stop(), _HarborConnectionManager);
             new StatusRoutes(_Database, _Settings, _Admiral, () => Stop(), _StartUtc, _JsonOptions, _Logging, slotManager, rebuildService, _RemoteTunnel.GetStatus, _RemoteTunnel.ReloadAsync, () => RestartOverride?.Invoke())
             {
@@ -1642,6 +1678,10 @@ namespace Armada.Server
             new HandoffArtifactRoutes(new HandoffArtifactAccessService(_Database))
                 .Register(_App, authenticate, _AuthorizationService);
 
+            // Stage submissions (plans, verdicts and results submitted through the submit tools)
+            new StageSubmissionRoutes(new StageSubmissionAccessService(_Database, _Logging, _Settings.Concurrency.MaxHierarchyDepth))
+                .Register(_App, authenticate, _AuthorizationService);
+
             // Evaluate (probe-only Quick model probes) and its runs
             new ModelProbeRoutes(_ModelProbeAccess, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
@@ -1656,6 +1696,10 @@ namespace Armada.Server
 
             // Fixture battery packs and runs
             new BatteryRoutes(_BatteryAccess, _JsonOptions)
+                .Register(_App, authenticate, _AuthorizationService);
+
+            // Pipeline reliability: mission attempt history, reliability summary, acceptance gate reports
+            new ReliabilityRoutes(new ReliabilityAccessService(_Database, new GateReportStore(_Settings.DataDirectory)), _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Push notification devices (mobile apps)
@@ -1726,7 +1770,7 @@ namespace Armada.Server
             new ConcurrencyRoutes(_Database).Register(_App, authenticate, _AuthorizationService);
 
             // Missions
-            new MissionRoutes(_Database, _Admiral, _MissionService, _Settings, _Git, _LandingService, _LandingPreviewService, _GitHubIntegrationService, EmitEventAsync, EmitMissionStatusChangedAsync, _MissionLanding.HandleMissionCompleteAsync, _WebSocketHub, _Logging, _JsonOptions)
+            new MissionRoutes(_Database, _Admiral, _MissionService, _Settings, _Git, _LandingService, _LandingPreviewService, _GitHubIntegrationService, EmitEventAsync, _MissionLanding.HandleMissionCompleteAsync, _WebSocketHub, _Logging, _JsonOptions)
                 { MissionActivityLookup = _AgentLifecycle.MissionActivity.Get, DockHosts = new DockHostResolver(_Git, _Logging, _HarborConnectionManager), BlackBox = _BlackBox?.Capture, BlackBoxHooks = _BlackBox?.Hooks }
                 .Register(_App, authenticate, _AuthorizationService);
 
@@ -1741,6 +1785,7 @@ namespace Armada.Server
             // Captains
             new CaptainRoutes(_Database, _Admiral, _Settings, _AgentLifecycle, _CaptainTools, EmitEventAsync, _JsonOptions, _PlanningSessions, _ObjectiveRefinementSessions)
             {
+                HarborUpdates = new CaptainHarborUpdateResolver(_Database, _HarborConnectionManager),
                 OnUsageCaptureConfigurationChanged = async () =>
                 {
                     _UsageCapture.Invalidate();

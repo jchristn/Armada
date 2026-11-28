@@ -105,8 +105,8 @@ namespace Armada.Tui.Screens.Delivery
             bool create = IsCreateMode;
             _Saving = true;
             EntityUi.Run<DeploymentEnvironment?>(Context, ct => create
-                ? Context.Client.CreateEnvironmentAsync(payload, ct)
-                : Context.Client.UpdateEnvironmentAsync(EntityId, payload, ct), saved =>
+                ? Context.Client.Environments.CreateAsync(payload, ct)
+                : Context.Client.Environments.UpdateAsync(EntityId, payload, ct), saved =>
             {
                 _Saving = false;
                 if (saved == null) return;
@@ -136,7 +136,7 @@ namespace Armada.Tui.Screens.Delivery
         /// <inheritdoc />
         protected override Task<DeploymentEnvironment?> FetchAsync(CancellationToken token)
         {
-            return Context.Client.GetEnvironmentAsync(EntityId, token);
+            return Context.Client.Environments.GetAsync(EntityId, token);
         }
 
         /// <inheritdoc />
@@ -319,7 +319,7 @@ namespace Armada.Tui.Screens.Delivery
             if (e == null) return;
             Context.Confirm("Delete Environment", EntityUi.T(Context, "Delete \"{{name}}\"? This removes only the environment record.", "name", e.Name), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting environment", ct => Context.Client.DeleteEnvironmentAsync(e.Id, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting environment", ct => Context.Client.Environments.DeleteAsync(e.Id, ct), () =>
                 {
                     EntityUi.Toast(Context, NotificationSeverityEnum.Warning, EntityUi.T(Context, "Environment \"{{name}}\" deleted.", "name", e.Name));
                     Context.Navigate("/delivery?tab=environments");

@@ -388,6 +388,41 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(run.Results.Where(r => r.TaskId == "review").All(r => r.Outcome == BatteryTaskOutcomeEnum.Passed), "tasks without the tool still run");
             }));
 
+            cases.Add(CaseAsync("runner_cancel_stops_executing_run", "Runner: CancelAsync stops an executing run; it ends Cancelled with the reason and no further task is dispatched", TestTags.Reliability, async () =>
+            {
+                using TempDir dir = new TempDir();
+                WriteSyntheticPack(dir, "syn", missingTool: false);
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                await SeedPipelineAsync(testDb.Driver).ConfigureAwait(false);
+                using ManualResetEventSlim entered = new ManualResetEventSlim(false);
+                using ManualResetEventSlim release = new ManualResetEventSlim(false);
+                Func<BatteryDispatchRequest, string, string?> scripted = ScriptedCaptain(true);
+                using CannedBatteryTaskDispatcher dispatcher = new CannedBatteryTaskDispatcher
+                {
+                    Captain = (r, worktree) =>
+                    {
+                        entered.Set();
+                        release.Wait(TimeSpan.FromSeconds(30));
+                        return scripted(r, worktree);
+                    }
+                };
+                BatteryRunService service = NewService(testDb.Driver, dir, dispatcher);
+                BatteryRun started = await service.StartAsync(TestCaptain(), null, new List<string> { "syn" }, 3, 5, true, Constants.DefaultTenantId, null).ConfigureAwait(false);
+                AssertTrue(entered.Wait(TimeSpan.FromSeconds(30)), "first task dispatched");
+
+                BatteryRun? requested = await service.CancelAsync(started.Id, "Gate client stopped", TimeSpan.Zero).ConfigureAwait(false);
+                AssertNotNull(requested, "run returned");
+                release.Set();
+                BatteryRun run = (await service.WaitAsync(started.Id).ConfigureAwait(false))!;
+                AssertEqual(BatteryRunStatusEnum.Cancelled, run.Status, run.FailureReason);
+                AssertEqual("Gate client stopped", run.FailureReason, "reason recorded");
+                AssertEqual(1, dispatcher.Requests.Count, "no task dispatched after the cancel");
+
+                BatteryRun again = (await service.CancelAsync(started.Id, "again", TimeSpan.Zero).ConfigureAwait(false))!;
+                AssertEqual("Gate client stopped", again.FailureReason, "a finished run is unchanged");
+                AssertNull(await service.CancelAsync("bat_missing", null, TimeSpan.Zero).ConfigureAwait(false), "unknown run");
+            }));
+
             cases.Add(CaseAsync("runner_prompt_variant_reaches_every_dispatch_and_configuration", "Runner: a run's prompt variant reaches every task dispatch and the run configuration; a run without one records none", TestTags.Positive, async () =>
             {
                 using TempDir dir = new TempDir();
@@ -449,6 +484,79 @@ namespace Test.Shared.Suites.Services
                 List<CaptainAssignmentOverride> overrides = MissionService.DeserializeCaptainOverrides((string)args[6]!);
                 AssertEqual((PromptVariantEnum?)PromptVariantEnum.Compact, overrides.Single().PromptVariant, "the voyage override carries the run's variant");
                 AssertEqual(PromptVariantEnum.Compact, PromptVariantResolver.Resolve("Worker", overrides, captain), "missions of the voyage resolve to the run's variant");
+            }));
+
+            cases.Add(CaseAsync("runner_pipeline_mode_staffs_personas_and_runs_worker_tasks", "Runner: a pipeline run dispatches only Worker tasks, each with the pipeline and the per-persona captains, and records both", TestTags.Positive, async () =>
+            {
+                using TempDir dir = new TempDir();
+                WriteSyntheticPack(dir, "syn");
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                await SeedPipelineAsync(db).ConfigureAwait(false);
+                await db.Pipelines.CreateAsync(new Pipeline("P-A") { TenantId = Constants.DefaultTenantId }).ConfigureAwait(false);
+                Captain opus = await db.Captains.CreateAsync(new Captain("opus-1") { TenantId = Constants.DefaultTenantId, Runtime = AgentRuntimeEnum.ClaudeCode, Model = "claude-opus-5-5" }).ConfigureAwait(false);
+                Captain qwen = await db.Captains.CreateAsync(new Captain("qwen-1") { TenantId = Constants.DefaultTenantId, Runtime = AgentRuntimeEnum.ApiEndpoint, Model = "qwen3.8:27b" }).ConfigureAwait(false);
+                Captain gpt = await db.Captains.CreateAsync(new Captain("gpt-1") { TenantId = Constants.DefaultTenantId, Runtime = AgentRuntimeEnum.Codex, Model = "gpt-6.1" }).ConfigureAwait(false);
+                List<CaptainAssignmentOverride> staffing = new List<CaptainAssignmentOverride>
+                {
+                    new CaptainAssignmentOverride("Architect", opus.Id, null),
+                    new CaptainAssignmentOverride("Worker", qwen.Id, null),
+                    new CaptainAssignmentOverride("TestEngineer", qwen.Id, null),
+                    new CaptainAssignmentOverride("Judge", gpt.Id, null)
+                };
+
+                using CannedBatteryTaskDispatcher dispatcher = new CannedBatteryTaskDispatcher { Captain = ScriptedCaptain(true) };
+                BatteryRunService service = NewService(db, dir, dispatcher);
+                BatteryRunOptions options = new BatteryRunOptions { Pipeline = "P-A", CaptainOverrides = staffing };
+                BatteryRun started = await service.StartAsync(qwen, null, new List<string> { "syn" }, 1, 5, true, Constants.DefaultTenantId, null, null, options).ConfigureAwait(false);
+                BatteryRun run = (await service.WaitAsync(started.Id).ConfigureAwait(false))!;
+
+                AssertEqual("P-A", run.Pipeline, "the run records its pipeline");
+                AssertContains("\"captainOverrides\"", run.ConfigurationJson!, "the configuration records the staffing");
+                AssertContains(gpt.Id, run.ConfigurationJson!, "the Judge captain is part of the configuration");
+                AssertTrue(dispatcher.Requests.Count > 0, "Worker tasks were dispatched");
+                AssertTrue(dispatcher.Requests.All(r => r.Persona == "Worker"), "only Worker tasks run under a pipeline");
+                AssertTrue(dispatcher.Requests.All(r => r.Pipeline == "P-A" && r.CaptainOverrides!.Count == 4), "every dispatch carries the pipeline and staffing");
+                AssertTrue(staffing.All(o => o.StrictCaptain), "staffing is applied strictly");
+
+                await AssertThrowsAsync<ArgumentException>(() => service.StartAsync(qwen, null, new List<string> { "syn" }, 1, 5, true, Constants.DefaultTenantId, null, null,
+                    new BatteryRunOptions { Pipeline = "No-Such-Pipeline", CaptainOverrides = staffing }), "an unknown pipeline is refused").ConfigureAwait(false);
+                await AssertThrowsAsync<ArgumentException>(() => service.StartAsync(qwen, null, new List<string> { "syn" }, 1, 5, true, Constants.DefaultTenantId, null, null,
+                    new BatteryRunOptions { Pipeline = "P-A" }), "a pipeline run without staffing is refused").ConfigureAwait(false);
+                await AssertThrowsAsync<ArgumentException>(() => service.StartAsync(qwen, null, new List<string> { "syn" }, 1, 5, true, Constants.DefaultTenantId, null, null,
+                    new BatteryRunOptions { Pipeline = "P-A", CaptainOverrides = new List<CaptainAssignmentOverride> { new CaptainAssignmentOverride("Worker", "cpt_missing", null) } }), "an unknown captain is refused").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("dispatcher_pipeline_mode_uses_pipeline_and_staffing", "Dispatch: a pipeline request dispatches under its pipeline with one strict override per persona and no pinned captain", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                Vessel vessel = await db.Vessels.CreateAsync(new Vessel("battery-pipeline", "file:///tmp/x.git") { TenantId = Constants.DefaultTenantId }).ConfigureAwait(false);
+                Captain worker = await db.Captains.CreateAsync(new Captain("pipeline-worker") { TenantId = Constants.DefaultTenantId }).ConfigureAwait(false);
+                Captain judge = await db.Captains.CreateAsync(new Captain("pipeline-judge") { TenantId = Constants.DefaultTenantId }).ConfigureAwait(false);
+                IAdmiralService admiral = RecordingBatteryAdmiral.Create(db);
+                RecordingBatteryAdmiral recorder = (RecordingBatteryAdmiral)(object)admiral;
+                AdmiralBatteryTaskDispatcher dispatcher = new AdmiralBatteryTaskDispatcher(admiral, db, Logging(), TimeSpan.FromMilliseconds(50));
+
+                BatteryDispatchRequest request = new BatteryDispatchRequest(vessel, worker, "[syn/edit #1] Edit", "Edit this.", "Worker", 300)
+                {
+                    Pipeline = "P-A",
+                    CaptainOverrides = new List<CaptainAssignmentOverride>
+                    {
+                        new CaptainAssignmentOverride("Worker", worker.Id, null),
+                        new CaptainAssignmentOverride("Judge", judge.Id, null)
+                    }
+                };
+                await dispatcher.RunAsync(request).ConfigureAwait(false);
+
+                object?[] args = recorder.Dispatches.Single();
+                AssertEqual("P-A", (string?)args[4], "dispatched under the requested pipeline");
+                List<MissionDescription> missions = (List<MissionDescription>)args[3]!;
+                AssertNull(missions.Single().RequestedCaptainId, "no captain is pinned; the pipeline stages are staffed by persona");
+                List<CaptainAssignmentOverride> overrides = MissionService.DeserializeCaptainOverrides((string)args[6]!);
+                AssertEqual(2, overrides.Count);
+                AssertTrue(overrides.All(o => o.StrictCaptain), "every persona override is strict");
+                AssertEqual(judge.Id, overrides.Single(o => o.Persona == "Judge").CaptainId);
             }));
 
             // ---- Fixture reset ----

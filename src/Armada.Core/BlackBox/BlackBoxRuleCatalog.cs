@@ -298,7 +298,7 @@ namespace Armada.Core.BlackBox
                     Area = "Dispatch",
                     Hypothesis = "Detect file overlap between active missions at dispatch and serialize overlapping missions.",
                     Evidence = "{conflictMission} and {missionId} changed {conflictOverlapCount|some} of the same files.",
-                    SourcePointers = { "src/Armada.Core/Services/MissionService.cs:TryAssignAsync" },
+                    SourcePointers = { "src/Armada.Core/Services/MissionLauncher.cs:TryAssignAsync" },
                     Severity = BlackBoxSeverityEnum.Medium
                 })
                 .Recover(new BlackBoxRulePath
@@ -328,9 +328,9 @@ namespace Armada.Core.BlackBox
                     "Two active missions that touch the same files are never integrated blindly: they are chained at dispatch or the later one is rebased onto the earlier one's landing before it integrates.",
                     "Services.LandingConflict",
                     "Land {conflictMission|a mission}, then {missionId|an overlapping mission}, and assert the second is rebased and lands, or was chained at dispatch, instead of failing with a conflict.",
-                    new[] { D.TargetSync, "src/Armada.Core/Services/MissionService.cs:TryAssignAsync", "src/Armada.Core/BlackBox/MissionOverlapAnalyzer.cs:PreviewAsync" },
+                    new[] { D.TargetSync, "src/Armada.Core/Services/MissionLauncher.cs:TryAssignAsync", "src/Armada.Core/BlackBox/MissionOverlapAnalyzer.cs:PreviewAsync" },
                     BlackBoxRuleChange.Of("Rebase onto the moved target and retry before failing a conflicted landing", "When a landing conflicts with a commit that landed since the mission started ({conflictCommit|a newer commit} from {conflictMission|another mission}), LandingTargetSynchronization should rebase {branchName|the branch} onto {targetBranch|the target}, or hand the conflict to the captain as a fix-up stage, and retry once; fail only when the conflict survives with the conflicting mission attributed.", "Services.LandingConflict: two missions edit the same file; the second landing is rebased and lands when the hunks do not overlap, and fails with the conflicting mission attributed when they do.", BlackBoxSeverityEnum.High, D.TargetSync),
-                    BlackBoxRuleChange.Of("Chain overlapping missions automatically where conflicts recur", "Use the dispatch overlap preview and the black box hotspots to chain missions that touch the same files ({conflictOverlapCount|some} overlapping files here) with DependsOnMissionId, and turn serializeOverlappingMissions on for a vessel where this conflict fingerprint recurs.", "Services.BlackBoxPrevention: a second mission whose brief names files an active mission is changing is dispatched with DependsOnMissionId set to it.", BlackBoxSeverityEnum.Medium, "src/Armada.Core/BlackBox/MissionOverlapAnalyzer.cs:PreviewAsync", "src/Armada.Core/Services/MissionService.cs:TryAssignAsync"))));
+                    BlackBoxRuleChange.Of("Chain overlapping missions automatically where conflicts recur", "Use the dispatch overlap preview and the black box hotspots to chain missions that touch the same files ({conflictOverlapCount|some} overlapping files here) with DependsOnMissionId, and turn serializeOverlappingMissions on for a vessel where this conflict fingerprint recurs.", "Services.BlackBoxPrevention: a second mission whose brief names files an active mission is changing is dispatched with DependsOnMissionId set to it.", BlackBoxSeverityEnum.Medium, "src/Armada.Core/BlackBox/MissionOverlapAnalyzer.cs:PreviewAsync", "src/Armada.Core/Services/MissionLauncher.cs:TryAssignAsync"))));
 
             rules.Add(new BlackBoxRule("BBX-LAND-005", "Verification failed", r => BlackBoxRuleFacts.Step(r) == BlackBoxStepEnum.Verification && BlackBoxResilienceScope.ConcreteCheckFailure(r))
                 .In(BlackBoxPhaseEnum.Landing)
@@ -372,9 +372,9 @@ namespace Armada.Core.BlackBox
                     "A mission reaches landing only after its verification command passes on its branch, and a post-merge failure is compared with the target tip before it is blamed on the mission.",
                     "Services.LandingPipeline",
                     "Make `{failingCommand|the verification command}` fail on the merged tree of {missionId|a mission} and assert Armada checks the target tip and sends the failure back to the captain instead of failing the mission.",
-                    new[] { D.Verification, "src/Armada.Core/Services/MissionService.Completion.cs:TryFailForDefinitionOfDoneAsync" },
+                    new[] { D.Verification, "src/Armada.Core/Services/StageCompletionHandler.cs:TryFailForDefinitionOfDoneAsync" },
                     BlackBoxRuleChange.Of("Check the target tip before blaming the mission for a verification failure", "When post-merge verification `{failingCommand|the command}` fails, LandingVerification should run it on the target tip too; a failure there is pre-existing and must not fail this mission, and a failure only on the merged tree is sent back to the captain as a fix-up attempt with the output.", "Services.LandingPipeline: a verification failure that also fails on the target tip is reported as pre-existing and the mission still lands.", BlackBoxSeverityEnum.Medium, D.Verification),
-                    BlackBoxRuleChange.Of("Gate completion on the landing verification command", "Run the landing verification commands as part of the mission's definition of done on its own branch, so a failing build or test is fixed by the captain before Armada spends a landing attempt on it.", "Services.LandingPipeline: a mission whose branch fails the verification command does not reach landing and is returned to its captain.", BlackBoxSeverityEnum.Low, "src/Armada.Core/Services/MissionService.Completion.cs:TryFailForDefinitionOfDoneAsync"))));
+                    BlackBoxRuleChange.Of("Gate completion on the landing verification command", "Run the landing verification commands as part of the mission's definition of done on its own branch, so a failing build or test is fixed by the captain before Armada spends a landing attempt on it.", "Services.LandingPipeline: a mission whose branch fails the verification command does not reach landing and is returned to its captain.", BlackBoxSeverityEnum.Low, "src/Armada.Core/Services/StageCompletionHandler.cs:TryFailForDefinitionOfDoneAsync"))));
 
             rules.Add(new BlackBoxRule("BBX-LAND-006", "Push or pull request failed", r =>
                     BlackBoxRuleFacts.Step(r) == BlackBoxStepEnum.Push || BlackBoxRuleFacts.Step(r) == BlackBoxStepEnum.PullRequest || BlackBoxRuleFacts.Step(r) == BlackBoxStepEnum.UnpublishedAncestry)
@@ -656,7 +656,7 @@ namespace Armada.Core.BlackBox
                     Area = "Scope check",
                     Hypothesis = "FindOutOfScopeFiles reports blank entries or files that are in scope; drop blank paths and normalize both lists before comparing.",
                     Evidence = "Out of scope: {outOfScopeFiles} ({blankCount} blank).",
-                    SourcePointers = { "src/Armada.Core/Services/MissionService.cs:FindOutOfScopeFiles", "src/Armada.Core/Services/MissionService.cs:TryFailMissionForScopeViolationAsync" },
+                    SourcePointers = { "src/Armada.Core/Services/MissionScopeGuard.cs:FindOutOfScopeFiles", "src/Armada.Core/Services/MissionScopeGuard.cs:TryFailMissionForScopeViolationAsync" },
                     Severity = BlackBoxSeverityEnum.High
                 })
                 .Recover(new BlackBoxRulePath
@@ -674,8 +674,8 @@ namespace Armada.Core.BlackBox
                     "Every out-of-scope entry is a non-blank, normalized repository path that is not in the mission's scoped file list.",
                     "Services.MissionScopeValidation",
                     "Complete a mission whose scoped files are written with ./ prefixes and blank lines and assert the scope check passes.",
-                    new[] { "src/Armada.Core/Services/MissionService.cs:FindOutOfScopeFiles", "src/Armada.Core/Services/MissionService.cs:ParseMissionScopedFiles", "src/Armada.Core/Services/MissionService.cs:TryFailMissionForScopeViolationAsync" },
-                    BlackBoxRuleChange.Of("Fix the scope parser: drop blank entries and normalize paths", "FindOutOfScopeFiles and ParseMissionScopedFiles should trim, drop blank entries and normalize separators and leading ./ on both the scoped list and the changed files before comparing, and TryFailMissionForScopeViolationAsync should never fail a mission whose out-of-scope list is empty after normalization.", "Services.MissionScopeValidation: scoped files with ./ prefixes, Windows separators and blank lines never produce an out-of-scope finding for those files.", BlackBoxSeverityEnum.High, "src/Armada.Core/Services/MissionService.cs:FindOutOfScopeFiles", "src/Armada.Core/Services/MissionService.cs:ParseMissionScopedFiles")), true));
+                    new[] { "src/Armada.Core/Services/MissionScopeGuard.cs:FindOutOfScopeFiles", "src/Armada.Core/Services/MissionScopeGuard.cs:ParseMissionScopedFiles", "src/Armada.Core/Services/MissionScopeGuard.cs:TryFailMissionForScopeViolationAsync" },
+                    BlackBoxRuleChange.Of("Fix the scope parser: drop blank entries and normalize paths", "FindOutOfScopeFiles and ParseMissionScopedFiles should trim, drop blank entries and normalize separators and leading ./ on both the scoped list and the changed files before comparing, and TryFailMissionForScopeViolationAsync should never fail a mission whose out-of-scope list is empty after normalization.", "Services.MissionScopeValidation: scoped files with ./ prefixes, Windows separators and blank lines never produce an out-of-scope finding for those files.", BlackBoxSeverityEnum.High, "src/Armada.Core/Services/MissionScopeGuard.cs:FindOutOfScopeFiles", "src/Armada.Core/Services/MissionScopeGuard.cs:ParseMissionScopedFiles")), true));
 
             rules.Add(new BlackBoxRule("BBX-SCOPE-003", "Scope violation", r => BlackBoxRuleFacts.Kind(r) == MissionFailureKindEnum.ScopeViolation || BlackBoxRuleFacts.Step(r) == BlackBoxStepEnum.ScopeViolation)
                 .In(BlackBoxPhaseEnum.Completion)
@@ -712,7 +712,7 @@ namespace Armada.Core.BlackBox
                     "Every provisioned mission has its start commit persisted (Mission.StartCommit and the dock's start commit file) before the captain starts.",
                     "Services.DockService",
                     "Provision a dock and assert the start commit is persisted before the captain starts; complete a mission without one and assert the scope check is skipped, not failed.",
-                    new[] { D.Provision, "src/Armada.Core/Services/DockService.cs:PersistDockStartCommitAsync", "src/Armada.Core/Services/MissionService.cs:TryFailMissionForScopeViolationAsync" },
+                    new[] { D.Provision, "src/Armada.Core/Services/DockService.cs:PersistDockStartCommitAsync", "src/Armada.Core/Services/MissionScopeGuard.cs:TryFailMissionForScopeViolationAsync" },
                     BlackBoxRuleChange.Of("Persist the start commit at every provision and skip the scope check without it", "DockService.ProvisionAsync should persist the start commit on every path (local and Harbor) before the captain starts, and TryFailMissionForScopeViolationAsync should skip, with a note, instead of failing when no start commit is recorded.", "Services.DockService: every provision path records the start commit; a mission without one is not failed by the scope check.", BlackBoxSeverityEnum.Medium, D.Provision, "src/Armada.Core/Services/DockService.cs:PersistDockStartCommitAsync")), true));
 
             rules.Add(new BlackBoxRule("BBX-NOOP-001", "No-op completion", r => BlackBoxRuleFacts.Kind(r) == MissionFailureKindEnum.NoOp || BlackBoxRuleFacts.Step(r) == BlackBoxStepEnum.NoOp)
@@ -723,7 +723,7 @@ namespace Armada.Core.BlackBox
                 {
                     Area = "Mission briefs",
                     Hypothesis = "Flag briefs that ask only for verification or investigation at dispatch, so they are dispatched as read-only missions instead of failing as no-ops.",
-                    SourcePointers = { "src/Armada.Core/Services/MissionService.Completion.cs:TryAssignAsync" },
+                    SourcePointers = { "src/Armada.Core/Services/MissionLauncher.cs:TryAssignAsync" },
                     Severity = BlackBoxSeverityEnum.Low
                 })
                 .Recover(new BlackBoxRulePath
@@ -755,7 +755,7 @@ namespace Armada.Core.BlackBox
                     Area = "Dispatch",
                     Hypothesis = "Detect \"depends on mission N\" language in mission briefs at dispatch and warn, or chain the missions automatically.",
                     Evidence = "{missionId} reported BLOCKED on {prerequisite|a prerequisite}.",
-                    SourcePointers = { "src/Armada.Core/Services/AdmiralService.cs:DispatchVoyageAsync", "src/Armada.Core/Services/MissionService.cs:TryAssignAsync" },
+                    SourcePointers = { "src/Armada.Core/Services/AdmiralService.cs:DispatchVoyageAsync", "src/Armada.Core/Services/MissionLauncher.cs:TryAssignAsync" },
                     Severity = BlackBoxSeverityEnum.Medium
                 })
                 .Recover(new BlackBoxRulePath
@@ -795,7 +795,7 @@ namespace Armada.Core.BlackBox
                     "A captain report that breaks the output contract is repaired (markers re-requested) before the mission fails, and work on the branch is never discarded because of the report's format.",
                     "Services.ContractRepair",
                     "Finish {missionId|a mission} with a report missing its markers and assert Armada requests an output repair and completes the mission with the repaired report.",
-                    new[] { D.OutputRepair, D.Completion, "src/Armada.Core/Services/MissionService.cs:FinishOutputRepairScheduledAsync" },
+                    new[] { D.OutputRepair, D.Completion, "src/Armada.Core/Services/OutputRepairService.cs:FinishOutputRepairScheduledAsync" },
                     BlackBoxRuleChange.Of("Re-request missing markers and repair the output contract before failing", "When the captain's report breaks the output contract, TryScheduleOutputRepairAsync should always schedule an output repair (re-requesting the exact missing markers or sections) up to the configured attempts, and parse markers tolerantly (case, whitespace, fenced blocks) before deciding the report is invalid.", "Services.ContractRepair: a report with lower-case or fenced markers parses, and a report missing a marker triggers a repair that completes the mission.", BlackBoxSeverityEnum.High, D.OutputRepair, D.Completion)), true));
 
             rules.Add(new BlackBoxRule("BBX-BOUND-001", "Boundary violation", r => BlackBoxRuleFacts.Kind(r) == MissionFailureKindEnum.Boundary || BlackBoxRuleFacts.Step(r) == BlackBoxStepEnum.BoundaryViolation)
@@ -1074,7 +1074,7 @@ namespace Armada.Core.BlackBox
                     "Provisioning a mission branch is idempotent: a leftover branch without unlanded work is reused or reset, never a reason to fail.",
                     "Services.DockService",
                     "Leave a branch named {branchName|like the mission branch} from an earlier attempt and assert provisioning reuses it.",
-                    new[] { D.Provision, "src/Armada.Core/Services/MissionService.cs:BuildMissionBranchName" },
+                    new[] { D.Provision, "src/Armada.Core/Services/MissionLauncher.cs:BuildMissionBranchName" },
                     BlackBoxRuleChange.Of("Make mission branch creation idempotent", "When the mission branch already exists, DockService.ProvisionAsync should reuse it when it has no commits beyond the target, reset it when it only has an earlier attempt's work that is preserved elsewhere, or choose a suffixed name, instead of failing provisioning.", "Services.DockService: provisioning over a leftover branch from an earlier attempt succeeds.", BlackBoxSeverityEnum.Medium, D.Provision))));
 
             rules.Add(new BlackBoxRule("BBX-PROV-004", "Start commit not recorded", r => BlackBoxRuleFacts.Step(r) == BlackBoxStepEnum.StartCommitRecord)
@@ -1163,8 +1163,8 @@ namespace Armada.Core.BlackBox
                     "A dependent of a failed mission stays Blocked (not Cancelled) and resumes when its dependency lands.",
                     "Services.PipelineDispatch",
                     "Fail the dependency of {missionId|a mission}, then recover it, and assert the dependent resumes on its own.",
-                    new[] { "src/Armada.Core/Services/MissionService.Handoff.cs:CancelDependentPipelineStagesAsync", "src/Armada.Core/Services/MissionService.Handoff.cs:SettleStagesBehindFailedDependenciesAsync" },
-                    BlackBoxRuleChange.Of("Hold dependents as Blocked and resume them when the dependency recovers", "Instead of cancelling the dependents of a failed mission, mark them Blocked with the root's black box entry, and resume them automatically when the root lands after a recovery.", "Services.PipelineDispatch: a dependent of a failed mission is Blocked, and runs after the dependency is restarted and lands.", BlackBoxSeverityEnum.Medium, "src/Armada.Core/Services/MissionService.Handoff.cs:SettleStagesBehindFailedDependenciesAsync"))));
+                    new[] { "src/Armada.Core/Services/MissionHandoffService.cs:CancelDependentPipelineStagesAsync", "src/Armada.Core/Services/MissionHandoffService.cs:SettleStagesBehindFailedDependenciesAsync" },
+                    BlackBoxRuleChange.Of("Hold dependents as Blocked and resume them when the dependency recovers", "Instead of cancelling the dependents of a failed mission, mark them Blocked with the root's black box entry, and resume them automatically when the root lands after a recovery.", "Services.PipelineDispatch: a dependent of a failed mission is Blocked, and runs after the dependency is restarted and lands.", BlackBoxSeverityEnum.Medium, "src/Armada.Core/Services/MissionHandoffService.cs:SettleStagesBehindFailedDependenciesAsync"))));
 
             rules.Add(new BlackBoxRule("BBX-HAND-001", "Handoff failed", r => BlackBoxRuleFacts.Phase(r) == BlackBoxPhaseEnum.Handoff)
                 .In(BlackBoxPhaseEnum.Handoff)
@@ -1175,7 +1175,7 @@ namespace Armada.Core.BlackBox
                 {
                     Area = "Pipelines",
                     Hypothesis = "Make the stage handoff tolerate this condition ({step}) or report it before the next stage starts.",
-                    SourcePointers = { "src/Armada.Core/Services/MissionService.Handoff.cs" },
+                    SourcePointers = { "src/Armada.Core/Services/MissionHandoffService.cs" },
                     Severity = BlackBoxSeverityEnum.Low
                 })
                 .Recover(new BlackBoxRulePath { Key = "restart", Title = "Restart the mission", Steps = { RestartStep() }, Risk = BlackBoxSeverityEnum.Low, ExpectedOutcome = "The stage runs again with a fresh handoff." })
@@ -1239,7 +1239,7 @@ namespace Armada.Core.BlackBox
                     "A stage's work is committed to its branch before the next stage starts, and a hardening failure is retried with the work intact.",
                     "Services.HandoffResilience",
                     "Make the first branch hardening of a stage fail and assert it is retried and the next stage starts with the work.",
-                    new[] { D.HardenStage, "src/Armada.Core/Services/MissionService.cs:CheckStageCommitContinuityAsync" },
+                    new[] { D.HardenStage, "src/Armada.Core/Services/StageCompletionHandler.cs:CheckStageCommitContinuityAsync" },
                     BlackBoxRuleChange.Of("Retry stage branch hardening with the work preserved", "HardenStageBranchAsync should commit any uncommitted stage work, retry the hardening once with backoff, and keep the stage WorkProduced with its dock when it still fails, instead of failing the pipeline.", "Services.HandoffResilience: a hardening failure is retried and the pipeline continues.", BlackBoxSeverityEnum.Medium, D.HardenStage))));
 
             rules.Add(new BlackBoxRule("BBX-HAND-004", "Integration barrier conflict", r => BlackBoxRuleFacts.Step(r) == BlackBoxStepEnum.IntegrationBarrier)
@@ -1254,7 +1254,7 @@ namespace Armada.Core.BlackBox
                     "Parallel stages that reach an integration barrier do not overlap, or are rebased onto each other before the barrier merges them.",
                     "Services.HandoffResilience",
                     "Fan out two stages that edit the same file and assert Armada serializes them or rebases before the barrier.",
-                    new[] { D.StageHandoff, "src/Armada.Core/Services/MissionService.Handoff.cs:TryHandoffToNextStageAsync" },
+                    new[] { D.StageHandoff, "src/Armada.Core/Services/MissionHandoffService.cs:TryHandoffToNextStageAsync" },
                     BlackBoxRuleChange.Of("Detect overlap when fanning out parallel stages", "Before starting parallel stages, estimate their file overlap; serialize overlapping stages, and at the barrier rebase a conflicting branch onto the merged result and retry before failing the voyage.", "Services.HandoffResilience: two overlapping parallel stages are serialized and the barrier merges cleanly.", BlackBoxSeverityEnum.Medium, D.StageHandoff))));
 
             rules.Add(new BlackBoxRule("BBX-RECOV-006", "Harbor link lost; the captain may still be working", r => BlackBoxRuleFacts.Step(r) == BlackBoxStepEnum.UnconfirmedStop && BlackBoxRuleFacts.HarborDisconnected(r))

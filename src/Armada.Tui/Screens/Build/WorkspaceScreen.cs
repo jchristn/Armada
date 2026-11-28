@@ -202,7 +202,7 @@ namespace Armada.Tui.Screens.Build
 
             RestorePrefs();
             RememberVessel();
-            Call((c, t) => c.ListVesselsAsync(new ArmadaPageQuery(1, 9999), t), r => Vessels = r?.Objects ?? new List<Vessel>(), null, ex => Error = String.IsNullOrEmpty(ex.Message) ? Tr("Failed to load vessels.") : ex.Message);
+            Call((c, t) => c.Vessels.ListAsync(new ArmadaPageQuery(1, 9999), t), r => Vessels = r?.Objects ?? new List<Vessel>(), null, ex => Error = String.IsNullOrEmpty(ex.Message) ? Tr("Failed to load vessels.") : ex.Message);
             LoadReadiness();
             RefreshWorkspace(Tree.Expanded.Where(p => p.Length > 0).ToList());
         }
@@ -256,9 +256,9 @@ namespace Armada.Tui.Screens.Build
             Call(async (c, t) =>
             {
                 WorkspaceLoad load = new WorkspaceLoad();
-                load.Status = await c.GetWorkspaceStatusAsync(vesselId, t).ConfigureAwait(false);
+                load.Status = await c.Workspace.GetStatusAsync(vesselId, t).ConfigureAwait(false);
                 load.ActiveMissions = await LoadActiveMissionsAsync(c, vesselId, t).ConfigureAwait(false);
-                load.Entries[""] = Normalize(await c.ListWorkspaceDirectoryAsync(vesselId, null, t).ConfigureAwait(false));
+                load.Entries[""] = Normalize(await c.Workspace.ListDirectoryAsync(vesselId, null, t).ConfigureAwait(false));
                 HashSet<string> expanded = new HashSet<string>(StringComparer.Ordinal) { "" };
                 foreach (string path in paths)
                 {
@@ -266,7 +266,7 @@ namespace Armada.Tui.Screens.Build
                     if (parent.Length > 0 && !expanded.Contains(parent)) continue;
                     try
                     {
-                        load.Entries[path] = Normalize(await c.ListWorkspaceDirectoryAsync(vesselId, path, t).ConfigureAwait(false));
+                        load.Entries[path] = Normalize(await c.Workspace.ListDirectoryAsync(vesselId, path, t).ConfigureAwait(false));
                         expanded.Add(path);
                     }
                     catch (ArmadaApiException)
@@ -312,7 +312,7 @@ namespace Armada.Tui.Screens.Build
                 return;
             }
 
-            Call((c, t) => c.GetWorkspaceFileAsync(VesselId, p, t), file =>
+            Call((c, t) => c.Workspace.GetFileAsync(VesselId, p, t), file =>
             {
                 if (file == null) return;
                 Files[p] = file;
@@ -336,7 +336,7 @@ namespace Armada.Tui.Screens.Build
             request.Path = path;
             request.Content = content;
             request.ExpectedHash = String.IsNullOrEmpty(file.ContentHash) ? null : file.ContentHash;
-            Call((c, t) => c.SaveWorkspaceFileAsync(VesselId, request, t), result =>
+            Call((c, t) => c.Workspace.SaveFileAsync(VesselId, request, t), result =>
             {
                 if (result == null) return;
                 file.Content = content;
@@ -616,7 +616,7 @@ namespace Armada.Tui.Screens.Build
                 EnumerationResult<WorkspaceActiveMission>? result;
                 try
                 {
-                    result = await client.ListWorkspaceActiveMissionsAsync(vesselId, new EnumerationQuery { PageNumber = page, PageSize = 1000 }, token).ConfigureAwait(false);
+                    result = await client.Workspace.ListActiveMissionsAsync(vesselId, new EnumerationQuery { PageNumber = page, PageSize = 1000 }, token).ConfigureAwait(false);
                 }
                 catch (ArmadaApiException)
                 {
@@ -744,7 +744,7 @@ namespace Armada.Tui.Screens.Build
 
             if (Tree.Loading.Contains(p)) return;
             Tree.Loading.Add(p);
-            Call((c, t) => c.ListWorkspaceDirectoryAsync(VesselId, p.Length > 0 ? p : null, t), entries =>
+            Call((c, t) => c.Workspace.ListDirectoryAsync(VesselId, p.Length > 0 ? p : null, t), entries =>
             {
                 Tree.Loading.Remove(p);
                 Tree.Entries[p] = Normalize(entries);
@@ -771,7 +771,7 @@ namespace Armada.Tui.Screens.Build
         {
             if (String.IsNullOrEmpty(VesselId)) return;
             _LoadingReadiness = true;
-            Call((c, t) => c.GetVesselReadinessAsync(VesselId, null, t), r =>
+            Call((c, t) => c.Vessels.GetReadinessAsync(VesselId, null, t), r =>
             {
                 _LoadingReadiness = false;
                 Readiness = r;
@@ -863,7 +863,7 @@ namespace Armada.Tui.Screens.Build
                 if (p.Length == 0) return;
                 WorkspaceCreateDirectoryRequest request = new WorkspaceCreateDirectoryRequest();
                 request.Path = p;
-                Call((c, t) => c.CreateWorkspaceDirectoryAsync(VesselId, request, t), r =>
+                Call((c, t) => c.Workspace.CreateDirectoryAsync(VesselId, request, t), r =>
                 {
                     Error = null;
                     Toast(NotificationSeverityEnum.Success, Tr("Created folder {{path}}", LocalizationArgs.Of("path", p)));
@@ -883,7 +883,7 @@ namespace Armada.Tui.Screens.Build
                 WorkspaceRenameRequest request = new WorkspaceRenameRequest();
                 request.Path = source;
                 request.NewPath = next;
-                Call((c, t) => c.RenameWorkspaceEntryAsync(VesselId, request, t), result =>
+                Call((c, t) => c.Workspace.RenameEntryAsync(VesselId, request, t), result =>
                 {
                     string moved = WorkspacePaths.Normalize(String.IsNullOrEmpty(result?.NewPath) ? next : result!.NewPath);
                     List<string> expanded = Tree.Expanded.Select(p => WorkspacePaths.Remap(p, source, moved)).Where(p => p.Length > 0).ToList();
@@ -931,7 +931,7 @@ namespace Armada.Tui.Screens.Build
             string p = WorkspacePaths.Normalize(target);
             Confirm("Delete", Tr("Delete {{path}}?", LocalizationArgs.Of("path", p)), () =>
             {
-                DeleteProgress.Run(Context, "Deleting workspace entry", t => Context.Client.DeleteWorkspaceEntryAsync(VesselId, p, t), r =>
+                DeleteProgress.Run(Context, "Deleting workspace entry", t => Context.Client.Workspace.DeleteEntryAsync(VesselId, p, t), r =>
                 {
                     List<string> expanded = Tree.Expanded.Where(x => x.Length > 0 && !WorkspacePaths.InScope(x, p)).ToList();
                     OpenTabs.RemoveAll(x => WorkspacePaths.InScope(x, p));
@@ -1030,7 +1030,7 @@ namespace Armada.Tui.Screens.Build
                 body.ProjectContext = project.Text;
                 body.StyleGuide = style.Text;
                 body.ModelContext = model.Text;
-                Call((c, t) => c.UpdateVesselAsync(vessel.Id, body, t), updated =>
+                Call((c, t) => c.Vessels.UpdateAsync(vessel.Id, body, t), updated =>
                 {
                     d.Complete();
                     if (updated != null)
@@ -1086,7 +1086,7 @@ namespace Armada.Tui.Screens.Build
                         continue;
                     }
 
-                    WorkspaceFileResponse? response = await c.GetWorkspaceFileAsync(vesselId, p, t).ConfigureAwait(false);
+                    WorkspaceFileResponse? response = await c.Workspace.GetFileAsync(vesselId, p, t).ConfigureAwait(false);
                     if (response == null || response.IsBinary || response.IsLarge) continue;
                     files.Add(new KeyValuePair<string, string>(p, response.Content ?? ""));
                 }
@@ -1108,7 +1108,7 @@ namespace Armada.Tui.Screens.Build
 
         private void ReviewDiff()
         {
-            Call((c, t) => c.GetWorkspaceDiffAsync(VesselId, null, t), result =>
+            Call((c, t) => c.Workspace.GetDiffAsync(VesselId, null, t), result =>
             {
                 if (result == null) return;
                 if (!String.IsNullOrEmpty(result.Error))
@@ -1138,7 +1138,7 @@ namespace Armada.Tui.Screens.Build
             Prompt("Search files", "Text to find", "", query =>
             {
                 if (String.IsNullOrWhiteSpace(query)) return;
-                Call((c, t) => c.SearchWorkspaceAsync(VesselId, query, 200, t), result =>
+                Call((c, t) => c.Workspace.SearchAsync(VesselId, query, 200, t), result =>
                 {
                     List<OpsLinkItem> items = new List<OpsLinkItem>();
                     foreach (WorkspaceSearchMatch m in result?.Matches ?? new List<WorkspaceSearchMatch>())

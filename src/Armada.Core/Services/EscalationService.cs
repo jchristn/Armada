@@ -41,6 +41,7 @@ namespace Armada.Core.Services
 
         private ConcurrentDictionary<string, long> _Cooldowns = new ConcurrentDictionary<string, long>();
         private TimeProvider _Time = TimeProvider.System;
+        private readonly RecoveryStateStore _RecoveryState;
 
         private static readonly JsonSerializerOptions _JsonOptions = new JsonSerializerOptions
         {
@@ -62,6 +63,7 @@ namespace Armada.Core.Services
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _Database = database ?? throw new ArgumentNullException(nameof(database));
+            _RecoveryState = new RecoveryStateStore(_Database, logging);
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _HttpClient = new HttpClient();
             _HttpClient.Timeout = TimeSpan.FromSeconds(10);
@@ -70,6 +72,24 @@ namespace Armada.Core.Services
         #endregion
 
         #region Public-Methods
+
+        /// <summary>
+        /// Load the cooldowns a previous run left (RELIABILITY_SIMPLICITY_PLAN.md RS-3.7), so a restart does not re-fire
+        /// every rule that fired just before it. Call once at startup.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Task.</returns>
+        public async Task LoadRecoveryStateAsync(CancellationToken token = default)
+        {
+            DateTime nowUtc = _Time.GetUtcNow().UtcDateTime;
+            long now = _Time.GetTimestamp();
+            foreach (KeyValuePair<string, EscalationCooldownRecord> cooldown in await _RecoveryState.LoadAsync<EscalationCooldownRecord>(RecoveryStateKinds.EscalationCooldown, token).ConfigureAwait(false))
+            {
+                // Place the fire time on the monotonic clock: as far before now as it was on the wall clock (never in the future).
+                double elapsedSeconds = Math.Max(0, (nowUtc - cooldown.Value.LastFiredUtc).TotalSeconds);
+                _Cooldowns[cooldown.Key] = now - (long)(elapsedSeconds * _Time.TimestampFrequency);
+            }
+        }
 
         /// <inheritdoc />
         public async Task EvaluateAsync(CancellationToken token = default)
@@ -170,6 +190,10 @@ namespace Armada.Core.Services
             }
 
             _Cooldowns[cooldownKey] = now;
+            // The wall-clock fire time is kept so the cooldown survives a restart; in memory it stays on the monotonic clock.
+            DateTime firedUtc = _Time.GetUtcNow().UtcDateTime;
+            await _RecoveryState.SaveAsync(RecoveryStateKinds.EscalationCooldown, cooldownKey, new EscalationCooldownRecord { LastFiredUtc = firedUtc },
+                firedUtc.AddMinutes(Math.Max(1, rule.CooldownMinutes)), token).ConfigureAwait(false);
 
             switch (rule.Action)
             {

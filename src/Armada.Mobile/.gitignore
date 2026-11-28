@@ -41,8 +41,12 @@ yarn-error.*
 /ios
 /android
 
-# EAS submit credentials (never commit)
+# EAS submit credentials and private store notes (never commit)
 secrets/
+*.local.md
+google-services.json
+GoogleService-Info.plist
+*.keystore
 
 # Maestro run output
 e2e/.output/

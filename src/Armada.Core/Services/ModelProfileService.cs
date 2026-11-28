@@ -6,6 +6,7 @@ namespace Armada.Core.Services
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Database;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using SyslogLogging;
 
@@ -201,6 +202,56 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Record a probe run's Speed measurement on the profile of the model it ran as served (RS-8.8): the slowest
+        /// output rate and the slowest time to the first output across its exchanges. Best effort: a run without a
+        /// measured rate changes nothing, and any failure is logged and gives null.
+        /// </summary>
+        /// <param name="observation">The run's observation (see <see cref="ObservationFrom(ModelProbeRun?, ModelEndpoint?)"/>), or null.</param>
+        /// <param name="runId">The probe run identifier, or null.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The recorded speed, or null when nothing was recorded.</returns>
+        public async Task<ModelProfileSpeed?> TryRecordSpeedAsync(ModelProfileObservation? observation, string? runId, CancellationToken token = default)
+        {
+            if (observation == null || String.IsNullOrEmpty(runId)) return null;
+            try
+            {
+                List<ModelProbeResult> results = await _Database.ModelProbeResults.ReadByRunAsync(runId!, token).ConfigureAwait(false);
+                ModelProfileSpeed? speed = SpeedFrom(results);
+                if (speed == null) return null;
+                ModelProfileResolution? resolution = await TryResolveAsync(observation, token).ConfigureAwait(false);
+                if (resolution == null) return null;
+                resolution.Profile.Speed = speed;
+                await _Database.ModelProfiles.UpdateAsync(resolution.Profile, token).ConfigureAwait(false);
+                return speed;
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "could not record the measured speed of probe run " + runId + ": " + ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// The speed a run's Speed probe measured: the slowest output rate and the slowest first output, or null when no
+        /// Speed result measured a rate.
+        /// </summary>
+        /// <param name="results">The run's probe results, or null.</param>
+        /// <returns>The speed, or null.</returns>
+        public static ModelProfileSpeed? SpeedFrom(IEnumerable<ModelProbeResult>? results)
+        {
+            if (results == null) return null;
+            ModelProbeResult? result = results.LastOrDefault(r => r != null && r.Probe == ModelProbeKindEnum.Speed && r.Metrics != null);
+            if (result == null) return null;
+            List<double> rates = new List<double>();
+            if (result.Metrics.OutputTokensPerSecond4k.HasValue && result.Metrics.OutputTokensPerSecond4k.Value > 0) rates.Add(result.Metrics.OutputTokensPerSecond4k.Value);
+            if (result.Metrics.OutputTokensPerSecond32k.HasValue && result.Metrics.OutputTokensPerSecond32k.Value > 0) rates.Add(result.Metrics.OutputTokensPerSecond32k.Value);
+            if (rates.Count == 0) return null;
+            long? first = result.Metrics.FirstOutputMs4k;
+            if (result.Metrics.FirstOutputMs32k.HasValue && (!first.HasValue || result.Metrics.FirstOutputMs32k.Value > first.Value)) first = result.Metrics.FirstOutputMs32k.Value;
+            return new ModelProfileSpeed { TokensPerSecond = rates.Min(), FirstOutputMs = first, MeasuredUtc = result.CreatedUtc };
+        }
+
+        /// <summary>
         /// The observation a stage outcome's provenance describes (runtime, provider, model, configured context as the
         /// served context, runtime version, model digest, sampling and tool settings), linked to its captain.
         /// </summary>
@@ -245,6 +296,9 @@ namespace Armada.Core.Services
                 Provider = run.ModelProvider,
                 Model = run.Model,
                 ServedContextTokens = run.ServedContextTokens ?? run.ConfiguredContextTokens,
+                ServedContextSource = run.ServedContextTokens.HasValue
+                    ? Enums.ContextLengthSourceEnum.Measured
+                    : (run.ConfiguredContextTokens.HasValue ? Enums.ContextLengthSourceEnum.Configured : null),
                 RuntimeVersion = run.RuntimeVersion,
                 ModelDigest = run.ModelDigest
             };

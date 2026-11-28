@@ -31,7 +31,7 @@ namespace Armada.Helm.Commands
             {
                 Vessel? vessel = await ResolveVesselAsync(client, settings.Vessel, cancellationToken).ConfigureAwait(false);
                 if (vessel == null) return BlackBoxCli.NotFoundExitCode;
-                VesselConcurrency? report = await client.GetVesselConcurrencyAsync(vessel.Id, cancellationToken).ConfigureAwait(false);
+                VesselConcurrency? report = await client.Concurrency.GetVesselAsync(vessel.Id, cancellationToken).ConfigureAwait(false);
                 if (settings.Json)
                 {
                     WritePureJson(report);

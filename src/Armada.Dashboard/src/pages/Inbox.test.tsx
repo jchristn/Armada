@@ -375,6 +375,24 @@ describe('Needs You model scorecard alerts', () => {
     expect(screen.getByTestId('location').textContent).toBe('/inbox');
   });
 
+  it('applies a tier suggestion (RS-8.5) with Apply tier', async () => {
+    const tier: ModelAlert = {
+      ...alert, id: 'mal_2', rule: 'TierSuggestion', persona: '', revisionGroup: '', vesselId: null, vesselName: null,
+      title: 'qwen3.8:27b: outcome data suggests tier Premium (routing uses Standard)', actions: [],
+      suggestedActions: [
+        { action: 'ApplyTier', label: 'Apply tier Premium', description: 'Sets the profile tier.', available: true, recommended: true },
+        { action: 'Ignore', label: 'Dismiss for 7 days', description: 'Hide this suggestion.', available: true, recommended: false },
+      ],
+    };
+    vi.mocked(getInbox).mockResolvedValue([{ ...item('model_alert', tier.title, '/inbox?modelAlert=mal_2'), severity: 'Info', entityId: 'mal_2', modelAlert: tier }]);
+    vi.mocked(applyModelAlertAction).mockResolvedValue({ record: { action: 'ApplyTier', appliedUtc: '2026-11-26T01:00:00Z', changed: true, result: 'Set the tier to Premium.' }, alert: tier });
+    renderInbox();
+
+    const button = await screen.findByRole('button', { name: 'Apply tier Premium (Recommended)' });
+    await act(async () => { fireEvent.click(button); });
+    expect(applyModelAlertAction).toHaveBeenCalledWith('mal_2', 'ApplyTier');
+  });
+
   it('routes Ignore through ignoreModelAlert', async () => {
     vi.mocked(getInbox).mockResolvedValue([alertItem()]);
     vi.mocked(ignoreModelAlert).mockResolvedValue({ record: { action: 'Ignore', appliedUtc: '2026-10-30T01:00:00Z', changed: true, result: 'Ignored for 7 days.' }, alert });

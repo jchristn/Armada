@@ -32,6 +32,12 @@ namespace Armada.Core.Services
         /// </summary>
         public ModelAlertEvaluation? LastEvaluation { get; private set; } = null;
 
+        /// <summary>
+        /// Routing data settings (RS-8.5); when set and SuggestTiers is on, each pass also suggests model profile tiers and
+        /// raises a TierSuggestion alert for each profile whose data disagrees with the tier routing uses. Null disables it.
+        /// </summary>
+        public Func<RoutingDataSettings>? RoutingData { get; set; } = null;
+
         #endregion
 
         #region Private-Members
@@ -319,6 +325,11 @@ namespace Armada.Core.Services
                 }
             }
 
+            // RS-8.5: tier suggestions from the same outcomes; an open suggestion that no longer holds resolves below.
+            RoutingDataSettings? routing = RoutingData?.Invoke();
+            if (routing != null && routing.SuggestTiers)
+                await SuggestTiersAsync(outcomes, profilesByKey, routing, now, evaluation, keptOpen, token).ConfigureAwait(false);
+
             // Resolve the open conditions that no longer hold (in the evaluated tenant).
             List<ModelAlert> open = await _Database.ModelAlerts.EnumerateOpenAsync(tenantId, token).ConfigureAwait(false);
             foreach (ModelAlert alert in open)
@@ -332,6 +343,87 @@ namespace Armada.Core.Services
             }
 
             return evaluation;
+        }
+
+        private async Task SuggestTiersAsync(List<StageOutcome> outcomes, Dictionary<string, ModelProfile?> profilesByKey, RoutingDataSettings routing,
+            DateTime now, ModelAlertEvaluation evaluation, HashSet<string> keptOpen, CancellationToken token)
+        {
+            Dictionary<string, PersonaOutcomeScore> scores = PersonaOutcomeStats.Compute(outcomes, now, routing.HalfLifeDays);
+            foreach (ModelProfile profile in profilesByKey.Values.Where(p => p != null).Select(p => p!).OrderBy(p => p.Id, StringComparer.Ordinal))
+            {
+                string profileKey = ModelProfileRules.IdentityKey(profile.TenantId, profile.Identity);
+                CaptainTierEnum current = profile.Tiering.Tier ?? CaptainTierSelector.ClassifyModel(profile.Identity.Model);
+                ModelProfileTiering? suggestion = ModelTierSuggester.Suggest(scores.Values.Where(s => String.Equals(s.ProfileKey, profileKey, StringComparison.Ordinal)),
+                    routing.MinimumSamples, routing.HalfLifeDays, current);
+                if (suggestion == null)
+                {
+                    if (profile.Tiering.SuggestedTier.HasValue)
+                    {
+                        profile.Tiering = new ModelProfileTiering { Tier = profile.Tiering.Tier };
+                        await _Database.ModelProfiles.UpdateAsync(profile, token).ConfigureAwait(false);
+                    }
+                    continue;
+                }
+
+                profile.Tiering.SuggestedTier = suggestion.SuggestedTier;
+                profile.Tiering.SuggestedReason = suggestion.SuggestedReason;
+                profile.Tiering.SuggestedSamples = suggestion.SuggestedSamples;
+                profile.Tiering.SuggestedUtc = now;
+                await _Database.ModelProfiles.UpdateAsync(profile, token).ConfigureAwait(false);
+
+                string key = ModelAlertRules.Key(profile.TenantId, profile.Id, String.Empty, String.Empty, null, ModelAlertRuleEnum.TierSuggestion);
+                ModelAlert? alert = await _Database.ModelAlerts.ReadByKeyAsync(key, token).ConfigureAwait(false);
+                bool raised = false;
+                bool changed = alert != null && alert.Value != (double)suggestion.SuggestedTier!.Value;
+                if (alert == null)
+                {
+                    alert = new ModelAlert { TenantId = profile.TenantId, ProfileId = profile.Id, Rule = ModelAlertRuleEnum.TierSuggestion, CreatedUtc = now, LastRaisedUtc = now };
+                    FillTier(alert, profile, current, now);
+                    alert = await _Database.ModelAlerts.CreateAsync(alert, key, token).ConfigureAwait(false);
+                    raised = true;
+                }
+                else
+                {
+                    // A suggestion of another tier is a new condition: it reopens and shows again even when ignored.
+                    if (alert.Status == ModelAlertStatusEnum.Resolved || changed)
+                    {
+                        alert.Status = ModelAlertStatusEnum.Open;
+                        alert.ResolvedUtc = null;
+                        alert.LastRaisedUtc = now;
+                        if (changed) alert.IgnoredUntilUtc = null;
+                        raised = true;
+                    }
+                    else evaluation.StillOpen++;
+                    FillTier(alert, profile, current, now);
+                    alert = await _Database.ModelAlerts.UpdateAsync(alert, token).ConfigureAwait(false);
+                }
+                keptOpen.Add(alert.Id);
+                if (raised)
+                {
+                    evaluation.RaisedCount++;
+                    if (evaluation.Raised.Count < ModelAlertEvaluation.MaxRaised) evaluation.Raised.Add(alert);
+                    else evaluation.Truncated = true;
+                    _Logging.Info(_Header + "profile " + profile.Id + ": " + alert.Title);
+                    if (!alert.IsIgnored(now)) Notify(alert);
+                }
+            }
+        }
+
+        private static void FillTier(ModelAlert alert, ModelProfile profile, CaptainTierEnum current, DateTime now)
+        {
+            CaptainTierEnum suggested = profile.Tiering.SuggestedTier!.Value;
+            string model = String.IsNullOrWhiteSpace(profile.Identity.Model) ? profile.Id : profile.Identity.Model!;
+            alert.Model = profile.Identity.Model;
+            alert.RevisionGroup = String.Empty;
+            alert.Persona = String.Empty;
+            alert.Title = model + ": outcome data suggests tier " + suggested + " (routing uses " + current + ")";
+            alert.Detail = (profile.Tiering.SuggestedReason ?? String.Empty) + " Routing does not change until an administrator applies the suggestion"
+                + " (Apply tier) or sets the profile's tier; an explicit captain tier always wins.";
+            alert.Count = profile.Tiering.SuggestedSamples;
+            alert.Of = null;
+            alert.Value = (double)suggested;
+            alert.Threshold = (double)current;
+            alert.LastEvaluatedUtc = now;
         }
 
         private static void Fill(ModelAlert alert, ModelAlertTarget target, ModelAlertRuleResult rule, DateTime now)

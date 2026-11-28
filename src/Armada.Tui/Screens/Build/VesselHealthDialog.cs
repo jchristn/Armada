@@ -230,7 +230,7 @@ namespace Armada.Tui.Screens.Build
         {
             _Loading = true;
             LoadError = null;
-            _Screen.Call((c, t) => c.GetVesselHealthAsync(VesselId, t), d =>
+            _Screen.Call((c, t) => c.VesselHealth.GetAsync(VesselId, t), d =>
             {
                 _Loading = false;
                 Apply(d);
@@ -292,7 +292,7 @@ namespace Armada.Tui.Screens.Build
             string? note = String.IsNullOrWhiteSpace(FormNote.Value) ? null : FormNote.Value.Trim();
             _Saving = true;
             FormError = null;
-            _Screen.Call((c, t) => c.SetVesselHealthOverrideAsync(VesselId, criterion, status, note, t), d =>
+            _Screen.Call((c, t) => c.VesselHealth.SetOverrideAsync(VesselId, criterion, status, note, t), d =>
             {
                 _Saving = false;
                 Apply(d);
@@ -316,7 +316,7 @@ namespace Armada.Tui.Screens.Build
             string label = T(HealthText.CriterionLabel(o.Criterion));
             _Screen.Confirm("Remove override", _Screen.Tr("Remove the {{criterion}} override? The evaluated status applies again.", LocalizationArgs.Of("criterion", label)), () =>
             {
-                _Screen.Call((c, t) => c.DeleteVesselHealthOverrideAsync(VesselId, o.Criterion, t), d =>
+                _Screen.Call((c, t) => c.VesselHealth.DeleteOverrideAsync(VesselId, o.Criterion, t), d =>
                 {
                     Apply(d);
                     _Screen.Toast(NotificationSeverityEnum.Success, _Screen.Tr("Override removed for {{criterion}}.", LocalizationArgs.Of("criterion", label)));
@@ -514,7 +514,7 @@ namespace Armada.Tui.Screens.Build
         private async Task<GridPage<VesselDependency>> LoadDependenciesAsync(GridQuery query, CancellationToken token)
         {
             EnumerationQuery page = new EnumerationQuery { PageNumber = query.PageNumber, PageSize = query.PageSize };
-            EnumerationResult<VesselDependency>? result = await _Screen.Context.Client.ListVesselDependenciesAsync(VesselId, page, token).ConfigureAwait(false);
+            EnumerationResult<VesselDependency>? result = await _Screen.Context.Client.VesselHealth.ListDependenciesAsync(VesselId, page, token).ConfigureAwait(false);
             List<VesselDependency> rows = result?.Objects ?? new List<VesselDependency>();
             return new GridPage<VesselDependency>(rows, result?.TotalRecords ?? rows.Count);
         }

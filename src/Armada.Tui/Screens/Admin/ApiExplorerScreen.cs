@@ -410,7 +410,7 @@ namespace Armada.Tui.Screens.Admin
             {
                 try
                 {
-                    ArmadaRawJson? raw = await Context.Client.GetOpenApiDocumentAsync().ConfigureAwait(false);
+                    ArmadaRawJson? raw = await Context.Client.Support.GetOpenApiDocumentAsync().ConfigureAwait(false);
                     ApiExplorerDocument doc = ApiExplorerSpec.Parse(raw?.Json ?? "{}");
                     return new KeyValuePair<ApiExplorerDocument?, string?>(doc, null);
                 }
@@ -463,7 +463,7 @@ namespace Armada.Tui.Screens.Admin
             {
                 try
                 {
-                    RequestHistoryRecord? record = await Context.Client.GetRequestHistoryEntryAsync(requestId).ConfigureAwait(false);
+                    RequestHistoryRecord? record = await Context.Client.RequestHistory.GetEntryAsync(requestId).ConfigureAwait(false);
                     return record;
                 }
                 catch (ArmadaApiException)

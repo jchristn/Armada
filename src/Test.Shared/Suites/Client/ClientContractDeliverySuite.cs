@@ -38,19 +38,19 @@ namespace Test.Shared.Suites.Client
                 AssertEqual(DeploymentStatusEnum.PendingApproval, pending.Status, "pending approval");
                 string environmentId = pending.EnvironmentId!;
 
-                DeploymentEnvironment? environment = await c.GetEnvironmentAsync(environmentId);
+                DeploymentEnvironment? environment = await c.Environments.GetAsync(environmentId);
                 AssertEqual("production", environment?.Name, "get environment");
                 DeploymentEnvironmentUpsertRequest envUpdate = new DeploymentEnvironmentUpsertRequest();
                 envUpdate.Description = "updated";
-                AssertEqual("updated", (await c.UpdateEnvironmentAsync(environmentId, envUpdate))?.Description, "update environment");
-                AssertTrue((await c.ListEnvironmentsAsync(new DeploymentEnvironmentQuery { VesselId = setup.Vessel.Id }))!.Objects.Any(e => e.Id == environmentId), "list environments by vessel");
-                AssertTrue((await c.EnumerateEnvironmentsAsync(new DeploymentEnvironmentQuery { VesselId = setup.Vessel.Id }))!.Objects.Any(e => e.Id == environmentId), "enumerate environments");
+                AssertEqual("updated", (await c.Environments.UpdateAsync(environmentId, envUpdate))?.Description, "update environment");
+                AssertTrue((await c.Environments.ListAsync(new DeploymentEnvironmentQuery { VesselId = setup.Vessel.Id }))!.Objects.Any(e => e.Id == environmentId), "list environments by vessel");
+                AssertTrue((await c.Environments.EnumerateAsync(new DeploymentEnvironmentQuery { VesselId = setup.Vessel.Id }))!.Objects.Any(e => e.Id == environmentId), "enumerate environments");
 
-                Deployment approved = (await c.ApproveDeploymentAsync(pending.Id, "contract approval"))!;
+                Deployment approved = (await c.Deployments.ApproveAsync(pending.Id, "contract approval"))!;
                 AssertEqual(DeploymentStatusEnum.Succeeded, approved.Status, "approved deployment ran");
                 AssertEqual("contract approval", approved.ApprovalComment, "approval comment");
-                AssertEqual(DeploymentStatusEnum.Succeeded, (await c.VerifyDeploymentAsync(pending.Id))?.Status, "verify");
-                AssertEqual(DeploymentStatusEnum.RolledBack, (await c.RollbackDeploymentAsync(pending.Id))?.Status, "rollback");
+                AssertEqual(DeploymentStatusEnum.Succeeded, (await c.Deployments.VerifyAsync(pending.Id))?.Status, "verify");
+                AssertEqual(DeploymentStatusEnum.RolledBack, (await c.Deployments.RollbackAsync(pending.Id))?.Status, "rollback");
 
                 DeploymentUpsertRequest second = new DeploymentUpsertRequest();
                 second.VesselId = setup.Vessel.Id;
@@ -58,22 +58,22 @@ namespace Test.Shared.Suites.Client
                 second.EnvironmentId = environmentId;
                 second.Title = "Contract deploy later";
                 second.AutoExecute = true;
-                Deployment toDeny = (await c.CreateDeploymentAsync(second))!;
-                AssertEqual(DeploymentStatusEnum.Denied, (await c.DenyDeploymentAsync(toDeny.Id, "not now"))?.Status, "deny");
+                Deployment toDeny = (await c.Deployments.CreateAsync(second))!;
+                AssertEqual(DeploymentStatusEnum.Denied, (await c.Deployments.DenyAsync(toDeny.Id, "not now"))?.Status, "deny");
                 DeploymentUpsertRequest rename = new DeploymentUpsertRequest();
                 rename.Notes = "contract notes";
-                AssertEqual("contract notes", (await c.UpdateDeploymentAsync(toDeny.Id, rename))?.Notes, "update deployment");
-                AssertEqual("Contract deploy later", (await c.GetDeploymentAsync(toDeny.Id))?.Title, "get deployment");
-                AssertTrue((await c.EnumerateDeploymentsAsync(new DeploymentQuery { VesselId = setup.Vessel.Id }))!.Objects.Count >= 2, "enumerate deployments");
-                await c.DeleteDeploymentAsync(toDeny.Id);
-                await ClientContract.ExpectErrorAsync(() => c.GetDeploymentAsync(toDeny.Id), "deployment deleted", 404, 404);
+                AssertEqual("contract notes", (await c.Deployments.UpdateAsync(toDeny.Id, rename))?.Notes, "update deployment");
+                AssertEqual("Contract deploy later", (await c.Deployments.GetAsync(toDeny.Id))?.Title, "get deployment");
+                AssertTrue((await c.Deployments.EnumerateAsync(new DeploymentQuery { VesselId = setup.Vessel.Id }))!.Objects.Count >= 2, "enumerate deployments");
+                await c.Deployments.DeleteAsync(toDeny.Id);
+                await ClientContract.ExpectErrorAsync(() => c.Deployments.GetAsync(toDeny.Id), "deployment deleted", 404, 404);
 
                 DeploymentEnvironmentUpsertRequest scratch = new DeploymentEnvironmentUpsertRequest();
                 scratch.VesselId = setup.Vessel.Id;
                 scratch.Name = "scratch-" + ClientContract.Suffix();
                 scratch.Kind = EnvironmentKindEnum.Development;
-                DeploymentEnvironment scratchEnv = (await c.CreateEnvironmentAsync(scratch))!;
-                await c.DeleteEnvironmentAsync(scratchEnv.Id);
+                DeploymentEnvironment scratchEnv = (await c.Environments.CreateAsync(scratch))!;
+                await c.Environments.DeleteAsync(scratchEnv.Id);
             }));
 
             cases.Add(Case("releases_incidents", "Release CRUD, refresh, enumerate, GitHub pull requests; incident CRUD and enumerate", async (c, fx) =>
@@ -83,15 +83,15 @@ namespace Test.Shared.Suites.Client
                 release.VesselId = setup.Vessel.Id;
                 release.Title = "Contract release";
                 release.Version = "1.2.3";
-                Release created = (await c.CreateReleaseAsync(release))!;
-                AssertEqual("1.2.3", (await c.GetReleaseAsync(created.Id))?.Version, "get release");
+                Release created = (await c.Releases.CreateAsync(release))!;
+                AssertEqual("1.2.3", (await c.Releases.GetAsync(created.Id))?.Version, "get release");
                 release.Notes = "contract notes";
-                AssertEqual("contract notes", (await c.UpdateReleaseAsync(created.Id, release))?.Notes, "update release");
-                AssertEqual(created.Id, (await c.RefreshReleaseAsync(created.Id))?.Id, "refresh release");
-                AssertTrue((await c.EnumerateReleasesAsync(new ReleaseQuery { VesselId = setup.Vessel.Id }))!.Objects.Any(r => r.Id == created.Id), "enumerate releases");
+                AssertEqual("contract notes", (await c.Releases.UpdateAsync(created.Id, release))?.Notes, "update release");
+                AssertEqual(created.Id, (await c.Releases.RefreshAsync(created.Id))?.Id, "refresh release");
+                AssertTrue((await c.Releases.EnumerateAsync(new ReleaseQuery { VesselId = setup.Vessel.Id }))!.Objects.Any(r => r.Id == created.Id), "enumerate releases");
                 try
                 {
-                    EnumerationResult<GitHubPullRequestDetail>? prs = await c.GetReleaseGitHubPullRequestsAsync(created.Id, new EnumerationQuery { PageSize = 5 });
+                    EnumerationResult<GitHubPullRequestDetail>? prs = await c.Releases.GetGitHubPullRequestsAsync(created.Id, new EnumerationQuery { PageSize = 5 });
                     AssertEqual(0, prs?.Objects.Count ?? 0, "no pull requests for a local vessel");
                     AssertEqual(0L, prs?.TotalRecords ?? 0, "exact total");
                     AssertEqual(5, prs?.PageSize ?? 0, "requested page size");
@@ -101,18 +101,18 @@ namespace Test.Shared.Suites.Client
                     AssertTrue(ex.StatusCode >= 400 && ex.StatusCode < 600, "GitHub unavailable maps to an error reply: " + ex.StatusCode);
                 }
 
-                await c.DeleteReleaseAsync(created.Id);
+                await c.Releases.DeleteAsync(created.Id);
 
                 IncidentUpsertRequest incident = new IncidentUpsertRequest();
                 incident.Title = "Contract incident";
                 incident.VesselId = setup.Vessel.Id;
                 incident.Severity = IncidentSeverityEnum.High;
-                Incident createdIncident = (await c.CreateIncidentAsync(incident))!;
-                AssertEqual("Contract incident", (await c.GetIncidentAsync(createdIncident.Id))?.Title, "get incident");
+                Incident createdIncident = (await c.Incidents.CreateAsync(incident))!;
+                AssertEqual("Contract incident", (await c.Incidents.GetAsync(createdIncident.Id))?.Title, "get incident");
                 incident.RootCause = "contract";
-                AssertEqual("contract", (await c.UpdateIncidentAsync(createdIncident.Id, incident))?.RootCause, "update incident");
-                AssertTrue((await c.EnumerateIncidentsAsync(new IncidentQuery { VesselId = setup.Vessel.Id }))!.Objects.Any(i => i.Id == createdIncident.Id), "enumerate incidents");
-                await c.DeleteIncidentAsync(createdIncident.Id);
+                AssertEqual("contract", (await c.Incidents.UpdateAsync(createdIncident.Id, incident))?.RootCause, "update incident");
+                AssertTrue((await c.Incidents.EnumerateAsync(new IncidentQuery { VesselId = setup.Vessel.Id }))!.Objects.Any(i => i.Id == createdIncident.Id), "enumerate incidents");
+                await c.Incidents.DeleteAsync(createdIncident.Id);
             }));
 
             cases.Add(Case("runbooks_and_executions", "Runbook CRUD and enumerate; execution start, get, update, list, enumerate, delete", async (c, fx) =>
@@ -122,23 +122,23 @@ namespace Test.Shared.Suites.Client
                 runbook.FileName = "contract-runbook-" + s + ".md";
                 runbook.Title = "Contract runbook";
                 runbook.Steps = new List<RunbookStep> { new RunbookStep { Id = "step-1", Title = "Check", Instructions = "Look." } };
-                Runbook created = (await c.CreateRunbookAsync(runbook))!;
-                AssertEqual("Contract runbook", (await c.GetRunbookAsync(created.Id))?.Title, "get runbook");
+                Runbook created = (await c.Runbooks.CreateAsync(runbook))!;
+                AssertEqual("Contract runbook", (await c.Runbooks.GetAsync(created.Id))?.Title, "get runbook");
                 runbook.Description = "updated";
-                AssertEqual("updated", (await c.UpdateRunbookAsync(created.Id, runbook))?.Description, "update runbook");
-                AssertTrue((await c.EnumerateRunbooksAsync(new RunbookQuery { Search = "Contract runbook" }))!.Objects.Any(r => r.Id == created.Id), "enumerate runbooks");
+                AssertEqual("updated", (await c.Runbooks.UpdateAsync(created.Id, runbook))?.Description, "update runbook");
+                AssertTrue((await c.Runbooks.EnumerateAsync(new RunbookQuery { Search = "Contract runbook" }))!.Objects.Any(r => r.Id == created.Id), "enumerate runbooks");
 
-                RunbookExecution execution = (await c.StartRunbookExecutionAsync(created.Id, new RunbookExecutionStartRequest { Title = "Contract execution" }))!;
+                RunbookExecution execution = (await c.Runbooks.StartExecutionAsync(created.Id, new RunbookExecutionStartRequest { Title = "Contract execution" }))!;
                 AssertEqual(RunbookExecutionStatusEnum.Running, execution.Status, "started");
-                AssertEqual(execution.Id, (await c.GetRunbookExecutionAsync(execution.Id))?.Id, "get execution");
+                AssertEqual(execution.Id, (await c.Runbooks.GetExecutionAsync(execution.Id))?.Id, "get execution");
                 RunbookExecutionUpdateRequest update = new RunbookExecutionUpdateRequest();
                 update.CompletedStepIds = new List<string> { "step-1" };
                 update.Status = RunbookExecutionStatusEnum.Completed;
-                AssertEqual(RunbookExecutionStatusEnum.Completed, (await c.UpdateRunbookExecutionAsync(execution.Id, update))?.Status, "complete execution");
-                AssertTrue((await c.ListRunbookExecutionsAsync(new RunbookExecutionQuery { RunbookId = created.Id }))!.Objects.Any(e => e.Id == execution.Id), "list executions");
-                AssertTrue((await c.EnumerateRunbookExecutionsAsync(new RunbookExecutionQuery { RunbookId = created.Id }))!.Objects.Any(e => e.Id == execution.Id), "enumerate executions");
-                await c.DeleteRunbookExecutionAsync(execution.Id);
-                await c.DeleteRunbookAsync(created.Id);
+                AssertEqual(RunbookExecutionStatusEnum.Completed, (await c.Runbooks.UpdateExecutionAsync(execution.Id, update))?.Status, "complete execution");
+                AssertTrue((await c.Runbooks.ListExecutionsAsync(new RunbookExecutionQuery { RunbookId = created.Id }))!.Objects.Any(e => e.Id == execution.Id), "list executions");
+                AssertTrue((await c.Runbooks.EnumerateExecutionsAsync(new RunbookExecutionQuery { RunbookId = created.Id }))!.Objects.Any(e => e.Id == execution.Id), "enumerate executions");
+                await c.Runbooks.DeleteExecutionAsync(execution.Id);
+                await c.Runbooks.DeleteAsync(created.Id);
             }));
 
             cases.Add(Case("check_runs", "Check run run, get, retry, import, delete; GitHub Actions sync without GitHub is an error reply", async (c, fx) =>
@@ -150,21 +150,21 @@ namespace Test.Shared.Suites.Client
                 workflow.VesselId = setup.Vessel.Id;
                 workflow.IsDefault = true;
                 workflow.BuildCommand = "echo contract-build";
-                WorkflowProfile createdWorkflow = (await c.CreateWorkflowProfileAsync(workflow))!;
+                WorkflowProfile createdWorkflow = (await c.WorkflowProfiles.CreateAsync(workflow))!;
 
                 CheckRunRequest run = new CheckRunRequest();
                 run.VesselId = setup.Vessel.Id;
                 run.WorkflowProfileId = createdWorkflow.Id;
                 run.Type = CheckRunTypeEnum.Build;
-                CheckRun started = (await c.RunCheckAsync(run))!;
+                CheckRun started = (await c.CheckRuns.RunAsync(run))!;
                 CheckRun? finished = null;
                 AssertTrue(await LiveServerSetup.WaitUntilAsync(async () =>
                 {
-                    finished = await c.GetCheckRunAsync(started.Id);
+                    finished = await c.CheckRuns.GetAsync(started.Id);
                     return finished != null && finished.Status != CheckRunStatusEnum.Pending && finished.Status != CheckRunStatusEnum.Running;
                 }, 60000), "check run finished");
                 AssertEqual(CheckRunStatusEnum.Passed, finished!.Status, "echo passes: " + finished.Output);
-                CheckRun retried = (await c.RetryCheckRunAsync(started.Id))!;
+                CheckRun retried = (await c.CheckRuns.RetryAsync(started.Id))!;
                 AssertNotEqual(started.Id, retried.Id, "retry creates a new run");
 
                 CheckRunImportRequest import = new CheckRunImportRequest();
@@ -173,13 +173,13 @@ namespace Test.Shared.Suites.Client
                 import.Status = CheckRunStatusEnum.Passed;
                 import.ProviderName = "contract-ci";
                 import.ExternalId = "run-" + ClientContract.Suffix();
-                CheckRun imported = (await c.ImportCheckRunAsync(import))!;
+                CheckRun imported = (await c.CheckRuns.ImportAsync(import))!;
                 AssertEqual("contract-ci", imported.ProviderName, "imported");
-                await c.DeleteCheckRunAsync(imported.Id);
+                await c.CheckRuns.DeleteAsync(imported.Id);
 
                 GitHubActionsSyncRequest sync = new GitHubActionsSyncRequest();
                 sync.VesselId = setup.Vessel.Id;
-                await ClientContract.ExpectErrorAsync(() => c.SyncGitHubActionsAsync(sync), "a local vessel has no GitHub repository");
+                await ClientContract.ExpectErrorAsync(() => c.Deployments.SyncGitHubActionsAsync(sync), "a local vessel has no GitHub repository");
             }));
 
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "Armada.Client contract: delivery (live server)", cases: cases);

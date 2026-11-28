@@ -64,13 +64,10 @@ namespace Armada.Core.Services
                 {
                     try
                     {
-                        using JsonDocument doc = JsonDocument.Parse(line.Substring(17));
-                        JsonElement root = doc.RootElement;
-                        if (root.ValueKind != JsonValueKind.Object) return;
-                        if (!root.TryGetProperty("id", out JsonElement id) || id.ValueKind != JsonValueKind.String) return;
-                        if (!root.TryGetProperty("started", out JsonElement started)) return;
-                        if (started.ValueKind == JsonValueKind.True) Start(id.GetString(), nowUtc);
-                        if (started.ValueKind == JsonValueKind.False) End(id.GetString());
+                        ToolLifecycleLine? lifecycle = JsonSerializer.Deserialize<ToolLifecycleLine>(line.Substring(17));
+                        if (lifecycle == null || lifecycle.Id == null || !lifecycle.Started.HasValue) return;
+                        if (lifecycle.Started.Value) Start(lifecycle.Id, nowUtc);
+                        else End(lifecycle.Id);
                     }
                     catch (JsonException) { }
                 }

@@ -40,7 +40,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(429, error!.HttpStatusCode);
                 AssertEqual("rate_limit_error", error.ErrorType);
                 AssertContains("per-minute rate limit", error.Message ?? String.Empty);
-                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, error));
+                AssertEqual(RuntimeFailureKindEnum.Transient, RuntimeFailureClassifier.Classify(1, error));
             }));
 
             cases.Add(Case("claude_api_error_line_with_trailing_hint", "A Claude API Error line with a trailing hint still deserializes", TestTags.Positive, () =>
@@ -123,11 +123,11 @@ namespace Test.Shared.Suites.Services
             {
                 Dictionary<string, RuntimeFailureKindEnum> lines = new Dictionary<string, RuntimeFailureKindEnum>
                 {
-                    ["[API Error: got status: 429 Too Many Requests. Please wait before retrying.]"] = RuntimeFailureKindEnum.UsageLimit,
+                    ["[API Error: got status: 429 Too Many Requests. Please wait before retrying.]"] = RuntimeFailureKindEnum.Transient,
                     ["Error: Request failed with status code 503"] = RuntimeFailureKindEnum.Transient,
                     ["AI_APICallError: Unauthorized (HTTP 401)"] = RuntimeFailureKindEnum.AuthFailure,
                     ["upstream returned HTTP/1.1 502 Bad Gateway"] = RuntimeFailureKindEnum.Transient,
-                    ["{\"error\":{\"code\":429,\"message\":\"Quota exceeded\",\"status\":\"RESOURCE_EXHAUSTED\"}}"] = RuntimeFailureKindEnum.UsageLimit,
+                    ["{\"error\":{\"code\":429,\"message\":\"Quota exceeded\",\"status\":\"RESOURCE_EXHAUSTED\"}}"] = RuntimeFailureKindEnum.Transient,
                     ["Error: [UNAUTHENTICATED] API key not valid"] = RuntimeFailureKindEnum.AuthFailure,
                     ["{\"error\":{\"message\":\"The model is overloaded\",\"status\":\"UNAVAILABLE\"}}"] = RuntimeFailureKindEnum.Transient,
                     ["TypeError: fetch failed (cause: connect ECONNREFUSED 127.0.0.1:11434)"] = RuntimeFailureKindEnum.Transient,
@@ -151,7 +151,7 @@ namespace Test.Shared.Suites.Services
             cases.Add(Case("pi_terminal_errors_classified", "pi 401/429/529 terminal records classify by their leading status; a recovered retry and non-terminal records do not", TestTags.Positive, () =>
             {
                 AssertEqual(RuntimeFailureKindEnum.AuthFailure, ClassifyPi(PiStreamFixtures.BadKey));
-                AssertEqual(RuntimeFailureKindEnum.UsageLimit, ClassifyPi(PiStreamFixtures.RateLimited));
+                AssertEqual(RuntimeFailureKindEnum.Transient, ClassifyPi(PiStreamFixtures.RateLimited), "a 429 without a quota signal is backpressure");
                 AssertEqual(RuntimeFailureKindEnum.Transient, ClassifyPi(PiStreamFixtures.Overloaded));
                 AssertEqual(RuntimeFailureKindEnum.Transient, ClassifyPi(PiStreamFixtures.RetryExhausted));
                 AssertNull(FirstPiError(PiStreamFixtures.RetryRecovered), "a retry that recovered is not a provider error");
@@ -177,18 +177,18 @@ namespace Test.Shared.Suites.Services
                     (log, stub) => new CursorRuntime(log) { ExecutablePath = stub },
                     (log, stub) => new OpenCodeRuntime(log) { ExecutablePath = stub } })
                 {
-                    AssertEqual(RuntimeFailureKindEnum.UsageLimit, RunStubClassification(factory, ">&2"));
-                    AssertEqual(RuntimeFailureKindEnum.Crash, RunStubClassification(factory, String.Empty));
+                    AssertEqual(RuntimeFailureKindEnum.Transient, RunStubClassification(factory, ">&2"));
+                    AssertEqual(RuntimeFailureKindEnum.Unclassified, RunStubClassification(factory, String.Empty));
                 }
             }));
 
-            cases.Add(Case("text_cli_reply_becomes_final_message", "A Gemini, Cursor or OpenCode run that exits cleanly writes its stdout reply, not its stderr progress, as the final message; a failed run writes none", TestTags.Positive, () =>
+            // OpenCode runs with --format json; its reply is rebuilt from text events (Services.OpenCodeRuntime).
+            cases.Add(Case("text_cli_reply_becomes_final_message", "A Gemini or Cursor run that exits cleanly writes its stdout reply, not its stderr progress, as the final message; a failed run writes none", TestTags.Positive, () =>
             {
                 if (OperatingSystem.IsWindows()) return;
                 foreach (Func<LoggingModule, string, BaseAgentRuntime> factory in new Func<LoggingModule, string, BaseAgentRuntime>[] {
                     (log, stub) => new GeminiRuntime(log) { ExecutablePath = stub },
-                    (log, stub) => new CursorRuntime(log) { ExecutablePath = stub },
-                    (log, stub) => new OpenCodeRuntime(log) { ExecutablePath = stub } })
+                    (log, stub) => new CursorRuntime(log) { ExecutablePath = stub } })
                 {
                     foreach (int exit in new[] { 0, 1 })
                     {
@@ -221,6 +221,36 @@ namespace Test.Shared.Suites.Services
                         }
                     }
                 }
+            }));
+
+            cases.Add(Case("open_model_errors_classify_from_fixtures", "Ollama, vLLM, LM Studio, llama.cpp and LiteLLM error responses get a machine type and kind (RS-5.3)", TestTags.Positive, () =>
+            {
+                string path = Path.Combine(DashboardSource.RepoRoot(), "src", "Test.Shared", "Fixtures", "OpenModelErrors", "open-model-errors.json");
+                OpenModelErrorFixtureFile? fixture = System.Text.Json.JsonSerializer.Deserialize<OpenModelErrorFixtureFile>(File.ReadAllText(path));
+                AssertNotNull(fixture);
+                AssertTrue(fixture!.Cases.Count >= 20, "fixture rows load");
+                AssertTrue(fixture.Cases.Exists(c => c.Provenance == "captured"), "at least one row was captured from a live server");
+                foreach (OpenModelErrorFixtureCase row in fixture.Cases)
+                {
+                    string label = row.Server + " " + row.Status + " " + row.ErrorType;
+                    RuntimeProviderError? error = RuntimeProviderErrorParser.FromHttpStatus(row.Status, row.Body);
+                    AssertNotNull(error, label);
+                    AssertEqual(row.ErrorType, error!.ErrorType, label);
+                    AssertEqual(Enum.Parse<RuntimeFailureKindEnum>(row.Kind), RuntimeFailureClassifier.Classify(1, error), label);
+                    // The same message from a generic runtime error type (Mux llm_error, a CLI line) classifies the same way.
+                    AssertEqual(Enum.Parse<RuntimeFailureKindEnum>(row.Kind), RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { ErrorType = "llm_error", HttpStatusCode = row.Status, Message = row.Body }), label + " via llm_error");
+                }
+            }));
+
+            cases.Add(Case("open_model_patterns_ignore_unrelated_text", "A message that names no known failure gets no type, and only a 400 uses the tool or schema rule", TestTags.Negative, () =>
+            {
+                AssertNull(OpenModelErrorPatterns.Match(500, "{\"error\":\"unexpected server error\"}"));
+                AssertNull(OpenModelErrorPatterns.Match(500, "tool registry unavailable"), "the tool or schema rule is for a rejected request only");
+                AssertNull(OpenModelErrorPatterns.Match(null, null));
+                AssertEqual("schema_validation_failed", OpenModelErrorPatterns.Match(400, "invalid tool definition"));
+                AssertNull(RuntimeProviderErrorParser.TryParseCliStderrLine("Compiling project... done", "OpenCode"), "ordinary stderr is not a provider error");
+                RuntimeProviderError? cli = RuntimeProviderErrorParser.TryParseCliStderrLine("Error: llama runner process has terminated: signal: killed", "OpenCode");
+                AssertEqual(OpenModelErrorPatterns.RunnerTerminated, cli?.ErrorType);
             }));
 
             return new TestSuiteDescriptor(

@@ -1,0 +1,27 @@
+services:
+  armada-demo:
+    # Store reviewer demo Admiral (docs/DEMO_ADMIRAL.md). Seed ./data first with ./reset.sh; the seeder writes
+    # settings.json, db/armada.db and demo-ids.json there. Keep the server tag in step with the seeder's source.
+    image: jchristn77/armada-server:v1.5.0
+    ports:
+      # Loopback only: reviewers reach it through the remote-access proxy, not a public port.
+      - "127.0.0.1:7890:7890"
+    environment:
+      - ARMADA_DATA_DIR=/app/data
+    volumes:
+      - ./data/settings.json:/app/data/settings.json
+      - ./data/db:/app/data/db
+      - ./data/logs:/app/data/logs
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:7890/api/v1/status/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+    # Small and capped so the demo cannot starve a shared host (it runs next to the proxy).
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+    restart: unless-stopped

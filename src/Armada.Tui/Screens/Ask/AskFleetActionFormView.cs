@@ -150,10 +150,10 @@ namespace Armada.Tui.Screens.Ask
                 {
                     FleetActionEnumerateQuery aq = new FleetActionEnumerateQuery();
                     aq.PageSize = 500;
-                    EnumerationResult<FleetAction>? actions = await client.EnumerateFleetActionsAsync(aq).ConfigureAwait(false);
+                    EnumerationResult<FleetAction>? actions = await client.FleetActions.EnumerateAsync(aq).ConfigureAwait(false);
                     ArmadaPageQuery vq = new ArmadaPageQuery();
                     vq.PageSize = 9999;
-                    EnumerationResult<Vessel>? vessels = await client.ListVesselsAsync(vq).ConfigureAwait(false);
+                    EnumerationResult<Vessel>? vessels = await client.Vessels.ListAsync(vq).ConfigureAwait(false);
                     Context.Dispatcher.Post(() => SetChoices(actions?.Objects ?? new List<FleetAction>(), vessels?.Objects ?? new List<Vessel>()));
                 }
                 catch (ArmadaApiException ex)

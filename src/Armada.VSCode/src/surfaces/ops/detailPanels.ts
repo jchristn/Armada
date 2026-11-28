@@ -9,6 +9,7 @@ import * as vscode from 'vscode';
 import { getCaptain, getCaptainLog, getMergeEntry, getMission, getMissionLog, getVoyage, listMissionSummaries } from '@dashboard/api/client';
 import type { MissionSummary } from '@dashboard/types/models';
 import { describeError } from '../../transport/errors';
+import { getMissionAttempts } from '../../transport/hostClient';
 import { openAsPage } from '../dashboard/pageRouting';
 import { entityRoute } from '../dashboard/routes';
 import { DetailPage, escapeHtml, isDetailMessage, renderDetailContent, renderDetailHtml } from './detailHtml';
@@ -127,7 +128,8 @@ export class DetailPanelManager implements vscode.Disposable {
         const mission = await getMission(page.id);
         page.live = ACTIVE_MISSION_STATUSES.includes(mission.status);
         const tail = page.live ? await getMissionLog(page.id, LOG_TAIL_LINES).then((r) => r.log, () => undefined) : undefined;
-        return missionPage(mission, this._Store, tail, now);
+        const history = await getMissionAttempts(page.id).catch(() => undefined);
+        return missionPage(mission, this._Store, tail, now, history);
       }
       case 'voyage': {
         const progress = await getVoyage(page.id);

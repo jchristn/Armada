@@ -186,7 +186,7 @@ namespace Armada.Tui.Screens.Operations
             request.PageNumber = 1;
             request.PageSize = FingerprintPageSize;
             if (!String.IsNullOrEmpty(VesselFilter.Value)) request.VesselId = VesselFilter.Value;
-            Call((c, t) => c.EnumerateBlackBoxFingerprintsAsync(request, t), r =>
+            Call((c, t) => c.BlackBox.EnumerateFingerprintsAsync(request, t), r =>
             {
                 Fingerprints = r?.Objects ?? new List<BlackBoxFingerprintSummary>();
                 if (Fingerprints.Count == 0)
@@ -218,7 +218,7 @@ namespace Armada.Tui.Screens.Operations
             request.PageNumber = 1;
             request.PageSize = RecoveryStatsPageSize;
             if (!String.IsNullOrEmpty(VesselFilter.Value)) request.VesselId = VesselFilter.Value;
-            Call((c, t) => c.GetBlackBoxRecoveryStatsAsync(request, t), r =>
+            Call((c, t) => c.BlackBoxInsights.GetRecoveryStatsAsync(request, t), r =>
             {
                 RecoveryStats = r?.Objects ?? new List<BlackBoxRecoveryStat>();
                 if (RecoveryStats.Count == 0)
@@ -266,7 +266,7 @@ namespace Armada.Tui.Screens.Operations
         protected override async Task<GridPage<BlackBoxEntrySummary>> FetchAsync(GridQuery query, CancellationToken token)
         {
             BlackBoxEnumerateRequest q = BuildRequest(query.PageNumber, query.PageSize);
-            EnumerationResult<BlackBoxEntrySummary>? result = await Context.Client.EnumerateBlackBoxAsync(q, token).ConfigureAwait(false);
+            EnumerationResult<BlackBoxEntrySummary>? result = await Context.Client.BlackBox.EnumerateAsync(q, token).ConfigureAwait(false);
             List<BlackBoxEntrySummary> rows = result?.Objects ?? new List<BlackBoxEntrySummary>();
             return new GridPage<BlackBoxEntrySummary>(rows, result?.TotalRecords ?? rows.Count);
         }
@@ -322,7 +322,7 @@ namespace Armada.Tui.Screens.Operations
         private void TogglePin(BlackBoxEntrySummary e)
         {
             bool pin = !e.Pinned;
-            Call((c, t) => pin ? c.PinBlackBoxAsync(e.Id, t) : c.UnpinBlackBoxAsync(e.Id, t), r =>
+            Call((c, t) => pin ? c.BlackBox.PinAsync(e.Id, t) : c.BlackBox.UnpinAsync(e.Id, t), r =>
             {
                 Toast(NotificationSeverityEnum.Success, pin ? Tr("Black box entry pinned.") : Tr("Black box entry unpinned."));
                 Refresh();
@@ -333,7 +333,7 @@ namespace Armada.Tui.Screens.Operations
         {
             Confirm("Delete Black Box Entry", Tr("Delete black box entry {{id}} and its evidence? This cannot be undone.", LocalizationArgs.Of("id", e.Id)), () =>
             {
-                Call((c, t) => c.DeleteBlackBoxAsync(e.Id, t), r =>
+                Call((c, t) => c.BlackBox.DeleteAsync(e.Id, t), r =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Black box entry {{id}} deleted.", LocalizationArgs.Of("id", e.Id)));
                     Refresh();

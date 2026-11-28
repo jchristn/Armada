@@ -69,11 +69,30 @@ The concurrency test script includes Services.VerificationCapacity, Services.Sta
 
 For a failed check, fill the captain or an outer capacity gate while verification finishes. Repair must wait without rerunning an already persisted check result. Free capacity and wait for a health tick: exactly one repair should start in the original dock with the check output. Repeat across an Admiral restart and confirm no extra launches. Cancel the verifying mission or recall its captain (including Recall All); late results must not restart it or release a sibling's slot. See [verification validation evidence](concurrency/VERIFICATION_CAPACITY_VALIDATION.md).
 
+## One dispatcher (1.5.0)
+
+Since 1.5.0 the Admiral has exactly one dispatch pass, and the manual steps above that say "on the next dispatch cycle"
+usually see the result at once. Completion, a review decision, a cancel, a new voyage with waiting missions, a Harbor
+linking and an endpoint breaker reopening each raise a dispatch wake; wakes raised together collapse into one pass, and
+the 10 second heartbeat stays only as a safety net. The head-of-queue dispatch that used to run inside completion is
+gone, so one pass now fills every free captain instead of one.
+
+Each pass reads captains, running missions per vessel, admission rows, voyages, vessels, personas, endpoints and model
+profiles once, then evaluates every pending mission against that snapshot. A claim drops the state it can change, so
+the next mission in the same pass never admits against counts from before it. The shared admission lock covers only
+the final re-check of the global, runtime and endpoint caps and the claim itself; captain selection, usage evidence,
+the Harbor policy gate and dock placement run before it, so a slow dock placement on one vessel no longer holds up
+every other vessel.
+
+`Services.SourceGuards` (`one_dispatcher`) fails the tests if a second dispatch loop appears anywhere outside
+`AdmiralService`. To see the wake path by hand, run two captains, dispatch a voyage whose second mission waits on the
+first, and finish the first: the second should be assigned within a second or two, not at the next heartbeat.
+
 ## Outer-gate and stuck-admission monitoring
 
 Services.OuterGateInvariant and Services.AdmissionStuck are included in the concurrency script. Lower global/runtime/endpoint limits below active usage and inspect Activity > Events as a global administrator. Running work must continue; observations should reflect a known reduction or unknown ordering, without leaking aggregate usage to scoped readers. Endpoint events open the existing configuration editor. A shared URL with different alias limits remains ambiguous.
 
-A stuck-admission warning requires the same Pending version ready before and after three sampled dispatch opportunities. Known launch/provisioning failures, unavailable placement, memory/global deferrals and ordinary capacity/dependency blockers must not warn. Large queues are covered through bounded rotating windows. See [monitor validation](concurrency/OUTER_GATE_MONITOR_VALIDATION.md).
+A stuck-admission warning requires a Pending mission that three dispatch passes in a row left unclaimed while every admission gate was open. Since 1.5.0 the monitor no longer re-runs admission on sampled missions: it reads the one admission result each dispatch pass records per mission (the same `MissionAssignmentBlocker` the dashboard, TUI and API show), so the warning and the waiting card cannot disagree, and it reports how long the mission has waited. Known launch/provisioning failures, unavailable placement, memory/global deferrals and ordinary capacity/dependency blockers must not warn. See [monitor validation](concurrency/OUTER_GATE_MONITOR_VALIDATION.md).
 
 ### Captain selection parity
 

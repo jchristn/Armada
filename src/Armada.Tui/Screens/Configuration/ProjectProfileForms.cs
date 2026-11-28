@@ -122,8 +122,8 @@ namespace Armada.Tui.Screens.Configuration
                 payload.Skills = EntityUi.SplitLines(skills.Value);
                 if (existing == null) payload.PersonaOverrides = new List<PersonaOverride>();
                 saved = existing != null
-                    ? await context.Client.UpdateProjectProfileAsync(existing.Id, payload, ct).ConfigureAwait(false)
-                    : await context.Client.CreateProjectProfileAsync(payload, ct).ConfigureAwait(false);
+                    ? await context.Client.ProjectProfiles.UpdateAsync(existing.Id, payload, ct).ConfigureAwait(false)
+                    : await context.Client.ProjectProfiles.CreateAsync(payload, ct).ConfigureAwait(false);
                 return null;
             }, () =>
             {

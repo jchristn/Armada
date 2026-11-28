@@ -52,7 +52,7 @@ namespace Armada.Tui.Screens.Configuration
                         body.PromptTemplateName = template.Value ?? existing.PromptTemplateName;
                         body.Scope = chosenScope;
                         priorities.Apply(body);
-                        await context.Client.UpdatePersonaAsync(existing.Name, body, ct).ConfigureAwait(false);
+                        await context.Client.Personas.UpdateAsync(existing.Name, body, ct).ConfigureAwait(false);
                     }
                     else
                     {
@@ -63,7 +63,7 @@ namespace Armada.Tui.Screens.Configuration
                         body.Scope = ScopeRules.ResolveCreateScope(context.Session, chosenScope);
                         priorities.Apply(body);
                         savedName = body.Name;
-                        await context.Client.CreatePersonaAsync(body, ct).ConfigureAwait(false);
+                        await context.Client.Personas.CreateAsync(body, ct).ConfigureAwait(false);
                     }
 
                     return null;
@@ -104,7 +104,7 @@ namespace Armada.Tui.Screens.Configuration
                 body.PromptTemplateName = template.Value ?? persona.PromptTemplateName;
                 body.DefaultCaptainId = EntityUi.Blank(captain.Value);
                 priorities.Apply(body);
-                await context.Client.UpdatePersonaAsync(persona.Name, body, ct).ConfigureAwait(false);
+                await context.Client.Personas.UpdateAsync(persona.Name, body, ct).ConfigureAwait(false);
                 return null;
             }, () =>
             {
@@ -131,7 +131,7 @@ namespace Armada.Tui.Screens.Configuration
                 body.CaptainPriorities = persona.CaptainPriorities.Select(p => new PersonaCaptainPriority { Runtime = p.Runtime, Model = p.Model, Endpoint = p.Endpoint, MinimumTier = p.MinimumTier }).ToList();
                 body.PriorityAvailability = persona.PriorityAvailability;
                 body.PriorityExhaustion = persona.PriorityExhaustion;
-                return context.Client.CreatePersonaAsync(body, ct);
+                return context.Client.Personas.CreateAsync(body, ct);
             }, created =>
             {
                 if (created == null) return;

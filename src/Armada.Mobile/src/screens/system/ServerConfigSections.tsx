@@ -10,6 +10,7 @@ import { errorText } from '../../resource/useLoad';
 import { intOr, useDraft, type MobileServerSettings } from './settingsModel';
 import { NumberField, SaveRow, SettingsSection } from './settingsParts';
 import { SwitchField } from '../../components/ui/SwitchField';
+import { TextField } from '../../components/ui/TextField';
 
 export interface SectionProps {
   settings: MobileServerSettings;
@@ -109,12 +110,16 @@ export function AgentSettingsSection({ settings, locked, onSaved }: SectionProps
     idleCaptainTimeoutSeconds: String(settings.idleCaptainTimeoutSeconds),
     landingMode: settings.landingMode || DEFAULT_GLOBAL_LANDING_MODE,
     blockDependentsOfFailedStages: settings.blockDependentsOfFailedStages ?? false,
+    acceptLegacyMissionMarkers: settings.acceptLegacyMissionMarkers ?? true,
+    outputRepairNormalizerCaptainId: settings.outputRepairNormalizerCaptainId ?? '',
   });
   const { save, saving } = useSettingsSave(onSaved);
   const v = draft.value;
   const modes = getGlobalLandingModes(t);
   // Shown only when the server reports the setting (older servers do not have it).
   const blockingSupported = settings.blockDependentsOfFailedStages !== undefined;
+  const legacyMarkersSupported = settings.acceptLegacyMissionMarkers !== undefined;
+  const normalizerSupported = settings.outputRepairNormalizerCaptainId !== undefined;
   const help = t('How finished missions land when neither the vessel nor the voyage sets a landing mode (default Merge and Push).');
   return (
     <SettingsSection title={t('Agent Settings')} description={t('Settings that control captain monitoring, stalling, cleanup, and how finished missions land.')} testID="settings-agent">
@@ -142,6 +147,27 @@ export function AgentSettingsSection({ settings, locked, onSaved }: SectionProps
           testID="settings-block-dependents"
         />
       )}
+      {legacyMarkersSupported && (
+        <SwitchField
+          label={t('Accept Legacy Mission Markers')}
+          hint={t('Deprecated. On: [ARMADA:MISSION] plans still work. Off: the Architect must emit an armada-plan block.')}
+          value={v.acceptLegacyMissionMarkers}
+          onChange={(x) => draft.set({ acceptLegacyMissionMarkers: x })}
+          disabled={locked}
+          testID="settings-legacy-mission-markers"
+        />
+      )}
+      {normalizerSupported && (
+        <TextField
+          label={t('Format Repair Captain')}
+          hint={t('Blank uses the captain that wrote the report.')}
+          value={v.outputRepairNormalizerCaptainId}
+          onChangeText={(x) => draft.set({ outputRepairNormalizerCaptainId: x })}
+          autoCapitalize="none"
+          editable={!locked}
+          testID="settings-output-repair-normalizer"
+        />
+      )}
       <SaveRow
         label={t('Save Agent Settings')}
         saving={saving}
@@ -157,6 +183,8 @@ export function AgentSettingsSection({ settings, locked, onSaved }: SectionProps
             idleCaptainTimeoutSeconds: intOr(v.idleCaptainTimeoutSeconds, 0),
             landingMode: v.landingMode || DEFAULT_GLOBAL_LANDING_MODE,
             ...(blockingSupported ? { blockDependentsOfFailedStages: v.blockDependentsOfFailedStages } : {}),
+            ...(legacyMarkersSupported ? { acceptLegacyMissionMarkers: v.acceptLegacyMissionMarkers } : {}),
+            ...(normalizerSupported ? { outputRepairNormalizerCaptainId: v.outputRepairNormalizerCaptainId.trim() } : {}),
           }, t('Agent settings saved'));
           if (ok) draft.reset();
         }}

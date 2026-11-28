@@ -118,32 +118,75 @@ namespace Armada.Core.Protocol
         /// <returns>The bounded failure text, or null.</returns>
         public string? DescribeProviderFailure()
         {
-            if (!String.Equals(Type, TypeError, StringComparison.Ordinal)) return null;
+            string? message = ProviderFailureMessage();
+            if (message == null) return null;
+            int? status = ProviderFailureStatus();
+            if (status.HasValue) return message + " (status " + status.Value.ToString() + ")";
+            return message;
+        }
 
+        /// <summary>
+        /// The bounded provider message of an error event (<c>data.message</c>, otherwise the top-level message), a
+        /// generic text when the payload names none, or null when this event is not an error.
+        /// </summary>
+        /// <returns>The message, or null.</returns>
+        public string? ProviderFailureMessage()
+        {
+            if (!String.Equals(Type, TypeError, StringComparison.Ordinal)) return null;
             string message = "OpenCode provider request failed";
-            int? status = null;
-            if (!String.IsNullOrWhiteSpace(Error))
+            OpenCodeProviderErrorDocument? document = ReadErrorDocument();
+            if (document != null)
             {
-                try
-                {
-                    OpenCodeProviderErrorDocument? document = JsonSerializer.Deserialize<OpenCodeProviderErrorDocument>(Error!);
-                    if (document != null)
-                    {
-                        string? raw = !String.IsNullOrWhiteSpace(document.Data?.Message) ? document.Data!.Message : document.Message;
-                        if (!String.IsNullOrWhiteSpace(raw)) message = raw!.Trim();
-                        if (document.Data != null && document.Data.StatusCode.HasValue) status = document.Data.StatusCode;
-                        else status = document.StatusCode;
-                    }
-                }
-                catch (JsonException)
-                {
-                }
+                string? raw = !String.IsNullOrWhiteSpace(document.Data?.Message) ? document.Data!.Message : document.Message;
+                if (!String.IsNullOrWhiteSpace(raw)) message = raw!.Trim();
             }
 
             if (message.Length > MaxProviderFailureMessageCharacters)
                 message = message.Substring(0, MaxProviderFailureMessageCharacters);
-            if (status.HasValue) return message + " (status " + status.Value.ToString() + ")";
             return message;
+        }
+
+        /// <summary>
+        /// The HTTP status of an error event (<c>data.statusCode</c>, otherwise the top-level <c>statusCode</c>), or null.
+        /// </summary>
+        /// <returns>The status, or null.</returns>
+        public int? ProviderFailureStatus()
+        {
+            if (!String.Equals(Type, TypeError, StringComparison.Ordinal)) return null;
+            OpenCodeProviderErrorDocument? document = ReadErrorDocument();
+            if (document == null) return null;
+            if (document.Data != null && document.Data.StatusCode.HasValue) return document.Data.StatusCode;
+            return document.StatusCode;
+        }
+
+        /// <summary>
+        /// The error's own kind (<c>type</c> in OpenCode 2, <c>name</c> before it, for example <c>APIError</c>), or null.
+        /// </summary>
+        /// <returns>The kind, or null.</returns>
+        public string? ProviderFailureKind()
+        {
+            if (!String.Equals(Type, TypeError, StringComparison.Ordinal)) return null;
+            OpenCodeProviderErrorDocument? document = ReadErrorDocument();
+            if (document == null) return null;
+            string? kind = !String.IsNullOrWhiteSpace(document.Type) ? document.Type : document.Name;
+            return String.IsNullOrWhiteSpace(kind) ? null : kind!.Trim();
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private OpenCodeProviderErrorDocument? ReadErrorDocument()
+        {
+            if (String.IsNullOrWhiteSpace(Error)) return null;
+            try
+            {
+                return JsonSerializer.Deserialize<OpenCodeProviderErrorDocument>(Error!);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
         }
 
         #endregion
@@ -152,6 +195,12 @@ namespace Armada.Core.Protocol
 
         private sealed class OpenCodeProviderErrorDocument
         {
+            [JsonPropertyName("type")]
+            public string? Type { get; set; } = null;
+
+            [JsonPropertyName("name")]
+            public string? Name { get; set; } = null;
+
             [JsonPropertyName("message")]
             public string? Message { get; set; } = null;
 

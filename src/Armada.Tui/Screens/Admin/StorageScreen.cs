@@ -78,7 +78,7 @@ namespace Armada.Tui.Screens.Admin
         public void GcDryRun()
         {
             if (!Context.Session.IsGlobalAdmin) return;
-            _ = ScreenOps.Run(Context, () => Context.Client.RunBlackBoxGcAsync(true), report =>
+            _ = ScreenOps.Run(Context, () => Context.Client.BlackBox.RunGcAsync(true), report =>
             {
                 GcDryRunReport = report;
                 if (report == null) return;
@@ -105,10 +105,10 @@ namespace Armada.Tui.Screens.Admin
             _ = ScreenOps.Run(Context, async () =>
             {
                 StorageSnapshot? read = collect
-                    ? await Context.Client.RefreshStorageAsync(new StorageRefreshRequest { ExactCounts = exact }).ConfigureAwait(false)
-                    : await Context.Client.GetStorageAsync().ConfigureAwait(false);
+                    ? await Context.Client.Server.RefreshStorageAsync(new StorageRefreshRequest { ExactCounts = exact }).ConfigureAwait(false)
+                    : await Context.Client.Server.GetStorageAsync().ConfigureAwait(false);
                 // The snapshot carries host totals only; the host reports are paged.
-                if (read != null) read.Hosts = await Context.Client.ListAllStorageHostsAsync().ConfigureAwait(false);
+                if (read != null) read.Hosts = await Context.Client.Server.ListAllStorageHostsAsync().ConfigureAwait(false);
                 return read;
             }, snapshot =>
             {
@@ -127,9 +127,9 @@ namespace Armada.Tui.Screens.Admin
             _ = ScreenOps.Quiet(Context, async () =>
             {
                 BlackBoxAdminStatus status = new BlackBoxAdminStatus();
-                try { status.Retention = await Context.Client.GetBlackBoxRetentionAsync().ConfigureAwait(false); }
+                try { status.Retention = await Context.Client.BlackBox.GetRetentionAsync().ConfigureAwait(false); }
                 catch (Exception ex) when (ex is ArmadaApiException || ex is System.Text.Json.JsonException || ex is InvalidOperationException) { status.Error = ex.Message; }
-                try { status.Storage = await Context.Client.GetBlackBoxStorageAsync().ConfigureAwait(false); }
+                try { status.Storage = await Context.Client.BlackBox.GetStorageAsync().ConfigureAwait(false); }
                 catch (Exception ex) when (ex is ArmadaApiException || ex is System.Text.Json.JsonException || ex is InvalidOperationException) { status.Error = ex.Message; }
                 return status;
             }, status =>

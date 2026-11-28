@@ -127,6 +127,88 @@ namespace Test.Shared.Suites.Services
                 return Task.CompletedTask;
             }));
 
+            cases.Add(Case("rs8_1_probed_capabilities_fill_unrecorded_tools", "RS-8.1: a probed capability fills a tool the administrator left unset; an administrator's value always wins", TestTags.Positive, () =>
+            {
+                WorkerEnvelope envelope = new WorkerEnvelope { RequiredTools = new List<string> { "tools", "mcp" } };
+                Captain captain = new Captain("probed") { ModelProfileId = "mdl_probed" };
+                ModelProfile profile = Profile(131072, null, null);
+                AssertContains("does not record tool calls", WorkerEnvelopeRules.IneligibilityReason(envelope, captain, profile) ?? "", "nothing recorded or probed is excluded");
+                profile.Capabilities.ProbedToolsAvailable = true;
+                profile.Capabilities.ProbedMcpAvailable = true;
+                AssertNull(WorkerEnvelopeRules.IneligibilityReason(envelope, captain, profile), "probed tools make the captain eligible without hand edits");
+                profile.Capabilities.McpAvailable = false;
+                AssertContains("has no MCP tools", WorkerEnvelopeRules.IneligibilityReason(envelope, captain, profile) ?? "", "the administrator's false beats a probed true");
+                profile.Capabilities.McpAvailable = true;
+                profile.Capabilities.ProbedToolsAvailable = false;
+                profile.Capabilities.ToolsAvailable = true;
+                AssertNull(WorkerEnvelopeRules.IneligibilityReason(envelope, captain, profile), "the administrator's true beats a probed false");
+                AssertEqual((bool?)true, profile.Capabilities.EffectiveToolsAvailable, "effective tools");
+                profile.Capabilities.ToolsAvailable = null;
+                AssertEqual((bool?)false, profile.Capabilities.EffectiveToolsAvailable, "the probed value when unset");
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(Case("rs8_2_file_limit_section", "RS-8.2: a profile's MaxFilesPerMission gives writing personas a file limit (the smaller of profile and envelope); the Architect and Judge get none", TestTags.Positive, () =>
+            {
+                AssertEqual("", WorkerEnvelopeRules.FileLimitSection(null, new WorkerEnvelope { MaxFiles = 2 }, "Worker"), "no profile limit: no section (the envelope alone is unchanged)");
+                string section = WorkerEnvelopeRules.FileLimitSection(3, null, "Worker");
+                AssertContains("## File Limit", section);
+                AssertContains("Change at most 3 files in this mission.", section);
+                AssertContains("report BLOCKED", section);
+                string tighter = WorkerEnvelopeRules.FileLimitSection(5, new WorkerEnvelope { MaxFiles = 1 }, "Test Engineer");
+                AssertContains("Change at most 1 file in this mission.", tighter, "the smaller envelope limit applies");
+                AssertContains("the Worker envelope to 1 file", tighter);
+                AssertContains("Change at most 2 files", WorkerEnvelopeRules.FileLimitSection(2, new WorkerEnvelope { MaxFiles = 4 }, null), "a looser envelope keeps the profile limit");
+                AssertEqual("", WorkerEnvelopeRules.FileLimitSection(3, null, "Architect"), "the Architect writes no change");
+                AssertEqual("", WorkerEnvelopeRules.FileLimitSection(3, null, "Judge"), "the Judge writes no change");
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(Case("rs8_2_contract_reminder", "RS-8.2: RepeatContractAtEnd true repeats the role summary contract at the end of the launch prompt; false, null and personas without a contract leave it unchanged", TestTags.Positive, () =>
+            {
+                string prompt = "Role: x. Read CLAUDE.md.\n\nCommit guidance.";
+                string repeated = MissionPromptBuilder.AppendContractReminder(prompt, "Worker", new ModelProfileRendering { RepeatContractAtEnd = true });
+                AssertTrue(repeated.StartsWith(prompt, StringComparison.Ordinal), "the prompt is kept");
+                AssertTrue(repeated.EndsWith("Output contract, repeated: " + StageOutputContract.RoleSummary("Worker"), StringComparison.Ordinal), "the contract summary closes the prompt");
+                AssertContains(StageOutputContract.ResultCompleteLine, repeated);
+                AssertEqual(prompt, MissionPromptBuilder.AppendContractReminder(prompt, "Worker", new ModelProfileRendering { RepeatContractAtEnd = false }), "false: unchanged");
+                AssertEqual(prompt, MissionPromptBuilder.AppendContractReminder(prompt, "Worker", new ModelProfileRendering()), "null: unchanged");
+                AssertEqual(prompt, MissionPromptBuilder.AppendContractReminder(prompt, "Worker", null), "no profile: unchanged");
+                AssertEqual(prompt, MissionPromptBuilder.AppendContractReminder(prompt, "Recorder", new ModelProfileRendering { RepeatContractAtEnd = true }), "a persona without a contract: unchanged");
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(Case("rs8_2_file_limit_reaches_instructions", "RS-8.2: the Worker's instructions file carries the profile's file limit; the Judge's does not", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    LoggingModule logging = new LoggingModule();
+                    logging.Settings.EnableConsole = false;
+                    ArmadaSettings settings = new ArmadaSettings();
+                    settings.DocksDirectory = Path.Combine(Path.GetTempPath(), "armada_envelope_limit_docks_" + Guid.NewGuid().ToString("N"));
+                    settings.ReposDirectory = Path.Combine(Path.GetTempPath(), "armada_envelope_limit_repos_" + Guid.NewGuid().ToString("N"));
+                    StubGitService git = new StubGitService();
+                    IDockService docks = new DockService(logging, testDb.Driver, settings, git);
+                    ICaptainService captains = new CaptainService(logging, testDb.Driver, settings, git, docks);
+                    MissionService missions = new MissionService(logging, testDb.Driver, settings, docks, captains);
+
+                    ModelProfile profile = Profile(131072, true, true);
+                    profile.Rendering.MaxFilesPerMission = 2;
+                    profile = await testDb.Driver.ModelProfiles.CreateAsync(profile, "envelope-limit-" + Guid.NewGuid().ToString("N")).ConfigureAwait(false);
+                    Captain captain = new Captain("limit-captain") { Runtime = AgentRuntimeEnum.ClaudeCode, ModelProfileId = profile.Id };
+                    Vessel vessel = new Vessel("limit-vessel", "https://github.com/test/repo.git");
+
+                    string worker = await GenerateInstructionsAsync(missions, new Mission("Change widgets", "do it") { Persona = "Worker" }, vessel, captain).ConfigureAwait(false);
+                    AssertContains("## File Limit", worker);
+                    AssertContains("Change at most 2 files in this mission.", worker);
+                    string judge = await GenerateInstructionsAsync(missions, new Mission("Review widgets", "review it") { Persona = "Judge" }, vessel, captain).ConfigureAwait(false);
+                    AssertFalse(judge.Contains("## File Limit", StringComparison.Ordinal), "the Judge gets no file limit");
+                    Captain noProfile = new Captain("plain-captain") { Runtime = AgentRuntimeEnum.ClaudeCode };
+                    string plain = await GenerateInstructionsAsync(missions, new Mission("Change widgets", "do it") { Persona = "Worker" }, vessel, noProfile).ConfigureAwait(false);
+                    AssertFalse(plain.Contains("## File Limit", StringComparison.Ordinal), "no profile: no file limit");
+                }
+            }));
+
             cases.Add(Case("prompt_placeholder_for_architect_and_judge", "The {WorkerEnvelope} placeholder is empty without an envelope and gives the Architect and Judge a generated description", TestTags.Positive, () =>
             {
                 Vessel vessel = new Vessel("prompt-vessel", "https://github.com/test/repo.git");

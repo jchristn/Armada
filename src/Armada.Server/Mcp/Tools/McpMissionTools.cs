@@ -559,13 +559,14 @@ namespace Armada.Server.Mcp.Tools
                     }
 
                     MissionStatusEnum statusBefore = mission.Status;
-                    mission.Status = newStatus;
-                    mission.LastUpdateUtc = DateTime.UtcNow;
 
                     if (newStatus == MissionStatusEnum.Complete || newStatus == MissionStatusEnum.Failed || newStatus == MissionStatusEnum.Cancelled)
                         mission.CompletedUtc = DateTime.UtcNow;
 
-                    mission = await database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                    MissionTransitionRequest manual = new MissionTransitionRequest { To = newStatus, Operator = true, Message = "Mission " + missionId + " transitioned to " + newStatus };
+                    manual.AllowedFrom.Add(statusBefore);
+                    if (!await admiral.Transitions.TryTransitionAsync(mission, manual).ConfigureAwait(false))
+                        return (object)McpToolError.Conflict("Mission " + missionId + " changed to " + mission.Status + " before the transition was recorded");
                     await BlackBoxOperatorCapture.RecordTransitionAsync(blackBox, mission, statusBefore, "MCP").ConfigureAwait(false);
 
                     Signal signal = new Signal(SignalTypeEnum.Progress, "Mission " + missionId + " transitioned to " + newStatus);

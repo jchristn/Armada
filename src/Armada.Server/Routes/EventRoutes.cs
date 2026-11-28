@@ -59,7 +59,7 @@ namespace Armada.Server.Routes
                 }
                 EnumerationQuery query = new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
-                string limitStr = QueryValueReader.Read(req.Query, "limit");
+                string? limitStr = QueryValueReader.Read(req.Query, "limit");
                 if (!String.IsNullOrEmpty(limitStr) && int.TryParse(limitStr, out int limit)) query.PageSize = limit;
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<ArmadaEvent> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Events.EnumerateAsync(q), (t, q) => _database.Events.EnumerateAsync(t, q), (t, u, q) => _database.Events.EnumerateAsync(t, u, q)).ConfigureAwait(false);
@@ -89,7 +89,7 @@ namespace Armada.Server.Routes
                 }
                 EnumerationQuery query = JsonSerializer.Deserialize<EnumerationQuery>(req.Http.Request.DataAsString, _jsonOptions) ?? new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
-                string limitStr = QueryValueReader.Read(req.Query, "limit");
+                string? limitStr = QueryValueReader.Read(req.Query, "limit");
                 if (!String.IsNullOrEmpty(limitStr) && int.TryParse(limitStr, out int limit)) query.PageSize = limit;
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<ArmadaEvent> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Events.EnumerateAsync(q), (t, q) => _database.Events.EnumerateAsync(t, q), (t, u, q) => _database.Events.EnumerateAsync(t, u, q)).ConfigureAwait(false);

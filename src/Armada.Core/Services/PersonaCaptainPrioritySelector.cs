@@ -22,10 +22,15 @@ namespace Armada.Core.Services
             if (persona == null) throw new ArgumentNullException(nameof(persona));
             if (!Enum.IsDefined(persona.PriorityAvailability)) return "PriorityAvailability is invalid";
             if (!Enum.IsDefined(persona.PriorityExhaustion)) return "PriorityExhaustion is invalid";
-            for (int index = 0; index < persona.CaptainPriorities.Count; index++)
+            return ValidateMatchers(persona.CaptainPriorities, "CaptainPriorities") ?? ValidateMatchers(persona.EscalationLadder, "EscalationLadder");
+        }
+
+        private static string? ValidateMatchers(List<PersonaCaptainPriority> matchers, string name)
+        {
+            for (int index = 0; index < matchers.Count; index++)
             {
-                PersonaCaptainPriority? priority = persona.CaptainPriorities[index];
-                string field = "CaptainPriorities[" + index + "]";
+                PersonaCaptainPriority? priority = matchers[index];
+                string field = name + "[" + index + "]";
                 if (priority == null) return field + " must not be null";
                 if (priority.Runtime.HasValue && !Enum.IsDefined(priority.Runtime.Value)) return field + ".Runtime is invalid";
                 if (priority.MinimumTier.HasValue && !Enum.IsDefined(priority.MinimumTier.Value)) return field + ".MinimumTier is invalid";

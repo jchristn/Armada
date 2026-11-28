@@ -402,20 +402,19 @@ namespace Armada.Server
                 }).ToList()
                 : new List<MissionDescription> { new MissionDescription(title, description) { OwnedPaths = drafted.Count == 1 && drafted[0].OwnedPaths.Count > 0 ? drafted[0].OwnedPaths : null } };
 
-            Voyage voyage = await _Admiral.DispatchVoyageAsync(
-                title,
-                "Created from planning session " + session.Id,
-                session.VesselId,
-                missions,
-                session.PipelineId,
-                session.SelectedPlaybooks,
-                null,
-                null,
-                token).ConfigureAwait(false);
-
-            voyage.SourcePlanningSessionId = session.Id;
-            voyage.SourcePlanningMessageId = sourceMessage.Id;
-            voyage = await _Database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
+            // The voyage description is the drafted objective: Architect slices give it to every Worker as the overall
+            // objective. The planning session is linked through SourcePlanningSessionId, not through this text.
+            Voyage voyage = await _Admiral.CreateVoyageAsync(null, new VoyageCreationRequest
+            {
+                Title = title,
+                Description = description,
+                VesselId = session.VesselId,
+                Missions = missions,
+                PipelineId = session.PipelineId,
+                SelectedPlaybooks = session.SelectedPlaybooks ?? new List<SelectedPlaybook>(),
+                SourcePlanningSessionId = session.Id,
+                SourcePlanningMessageId = sourceMessage.Id
+            }, token).ConfigureAwait(false);
 
             _WebSocketHub?.BroadcastToTenant(
                 session.TenantId,
@@ -808,7 +807,7 @@ namespace Armada.Server
                     prompt = InlinePromptFile(prompt, promptFilePath);
                 TaskCompletionSource<int?> exitSource = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
                 object outputLock = new object();
-                StringBuilder output = new StringBuilder();
+                BoundedTextBuffer output = new BoundedTextBuffer(_MaxPlanningOutputChars);
                 // Turn telemetry is recorded by the same component as Ask Armada turns, on the monotonic clock: a
                 // wall-clock difference grows by however long the host slept during the turn (or goes negative on a
                 // backward NTP step).
@@ -868,11 +867,10 @@ namespace Armada.Server
                             // Mux assistant_text and Claude text_delta events are partial tokens: append raw
                             // (no line breaks) so the streamed reply reads naturally.
                             output.Append(delta);
-                            BoundedTextBuffer.Trim(output, _MaxPlanningOutputChars);
                         }
                         else
                         {
-                            BoundedTextBuffer.AppendLine(output, delta, _MaxPlanningOutputChars);
+                            output.AppendLine(delta);
                         }
                         updatedContent = output.ToString();
                     }
@@ -1228,7 +1226,7 @@ namespace Armada.Server
             if (runtime is RemoteAgentRuntime)
                 prompt = InlinePromptFile(prompt, promptFilePath);
             TaskCompletionSource<int?> exitSource = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            StringBuilder output = new StringBuilder();
+            BoundedTextBuffer output = new BoundedTextBuffer(_MaxPlanningOutputChars);
             object outputLock = new object();
             int? processId = null;
             string? providerFailure = null;
@@ -1249,7 +1247,6 @@ namespace Armada.Server
                         lock (outputLock)
                         {
                             output.Append(piText);
-                            BoundedTextBuffer.Trim(output, _MaxPlanningOutputChars);
                         }
                     }
                     return;
@@ -1273,7 +1270,7 @@ namespace Armada.Server
                     {
                         lock (outputLock)
                         {
-                            BoundedTextBuffer.AppendLine(output, openCodeText!, _MaxPlanningOutputChars);
+                            output.AppendLine(openCodeText!);
                         }
                     }
                     return;
@@ -1281,7 +1278,7 @@ namespace Armada.Server
 
                 lock (outputLock)
                 {
-                    BoundedTextBuffer.AppendLine(output, line, _MaxPlanningOutputChars);
+                    output.AppendLine(line);
                 }
             };
             runtime.OnProcessExited += (processId, exitCode) => exitSource.TrySetResult(exitCode);

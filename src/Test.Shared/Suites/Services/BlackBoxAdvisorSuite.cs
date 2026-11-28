@@ -57,7 +57,7 @@ namespace Test.Shared.Suites.Services
                         }
                         if (p.Steps.Any(s => s.Action != null)) AssertNotNull(p.Action, "path action");
                     }
-                    AssertTrue(a.Summary != null && a.Summary.Length > 20 && !a.Summary.Contains('—'), "summary");
+                    AssertTrue(a.Summary != null && a.Summary.Length > 20 && !a.Summary.Contains('\u2014'), "summary");
                     BlackBoxResilience? res = a.Resilience;
                     AssertNotNull(res, g.RuleId + " resilience section");
                     if (res!.InScope)
@@ -266,7 +266,7 @@ namespace Test.Shared.Suites.Services
                 AssertContains("Same failure in the last 30 days: 4", brief, "occurrences");
                 AssertContains("retry_landing", brief, "MCP command");
                 AssertContains("## Your answer", brief);
-                AssertFalse(brief.Contains('—'), "no em-dashes");
+                AssertFalse(brief.Contains('\u2014'), "no em-dashes");
                 return Task.CompletedTask;
             }));
 

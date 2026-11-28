@@ -32,7 +32,7 @@ namespace Armada.Helm.Commands
             AnsiConsole.MarkupLine("[bold dodgerblue1]Admiral Server[/]");
             AnsiConsole.WriteLine();
 
-            // Check if already running (bypass EnsureServerAsync — just probe directly)
+            // Check if already running (bypass EnsureServerAsync: just probe directly)
             try
             {
                 using HttpClient probeClient = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
@@ -45,7 +45,7 @@ namespace Armada.Helm.Commands
             }
             catch
             {
-                // Not running — proceed to start
+                // Not running: proceed to start
             }
 
             // Find the server: an installed one first (next to the CLI, in the tool store, or armada-server on the

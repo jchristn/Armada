@@ -565,6 +565,71 @@ Repeated failures of the same kind share a fingerprint: `POST /api/v1/blackbox/f
 `list_blackbox_hotspots`) the directories that keep conflicting. Storage, retention and garbage collection are in
 [Black box retention and storage](#black-box-retention-and-storage); the full guide is [BLACKBOX.md](BLACKBOX.md).
 
+## Reliability settings added in 1.5.0
+
+Armada 1.5.0 adds a handful of server settings that decide how hard it works to rescue a mission before giving up, and
+how it picks captains when open and frontier models share a pipeline. Every one of them has a default that keeps a
+mixed pipeline running without tuning, so the usual reason to touch them is a specific symptom: missions that escalate
+too eagerly, a merge queue that fails on a busy branch, or a small-context model that gets a prompt it cannot hold.
+
+All of them are in `settings.json`, in the runtime settings API (`GET` and `PUT /api/v1/settings`), and on the
+dashboard Settings page under Reliability and Routing. They apply live. The two prompt-variant thresholds and
+`TimeoutScaleReferenceTokensPerSecond` reject an out-of-range value with `400`; the others are clamped into range.
+
+| Setting | Default | Range | Effect |
+|---|---|---|---|
+| `UnclassifiedResumeLimit` | 1 | 0 to 3 | In-place resumes after an `Unclassified` exit (non-zero, no recognized provider error) before the mission escalates. Never more than `MaxRecoveryAttempts` |
+| `JudgeReworkRounds` | 2 | 1 to 5 | Automatic Judge rework rounds for one Worker slice before Armada tries another Worker captain and then stops |
+| `MaxEscalations` | 2 | 0 to 5 | Hops one mission may take up its persona's escalation ladder, or to a strictly higher tier without a ladder. 0 turns automatic escalation off |
+| `EscalateOnOpenEndpointBreaker` | false | | Escalates a transient failure at once when the captain's endpoint circuit breaker is open, instead of riding out the outage on resumes |
+| `TimeoutScaleReferenceTokensPerSecond` | 30 | 0 to 1000 | Reference speed for scaling the timeouts of slow models; see [Per-model timeouts](#per-model-timeouts-and-endpoint-concurrency). 0 turns scaling off |
+| `PromptVariantCompactMaxContextTokens` | 32768 | 0 to 2097152 | Served context at or below which a mission gets the Compact prompt when nothing else picks a variant. 0 turns the automatic choice off |
+| `PromptVariantLeanMaxContextTokens` | 65536 | 0 to 2097152 | The same for the Lean prompt, checked after the Compact threshold |
+| `MergeQueueRequeueLimit` | 3 | 0 to 10 | Times a push refused because the target branch moved is retried from a fresh fetch, and times a lost landing handoff is enqueued again. 0 fails at once, as 1.4.0 did |
+| `MergeQueueBatchSize` | 1 | 1 to 20 | Entries of one vessel and target branch merged, verified and pushed together. 1 is off; a failing batch is split in half until the bad entry is found |
+| `MergeQueueLeaseSeconds` | 900 | 5 to 14400 | Lifetime of the merge queue's processing lease, renewed before every entry |
+| `AcceptLegacyMissionMarkers` | true | | Accepts an Architect plan written as `[ARMADA:MISSION]` markers, with a warning each time. Deprecated; removed in 2.0 |
+| `OutputRepairNormalizerCaptainId` | null | | Captain that runs the format-only repair turn. Null uses the captain that wrote the output |
+| `RoutingData.RankByOutcomes` | false | | Ranks the captains of one tier by their model's recorded results for the persona. Until a model has `MinimumSamples` results, the 1.4.0 order applies. Off by default because it slows dispatch: in the 100-captain admission benchmark p50 went from 1.47 s to 1.90 s and p95 from 1.76 s to 3.07 s |
+| `RoutingData.SuggestTiers` | false | | Raises a `TierSuggestion` alert in Needs You when outcome data suggests a different tier for a model profile. Never applied without an administrator |
+| `RoutingData.MinimumSamples` | 20 | 5 to 1000 | Attempts a model needs for a persona before its results rank it or suggest a tier |
+| `RoutingData.HalfLifeDays` | 14 | 1 to 365 | Days after which an attempt counts half as much as a new one |
+
+`RoutingData` is one object: a `PUT` that includes it replaces all four values, so send the whole object.
+
+Three related knobs live on each model endpoint's inference options rather than on the server, because they depend on
+the model server: `streamingMode` (`Automatic`, `On`, `Off`; `Automatic` streams OpenAI-compatible and Ollama
+endpoints), `toolOutputWindowPercent` (default 12, 1 to 50: the share of a known context window one `read_file` or
+process result may fill) and `repeatedToolCallLimit` (default 3, 2 to 20: identical consecutive tool calls before a
+corrective note; twice the limit ends the run as degenerate output). Per-model recovery, timeouts, rendering and tier
+are set on the model profile, described in [REST_API.md](REST_API.md#model-profiles).
+
+## Per-model timeouts and endpoint concurrency
+
+The health check takes four timeouts from the captain's model profile when it has one (RS-8.8). Each value comes from
+the profile override if one is set. If not, it is scaled from the profile's measured speed, or it is the global setting.
+
+| Value | Global setting (default) | Profile override range | Effect |
+|---|---|---|---|
+| Stall threshold | `StallThresholdMinutes` (10) | 1 to 240 | Minutes without output before the captain is stalled and recovered |
+| Tool-wait hard limit | `ToolWaitHardLimitMinutes` (60) | 1 to 1440 | Minutes a quiet runtime tool may run before the stall check applies anyway |
+| Maximum runtime | `MaxMissionRuntimeMinutes` (240; 0 is no cap) | 1 to 2880 | Minutes before a mission is failed as a runaway; a profile cannot turn on a cap that is 0 |
+| First-output time | the stall threshold | 1 to 240 | Replaces the stall threshold until the mission's first output |
+
+`TimeoutScaleReferenceTokensPerSecond` sets the reference rate for scaling. The default is 30, the range is 0 to 1000,
+and 0 turns scaling off. A profile measured slower than the reference gets each unset value multiplied by the reference
+divided by its rate, at most four times. A slow first output measured by the Speed probe raises the first-output time
+to four times that measurement. No value goes above four times its global setting. Profile reads return
+`effectiveTimeouts` with each value and its source. After an in-place stall recovery relaunch, the stall threshold
+applies from the relaunch on, not the first-output time.
+
+An endpoint's `InferenceOptions.MaxConcurrentMissions` is counted per concurrency key (RS-8.9). The key is the scope,
+the normalized URL and the model. The URL is normalized: scheme and host are lower case, the default port and trailing
+slashes are dropped, a trailing `/v1` is dropped, and every loopback name is read as `localhost`. A loopback URL is
+scoped to the host that calls it, which is the Harbor of the mission's dock or the Admiral. Any other URL is shared
+from every host. Admission checks the cap against the Admiral's host while choosing a captain, then checks it again
+against the placed Harbor before the claim. Endpoint circuit breakers use the Admiral-host key.
+
 ## Troubleshooting
 
 **The server will not start and the log says the address is in use.** Another process holds 7890 or 7891, often a

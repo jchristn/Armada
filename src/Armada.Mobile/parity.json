@@ -393,6 +393,22 @@
     },
     {
       "kind": "route",
+      "key": "/model-profiles",
+      "status": "implemented",
+      "mobile": "src/app/(app)/(work)/model-profiles/index.tsx",
+      "workstream": "W0.5",
+      "notes": "redirect to /captains?tab=profiles"
+    },
+    {
+      "kind": "route",
+      "key": "/model-profiles/:id",
+      "status": "implemented",
+      "mobile": "src/app/(app)/(work)/model-profiles/[id].tsx",
+      "workstream": "W3.2",
+      "notes": "ModelProfileDetailScreen, read-only: served context and source, configured or probed tools and MCP, tier and suggestion, recovery policy and timeouts in effect, rendering, measured speed"
+    },
+    {
+      "kind": "route",
       "key": "/more",
       "status": "extension",
       "mobile": "src/app/(app)/(more)/more.tsx",
@@ -802,10 +818,10 @@
     {
       "kind": "tab",
       "key": "Activity:concurrency",
-      "status": "planned",
-      "mobile": "/activity?source=concurrency",
+      "status": "implemented",
+      "mobile": "src/screens/activity/ConcurrencyTab.tsx",
       "workstream": "W4.3",
-      "notes": "Concurrency"
+      "notes": "slot wait tiles, wait time by cause, busiest buckets, per-gate totals; window and vessel filters"
     },
     {
       "kind": "tab",
@@ -865,6 +881,14 @@
     },
     {
       "kind": "tab",
+      "key": "CaptainsHub:battery-runs",
+      "status": "implemented",
+      "mobile": "src/screens/captains/BatteryRunsTab.tsx",
+      "workstream": "W3.2",
+      "notes": "paged runs with status filter; row opens the captain; admins cancel from the row menu"
+    },
+    {
+      "kind": "tab",
       "key": "CaptainsHub:captains",
       "status": "implemented",
       "mobile": "src/screens/captains/CaptainsTab.tsx",
@@ -878,6 +902,22 @@
       "mobile": "src/screens/captains/DocksTab.tsx",
       "workstream": "W3.2",
       "notes": "paged list with delete and bulk delete; rows open /docks/:id (W2)"
+    },
+    {
+      "kind": "tab",
+      "key": "CaptainsHub:profiles",
+      "status": "implemented",
+      "mobile": "src/screens/captains/ModelProfilesTab.tsx",
+      "workstream": "W3.2",
+      "notes": "paged list with search; rows open /model-profiles/:id (detail beside the list on tablets)"
+    },
+    {
+      "kind": "tab",
+      "key": "CaptainsHub:reliability",
+      "status": "implemented",
+      "mobile": "src/screens/captains/ReliabilityTab.tsx",
+      "workstream": "W3.2",
+      "notes": "summary per model and persona with window, filters, sort, include evaluations, totals, and the latest gate report"
     },
     {
       "kind": "tab",
@@ -1302,6 +1342,14 @@
       "mobile": "useAskConversation",
       "workstream": "W1.1",
       "notes": "Ask Armada (shared lib/askConversation, askThreads, askEvents)"
+    },
+    {
+      "kind": "api",
+      "key": "cancelBatteryRun",
+      "status": "implemented",
+      "mobile": "BatteryRunsTab",
+      "workstream": "W4.3",
+      "notes": "row menu, with confirmation"
     },
     {
       "kind": "api",
@@ -2706,10 +2754,10 @@
     {
       "kind": "api",
       "key": "getConcurrencyMetrics",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "ConcurrencyTab",
       "workstream": "W2.3",
-      "notes": "Voyages"
+      "notes": "Activity > Concurrency"
     },
     {
       "kind": "api",
@@ -2817,6 +2865,14 @@
     },
     {
       "kind": "api",
+      "key": "getGateReport",
+      "status": "implemented",
+      "mobile": "ReliabilityTab",
+      "workstream": "W4.3",
+      "notes": "latest gate report on the Reliability tab"
+    },
+    {
+      "kind": "api",
       "key": "getHarbor",
       "status": "implemented",
       "mobile": "src/screens/configuration/HarborsTab",
@@ -2889,6 +2945,14 @@
     },
     {
       "kind": "api",
+      "key": "getMissionAttempts",
+      "status": "implemented",
+      "mobile": "MissionAttemptsSection",
+      "workstream": "W2.2",
+      "notes": "Mission detail attempts timeline (RS-12.16)"
+    },
+    {
+      "kind": "api",
       "key": "getMissionBlackBox",
       "status": "implemented",
       "mobile": "src/screens/blackbox/BlackBoxPanel.tsx",
@@ -2954,10 +3018,10 @@
     {
       "kind": "api",
       "key": "getMissionWaits",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MissionWaitsSection",
       "workstream": "W2.3",
-      "notes": "Voyages"
+      "notes": "Mission detail wait time"
     },
     {
       "kind": "api",
@@ -2974,6 +3038,14 @@
       "mobile": "",
       "workstream": "W4.3",
       "notes": "the mobile app has no captain or model endpoint evaluation screen: the dashboard runs Quick probe runs from the captain page and the endpoint health dialog (MODEL_HETEROGENEITY.md Phase 2); the app adds one when evaluation needs it on the go"
+    },
+    {
+      "kind": "api",
+      "key": "getModelProfile",
+      "status": "implemented",
+      "mobile": "ModelProfileDetailScreen",
+      "workstream": "W4.3",
+      "notes": "Model profile detail"
     },
     {
       "kind": "api",
@@ -3078,6 +3150,14 @@
       "mobile": "src/screens/delivery/ReleasesTab.tsx, ReleaseDetail.tsx",
       "workstream": "W4.1",
       "notes": "Releases"
+    },
+    {
+      "kind": "api",
+      "key": "getReliabilitySummary",
+      "status": "implemented",
+      "mobile": "ReliabilityTab",
+      "workstream": "W4.3",
+      "notes": "Captains hub Reliability tab"
     },
     {
       "kind": "api",
@@ -3258,10 +3338,10 @@
     {
       "kind": "api",
       "key": "getVesselConcurrency",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "VesselConcurrencySection",
       "workstream": "W2.3",
-      "notes": "Voyages"
+      "notes": "Vessel detail concurrency"
     },
     {
       "kind": "api",
@@ -3354,10 +3434,10 @@
     {
       "kind": "api",
       "key": "getVoyageTree",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "VoyageTreeSection",
       "workstream": "W2.3",
-      "notes": "Voyages"
+      "notes": "Voyage detail mission tree"
     },
     {
       "kind": "api",
@@ -3521,6 +3601,14 @@
     },
     {
       "kind": "api",
+      "key": "listBatteryRuns",
+      "status": "implemented",
+      "mobile": "BatteryRunsTab",
+      "workstream": "W4.3",
+      "notes": "Captains hub Battery Runs tab"
+    },
+    {
+      "kind": "api",
       "key": "listBlackBox",
       "status": "implemented",
       "mobile": "src/screens/blackbox/BlackBoxListScreen.tsx",
@@ -3641,6 +3729,14 @@
     },
     {
       "kind": "api",
+      "key": "listGateReports",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W4.3",
+      "notes": "No dashboard screen lists stored gate reports either (the Reliability tab reads only the latest, as mobile does); the history stays on REST, MCP and the CLI."
+    },
+    {
+      "kind": "api",
       "key": "listHarborJobs",
       "status": "not-applicable",
       "mobile": "",
@@ -3705,6 +3801,14 @@
     },
     {
       "kind": "api",
+      "key": "listMissionSubmissions",
+      "status": "implemented",
+      "mobile": "MissionFindingsSection",
+      "workstream": "W2.2",
+      "notes": "Mission detail submitted results and findings (RS-12.16)"
+    },
+    {
+      "kind": "api",
       "key": "listMissionSummaries",
       "status": "implemented",
       "mobile": "MissionsList",
@@ -3734,6 +3838,14 @@
       "mobile": "",
       "workstream": "W4.3",
       "notes": "the mobile app has no captain or model endpoint evaluation screen: the dashboard runs Quick probe runs from the captain page and the endpoint health dialog (MODEL_HETEROGENEITY.md Phase 2); the app adds one when evaluation needs it on the go"
+    },
+    {
+      "kind": "api",
+      "key": "listModelProfiles",
+      "status": "implemented",
+      "mobile": "ModelProfilesTab",
+      "workstream": "W4.3",
+      "notes": "Captains hub Model Profiles tab"
     },
     {
       "kind": "api",
@@ -4737,6 +4849,14 @@
     },
     {
       "kind": "api",
+      "key": "updateModelProfile",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W4.3",
+      "notes": "Mobile shows model profiles read-only (RS-12.16); tier, recovery, and timeout edits stay on the dashboard"
+    },
+    {
+      "kind": "api",
       "key": "updateObjective",
       "status": "not-applicable",
       "mobile": "",
@@ -5025,6 +5145,22 @@
     },
     {
       "kind": "event",
+      "key": "mission.escalated",
+      "status": "implemented",
+      "mobile": "MissionAttemptsSection",
+      "workstream": "W1.4",
+      "notes": "reloads the mission attempts timeline (ATTEMPT_EVENTS)"
+    },
+    {
+      "kind": "event",
+      "key": "mission.repaired",
+      "status": "implemented",
+      "mobile": "MissionAttemptsSection",
+      "workstream": "W1.4",
+      "notes": "reloads the mission attempts timeline (ATTEMPT_EVENTS)"
+    },
+    {
+      "kind": "event",
       "key": "objective-refinement-session.applied",
       "status": "implemented",
       "mobile": "src/screens/objectives/useRefinement.ts",
@@ -5150,6 +5286,14 @@
       "mobile": "NotificationContext",
       "workstream": "W0.6",
       "notes": "notification center and toast (shared lib/notificationEvents)"
+    },
+    {
+      "kind": "setting",
+      "key": "settings.acceptLegacyMissionMarkers",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
+      "workstream": "W4.4",
+      "notes": ""
     },
     {
       "kind": "setting",
@@ -5378,6 +5522,14 @@
     {
       "kind": "setting",
       "key": "settings.mcpPort",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.outputRepairNormalizerCaptainId",
       "status": "implemented",
       "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",

@@ -68,7 +68,7 @@ Harbor to server:
 | `started` | `HarborStarted` | a launched process started (reports host PID) |
 | `output` | `HarborOutput` | a chunk of stdout or stderr for a job |
 | `activity` | `HarborActivity` | the latest activity of a job that asked for structured progress (a tool call, text, or reasoning) |
-| `exited` | `HarborExited` | a captain process exited (exit code, plus optional `durationMs` and `timeToFirstTokenMs`) |
+| `exited` | `HarborExited` | a captain process exited (exit code, plus optional `durationMs`, `timeToFirstTokenMs`, `discoveredContextLength` and `discoveredContextSource`) |
 | `gitResult` | `HarborGitResult` | the result of a git/gh request |
 | `dockResult` | `HarborDockResult` | the result of a dock request |
 | `fileResult` | `HarborFileResult` | the result of a file request |
@@ -88,7 +88,7 @@ Connect and register:
 
 ```
 Harbor -> handshake { harborId, name, protocolVersion, osPlatform, architecture, capabilities, maxConcurrentJobs }
-Admiral -> handshakeAck { accepted: true, mcpBaseUrl }
+Admiral -> handshakeAck { accepted: true, mcpBaseUrl, missingCapabilities }
 Harbor -> heartbeat { liveJobIds: [], sequence: 1, lastRoundTripMs: null, reconnectCount: 0, lastReconnectUtc: null }
 Admiral -> heartbeatAck { sequence: 1 }
 Harbor -> heartbeat { liveJobIds: [], sequence: 2, lastRoundTripMs: 14, reconnectCount: 0, lastReconnectUtc: null }
@@ -130,8 +130,18 @@ Harbor  -> activity { jobId, activity }                (repeated, only with stru
 Admiral -> stdin   { jobId, data }                      (optional)
 Admiral -> kill    { jobId, gracefulTimeoutMs }         (optional)
 Harbor  -> output  { jobId, stream: "FinalMessage", data }   (once, only when returnFinalMessage was set)
-Harbor  -> exited  { jobId, exitCode, durationMs, timeToFirstTokenMs }
+Harbor  -> exited  { jobId, exitCode, durationMs, timeToFirstTokenMs, discoveredContextLength, discoveredContextSource }
 ```
+
+Context discovery (`api-context-discovery-v1`, RS-7.8): for an API captain whose `inferenceEndpoint.inferenceOptions` sets
+no `contextLength`, a Harbor that advertises this capability reads the window from the model server on its own host before
+the first turn (Ollama `/api/ps`, then `/api/show` `num_ctx`; `/v1/models` `max_model_len` for an OpenAI-compatible server),
+uses it for compaction and the context-limit stop, and returns it in `exited.discoveredContextLength` with
+`discoveredContextSource`. `inferenceEndpoint.discoveredContextLength` and `discoveredContextSource` carry the window the
+Admiral already knows; the Harbor uses it when its own read finds nothing, and does not report it back. The Admiral stores a
+reported window on the endpoint only from a Harbor that advertised the capability, and never over a configured
+`contextLength`. All four fields are optional and additive; a Harbor that predates them ignores them and runs without a
+window.
 
 The `launch` fields after `mcpSessionToken` were added for interactive launches (captain chat, Ask Armada turns,
 planning, refinement). They are additive and optional: each defaults to `false`, a Harbor that predates them ignores
@@ -186,6 +196,45 @@ disconnected when its link closes. `kill.gracefulTimeoutMs` defaults to 10000. A
 Harbor that cannot launch (for example a build without a job runner, a CLI that is not installed on the Harbor host, or
 a working directory that does not exist there) answers with `error { jobId, message }`; the Admiral fails that launch at
 once with the Harbor's message instead of waiting for `started`.
+
+### API captain capability flags
+
+A Harbor that runs jobs also advertises one flag per captain runtime behavior that runs on the Harbor, each a capability
+with `available: true` (names in `HarborCapabilityFlags`). A Harbor that lacks a flag runs the earlier behavior, and
+the Admiral falls back to it: the launch still goes to that Harbor and nothing new is required of it.
+
+| flag | behavior | advertised |
+|------|----------|------------|
+| `api-inference-streaming-v1` | streams API captain responses with idle and first-response deadlines | since 1.4.0 |
+| `api-submit-tool-v1` | honors the native submit tool for a stage's structured output (`ARMADA_SUBMIT_TOOL`) | 1.5.0 |
+| `api-tool-scope-v1` | limits scoped MCP tools to the persona's scope (`ARMADA_MCP_TOOL_SCOPE`) | 1.5.0 |
+| `api-completion-line-v1` | treats a missing completion line as incomplete (`ARMADA_REQUIRES_COMPLETION_LINE`) | 1.5.0 |
+| `cli-final-message-hygiene-v1` | CLI runtimes clean their final message: OpenCode JSON final message and stdout error events, no `--dir` for OpenCode 2, reasoning stripped | 1.5.0 |
+| `api-text-tool-call-recovery-v1` | recovers tool calls a model wrote as text and runs them; reports `unknown_tool` with the available names for a name that does not exist | 1.5.0 |
+| `api-malformed-call-retry-v1` | corrects instead of resending a request that failed on a malformed tool call or a repeat loop | 1.5.0 |
+| `api-repetition-guard-v1` | notes repeated identical tool calls and stops the run at twice `repeatedToolCallLimit` | 1.5.0 |
+| `api-reasoning-hygiene-v1` | strips reasoning from the final message and history | 1.5.0 |
+| `api-tool-limits-scaled-v1` | scales tool output limits to the context window | 1.5.0 |
+| `api-edit-encoding-preserve-v1` | keeps a file's byte order mark and line endings on edits | 1.5.0 |
+| `api-edit-line-prefix-guard-v1` | rejects edits and writes whose text carries `read_file` line-number prefixes | 1.5.0 |
+| `api-context-discovery-v1` | discovers a model's served context window on the Harbor | 1.5.0 |
+| `api-model-warmup-v1` | loads an Ollama model with `keep_alive` before the first turn | 1.5.0 |
+
+Reserved flags are declared but not advertised until their behavior ships. The Admiral expects every flag its own
+Harbor build advertises. For a Harbor that lacks one, `handshakeAck.missingCapabilities` lists the missing names (null
+when none are missing; an older Harbor ignores the field), the Harbor record's `missingCapabilities` and
+`updateRecommended` (computed, not stored) report it on REST, and a captain whose exclusive session or active mission
+runs on such a Harbor reads `harborUpdateRecommended: true`. The dashboard, TUI, and mobile app show "Harbor update
+recommended" on the Harbor and the captain. The Harbor app shows it in its connection detail and as an update banner
+with a "How to update" link, lists its capability flags in plain language (hover the "Harbor features" line for each
+flag and whether the Admiral expects it), and shows the context window it discovered for each local endpoint and model
+(`api-context-discovery-v1`).
+
+Streaming default: an API captain endpoint whose `inferenceOptions.streamingMode` is `Automatic` streams on
+OpenAI-compatible, Ollama, and Ollama Cloud endpoints. For a Harbor launch the Admiral resolves `Automatic` before it
+sends the endpoint: on when the Harbor advertises `api-inference-streaming-v1`, off otherwise. It sends the result as
+`streamingMode` and as `streaming`, so a 1.4.0 Harbor applies it. `On` or `Off` set by the operator always wins; `On`
+still requires a Harbor with the flag.
 
 Delegate a git operation:
 

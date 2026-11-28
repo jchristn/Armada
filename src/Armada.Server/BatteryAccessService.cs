@@ -16,7 +16,7 @@ namespace Armada.Server
     /// admin sees every tenant). Captain sessions are refused. Errors are typed exceptions the route and tool layers map
     /// to 400/403/404.
     /// </summary>
-    public partial class BatteryAccessService
+    public class BatteryAccessService
     {
         #region Private-Members
 
@@ -24,6 +24,15 @@ namespace Armada.Server
         private readonly DatabaseDriver _Database;
         private readonly BatteryRunService _Service;
         private readonly LoggingModule _Logging;
+
+        #endregion
+
+        #region Public-Members
+
+        /// <summary>
+        /// Battery pack authoring.
+        /// </summary>
+        public BatteryPackAccessService Packs { get; }
 
         #endregion
 
@@ -40,6 +49,7 @@ namespace Armada.Server
         {
             _Database = database ?? throw new ArgumentNullException(nameof(database));
             _Service = service ?? throw new ArgumentNullException(nameof(service));
+            Packs = new BatteryPackAccessService(_Service);
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
         }
 
@@ -104,8 +114,21 @@ namespace Armada.Server
             if (!String.IsNullOrWhiteSpace(captain.ModelEndpointId))
                 endpoint = await _Database.ModelEndpoints.ReadAsync(captain.ModelEndpointId!, token).ConfigureAwait(false);
 
+            BatteryRunOptions? options = null;
+            if (!String.IsNullOrWhiteSpace(request.Pipeline))
+            {
+                // Every staffed captain must be visible to the caller, as the primary captain is.
+                foreach (CaptainAssignmentOverride entry in request.CaptainOverrides ?? new List<CaptainAssignmentOverride>())
+                {
+                    Captain? staffed = String.IsNullOrWhiteSpace(entry.CaptainId) ? null : await _Database.Captains.ReadAsync(entry.CaptainId!.Trim(), token).ConfigureAwait(false);
+                    if (staffed == null || !CanSeeTenant(caller, staffed.TenantId)) throw new KeyNotFoundException("Captain not found for persona " + entry.Persona + ".");
+                }
+
+                options = new BatteryRunOptions { Pipeline = request.Pipeline.Trim(), CaptainOverrides = request.CaptainOverrides };
+            }
+
             BatteryRun run = await _Service.StartAsync(captain, endpoint, request.Packs, request.RunCount, request.Seed,
-                request.CreateFixtureVessel, caller.TenantId, caller.UserId, request.PromptVariant, token).ConfigureAwait(false);
+                request.CreateFixtureVessel, caller.TenantId, caller.UserId, request.PromptVariant, options, token).ConfigureAwait(false);
             _Logging.Info(_Header + "battery run " + run.Id + " of captain " + captain.Id + " started by " + caller.UserId);
             return run;
         }
@@ -131,6 +154,56 @@ namespace Armada.Server
         }
 
         /// <summary>
+        /// One page of the runs visible to the caller, newest first: a global admin sees every tenant (query.TenantId
+        /// filters), everyone else their own tenant. Paged in the database; pageSize 1 to 1000 (default 25).
+        /// </summary>
+        /// <param name="caller">Caller.</param>
+        /// <param name="query">Filters (captain, status) and paging; null uses the defaults.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of runs, without their per-task results.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when caller is null.</exception>
+        /// <exception cref="UnauthorizedAccessException">Thrown for anonymous callers and captain sessions.</exception>
+        public async Task<EnumerationResult<BatteryRun>> EnumerateRunsAsync(AuthContext caller, BatteryRunQuery? query, CancellationToken token = default)
+        {
+            RequirePerson(caller);
+            BatteryRunQuery source = query ?? new BatteryRunQuery();
+            BatteryRunQuery effective = new BatteryRunQuery
+            {
+                TenantId = caller.IsAdmin ? (String.IsNullOrWhiteSpace(source.TenantId) ? null : source.TenantId.Trim()) : caller.TenantId,
+                CaptainId = String.IsNullOrWhiteSpace(source.CaptainId) ? null : source.CaptainId.Trim(),
+                Status = source.Status,
+                PageNumber = Math.Max(1, source.PageNumber),
+                PageSize = Math.Clamp(source.PageSize, 1, 1000)
+            };
+            return await _Service.EnumerateRunsAsync(effective, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Cancel a visible run: no further task is dispatched, its open mission is cancelled (releasing its dock and
+        /// captain), and the run ends Cancelled with what finished kept. Cancelling a finished run returns it unchanged.
+        /// Needs a global admin or a tenant admin of the run's tenant.
+        /// </summary>
+        /// <param name="caller">Caller.</param>
+        /// <param name="runId">Run identifier.</param>
+        /// <param name="reason">Reason recorded on the run, or null.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The run after the stop was requested (Cancelled, or still Running while its open mission stops).</returns>
+        /// <exception cref="ArgumentNullException">Thrown when caller is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when the reason is longer than 500 characters.</exception>
+        /// <exception cref="KeyNotFoundException">Thrown when the run does not exist or is in another tenant.</exception>
+        /// <exception cref="UnauthorizedAccessException">Thrown when the caller is not an admin, or is a captain session.</exception>
+        public async Task<BatteryRun> CancelRunAsync(AuthContext caller, string? runId, string? reason, CancellationToken token = default)
+        {
+            BatteryRun run = await GetRunAsync(caller, runId, token).ConfigureAwait(false);
+            if (!caller.IsAdmin && !caller.IsTenantAdmin) throw new UnauthorizedAccessException("Only an admin can cancel a battery run.");
+            if (reason != null && reason.Length > 500) throw new ArgumentException("reason must be at most 500 characters.");
+            BatteryRun? stopped = await _Service.CancelAsync(run.Id, reason, TimeSpan.FromSeconds(10), token).ConfigureAwait(false);
+            if (stopped == null) throw new KeyNotFoundException("Battery run not found.");
+            _Logging.Info(_Header + "battery run " + run.Id + " cancel requested by " + caller.UserId + "; status " + stopped.Status);
+            return stopped;
+        }
+
+        /// <summary>
         /// One page of a visible run's per-task results (grader evidence and the captain's raw output), paged in the
         /// database. query.Status filters by outcome.
         /// </summary>
@@ -153,7 +226,7 @@ namespace Armada.Server
 
         #region Private-Methods
 
-        private static void RequirePerson(AuthContext caller)
+        internal static void RequirePerson(AuthContext caller)
         {
             if (caller == null) throw new ArgumentNullException(nameof(caller));
             if (!caller.IsAuthenticated) throw new UnauthorizedAccessException("Authentication required.");

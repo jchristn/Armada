@@ -7,6 +7,7 @@ import {
   dashboardAskUrl,
   dashboardPageUrl,
   getEntryForAnyId,
+  getMissionAttempts,
   listAllVessels,
   normalizeBaseUrl,
   readHealth,
@@ -26,6 +27,20 @@ async function errorFrom(mock: MockFetch): Promise<unknown> {
 }
 
 describe('host client', () => {
+  it('reads a mission attempt history with the credential, and treats a missing route as no history', async () => {
+    const mock = new MockFetch().on('GET', '/api/v1/missions/msn_1/attempts', { json: { missionId: 'msn_1', tier: 'Mid', escalationCount: 1, attempts: [{ attempt: 1, disposition: 'Escalated' }] } });
+    useMock(mock, { secret: 'tok-1', header: 'Bearer' });
+    const history = await getMissionAttempts('msn_1');
+    assert.strictEqual(history?.tier, 'Mid');
+    assert.strictEqual(history?.attempts.length, 1);
+    assert.strictEqual(mock.requests[0].headers.Authorization, 'Bearer tok-1');
+    mock.on('GET', '/api/v1/missions/msn_2/attempts', { status: 404, json: {} });
+    assert.strictEqual(await getMissionAttempts('msn_2'), undefined);
+    mock.on('GET', '/api/v1/missions/msn_3/attempts', { json: { missionId: 'msn_3' } });
+    assert.deepStrictEqual((await getMissionAttempts('msn_3'))?.attempts, []);
+    await assert.rejects(getMissionAttempts(' '));
+  });
+
   it('sends a bearer token, or the settings API key as X-Api-Key, with every shared-client request', async () => {
     const mock = new MockFetch().on('POST', '/api/v1/blackbox/enumerate', { json: page([]) });
     useMock(mock, { secret: 'tok-1', header: 'Bearer' });

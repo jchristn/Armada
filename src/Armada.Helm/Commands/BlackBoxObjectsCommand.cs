@@ -21,7 +21,7 @@ namespace Armada.Helm.Commands
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             return await RunBlackBoxAsync(settings.Json, async client =>
             {
-                EnumerationResult<BlackBoxObjectSummary>? result = await client.ListBlackBoxObjectsAsync(settings.Id, settings.Page, settings.PageSize, cancellationToken).ConfigureAwait(false);
+                EnumerationResult<BlackBoxObjectSummary>? result = await client.BlackBox.ListObjectsAsync(settings.Id, settings.Page, settings.PageSize, cancellationToken).ConfigureAwait(false);
                 if (settings.Json)
                 {
                     WritePureJson(result);

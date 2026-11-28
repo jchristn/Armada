@@ -91,6 +91,7 @@ namespace Armada.Harbor
         // The link loop itself; shared with a headless start, which runs the same host without this window.
         private readonly HarborLinkHost _Host;
         private string? _LastRuntimeSummary = null;
+        private const string _UpdateHelpUrl = "https://github.com/jchristn/armada/blob/main/docs/HARBOR.md#installing-and-running-the-harbor-app";
         private readonly DispatcherTimer _JobsTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         // Entries logged from any thread wait here; the UI thread takes them in batches (DrainActivity).
         private readonly ConcurrentQueue<HarborLogEntry> _PendingLog = new ConcurrentQueue<HarborLogEntry>();
@@ -125,6 +126,8 @@ namespace Armada.Harbor
             _Host.OnMcp = SetMcp;
             _Host.OnLog = AppendLog;
             _Host.OnRuntimesDetected = ShowRuntimes;
+            _Host.OnCapabilities = ShowCapabilities;
+            _Host.DiscoveredContexts.Changed += ShowDiscoveredContexts;
             _ActivityLog.ShowDetails = _Settings.ShowActivityDetails;
             _LoadingShowDetails = true;
             ShowDetailsBox.IsChecked = _Settings.ShowActivityDetails;
@@ -460,6 +463,44 @@ namespace Armada.Harbor
                 RuntimesText.Text = summary;
                 ToolTip.SetTip(RuntimesText, tip);
             });
+        }
+
+        private void ShowCapabilities(HarborCapabilityReport report)
+        {
+            string? prompt = report.UpdatePrompt;
+            string tip = String.Join(Environment.NewLine, report.Details);
+            Dispatcher.UIThread.Post(() =>
+            {
+                CapabilitiesText.Text = report.Summary;
+                CapabilitiesText.IsVisible = true;
+                ToolTip.SetTip(CapabilitiesText, tip);
+                UpdateText.Text = prompt ?? String.Empty;
+                UpdateBanner.IsVisible = prompt != null;
+            });
+        }
+
+        private void ShowDiscoveredContexts()
+        {
+            List<string> lines = HarborDiscoveredContextLog.Describe(_Host.DiscoveredContexts.Snapshot());
+            string text = lines.Count > 0 ? "Local model context windows: " + String.Join("; ", lines) : String.Empty;
+            Dispatcher.UIThread.Post(() =>
+            {
+                ContextsText.Text = text;
+                ContextsText.IsVisible = lines.Count > 0;
+                ToolTip.SetTip(ContextsText, lines.Count > 0 ? String.Join(Environment.NewLine, lines) : null);
+            });
+        }
+
+        private void OnUpdateHelpClick(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(_UpdateHelpUrl) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                AppendInfo("Could not open " + _UpdateHelpUrl + ": " + ex.Message, HarborLogCategoryEnum.General, HarborLogOutcomeEnum.Failed);
+            }
         }
 
         private void ReportPathImport()

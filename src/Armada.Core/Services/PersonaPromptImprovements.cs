@@ -26,6 +26,15 @@ namespace Armada.Core.Services
 
         internal static IReadOnlyDictionary<string, string> ConcurrencyBriefs { get; } = Load("persona-briefs-v6.json");
 
+        // The briefs before RS-6.1 moved every output contract into StageOutputContract.
+        internal static IReadOnlyDictionary<string, string> ContractBriefs { get; } = Load("persona-briefs-v7.json");
+
+        // The original hardcoded persona defaults, kept only so an untouched install from that release is recognized.
+        internal static IReadOnlyDictionary<string, string> OriginalDefaults { get; } = Load("persona-defaults-v0.json");
+
+        // Earlier built-in contents of other templates, keyed by template name and version.
+        internal static IReadOnlyDictionary<string, string> PreviousTemplates { get; } = Load("progress-signals-previous.json");
+
         internal static string Apply(string name, string content)
         {
             if (!Additions.TryGetValue(name, out string? addition)) return content;
@@ -33,7 +42,7 @@ namespace Armada.Core.Services
             return content + addition;
         }
 
-        private static Dictionary<string, string> Load(string resource = "persona-improvements.json")
+        internal static Dictionary<string, string> Load(string resource = "persona-improvements.json")
         {
             Assembly assembly = typeof(PersonaPromptImprovements).Assembly;
             using Stream stream = assembly.GetManifestResourceStream("Armada.Core.Prompts." + resource)

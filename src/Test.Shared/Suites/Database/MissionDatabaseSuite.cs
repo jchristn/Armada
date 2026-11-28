@@ -40,6 +40,58 @@ namespace Test.Shared.Suites.Database
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
+            cases.Add(CaseAsync("status_scan_since_cutoff", "EnumerateByStatusAsync with updatedSince returns only missions in that status updated at or after the cutoff (RS-10.2)", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+
+                    Mission old = new Mission("Old failure", "desc") { VesselId = prereqs.Vessel.Id, Status = MissionStatusEnum.Failed };
+                    await db.Missions.CreateAsync(old);
+                    await Task.Delay(300);
+                    DateTime cutoff = DateTime.UtcNow;
+                    await Task.Delay(300);
+                    Mission recent = new Mission("Recent failure", "desc") { VesselId = prereqs.Vessel.Id, Status = MissionStatusEnum.Failed };
+                    await db.Missions.CreateAsync(recent);
+                    Mission otherStatus = new Mission("Recent landing failure", "desc") { VesselId = prereqs.Vessel.Id, Status = MissionStatusEnum.LandingFailed };
+                    await db.Missions.CreateAsync(otherStatus);
+
+                    List<Mission> since = await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.Failed, cutoff);
+                    AssertEqual(1, since.Count, "only the recent Failed mission");
+                    AssertEqual(recent.Id, since[0].Id);
+                    AssertEqual(2, (await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.Failed, cutoff.AddHours(-1))).Count, "an earlier cutoff includes both");
+                    AssertEqual(1, (await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.LandingFailed, cutoff)).Count, "status still filters");
+                    AssertEqual(0, (await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.Failed, DateTime.UtcNow.AddMinutes(5))).Count, "a future cutoff returns nothing");
+                }
+            }));
+
+            cases.Add(CaseAsync("status_scan_dispatch_order", "EnumerateByStatusAsync returns missions by priority, then oldest first, with and without a tenant (the dispatcher's order on every provider)", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+                    TenantMetadata tenant = new TenantMetadata("Order " + Guid.NewGuid().ToString("N").Substring(0, 8));
+                    await db.Tenants.CreateAsync(tenant);
+
+                    Mission first = new Mission("First", "desc") { VesselId = prereqs.Vessel.Id, TenantId = tenant.Id, Status = MissionStatusEnum.Pending, Priority = 100 };
+                    await db.Missions.CreateAsync(first);
+                    await Task.Delay(50);
+                    Mission second = new Mission("Second", "desc") { VesselId = prereqs.Vessel.Id, TenantId = tenant.Id, Status = MissionStatusEnum.Pending, Priority = 100 };
+                    await db.Missions.CreateAsync(second);
+                    await Task.Delay(50);
+                    Mission urgent = new Mission("Urgent", "desc") { VesselId = prereqs.Vessel.Id, TenantId = tenant.Id, Status = MissionStatusEnum.Pending, Priority = 1 };
+                    await db.Missions.CreateAsync(urgent);
+
+                    string expected = urgent.Id + "," + first.Id + "," + second.Id;
+                    List<Mission> all = await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending);
+                    AssertEqual(expected, String.Join(",", all.Select(m => m.Id)), "priority first, then oldest first");
+                    List<Mission> scoped = await db.Missions.EnumerateByStatusAsync(tenant.Id, MissionStatusEnum.Pending);
+                    AssertEqual(expected, String.Join(",", scoped.Select(m => m.Id)), "the tenant-scoped scan uses the same order");
+                }
+            }));
+
             cases.Add(CaseAsync("mission_failure_kind_and_wait_flag_round_trip", "Mission FailureKind and WaitForVoyageWorkers persist through create, update, read, and summary", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
@@ -172,6 +224,44 @@ namespace Test.Shared.Suites.Database
                     AssertTrue(threw, "a failing insert fails the chain");
                     AssertNull(await db.Missions.ReadAsync(orphan.Id), "no part of a failed chain is written");
                     AssertEqual(nextJudge.Id, (await db.Missions.ReadAsync(recorder.Id))!.DependsOnMissionId, "the re-point of a failed chain is rolled back");
+                }
+            }));
+
+            cases.Add(CaseAsync("mission_write_batch_is_all_or_nothing", "WriteBatchAsync writes new missions, guarded updates and playbook snapshots together; a guard that finds the status changed writes nothing", TestTags.Reliability, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+                    Mission slot = await db.Missions.CreateAsync(new Mission("Slot", "w") { VesselId = prereqs.Vessel.Id, VoyageId = prereqs.Voyage.Id });
+                    Mission started = await db.Missions.CreateAsync(new Mission("Started", "w") { VesselId = prereqs.Vessel.Id, VoyageId = prereqs.Voyage.Id, Status = MissionStatusEnum.InProgress });
+                    List<MissionPlaybookSnapshot> snapshots = new List<MissionPlaybookSnapshot> { new MissionPlaybookSnapshot { FileName = "rules.md", Content = "be careful" } };
+
+                    Mission slice = new Mission("Slice", "w") { VesselId = prereqs.Vessel.Id, VoyageId = prereqs.Voyage.Id, DependsOnMissionId = slot.Id };
+                    slot.Title = "Slot, filled";
+                    MissionWriteBatch batch = new MissionWriteBatch();
+                    batch.Created.Add(slice);
+                    batch.Updated.Add(new MissionGuardedWrite(slot, new[] { MissionStatusEnum.Pending }));
+                    batch.Snapshots.Add(new MissionSnapshotSet(slice.Id, snapshots));
+                    AssertTrue(await db.Missions.WriteBatchAsync(batch), "the batch was written");
+                    AssertNotNull(await db.Missions.ReadAsync(slice.Id), "the new mission exists");
+                    AssertEqual("Slot, filled", (await db.Missions.ReadAsync(slot.Id))!.Title, "the guarded update applied");
+                    AssertEqual("be careful", (await db.Playbooks.GetMissionSnapshotsAsync(slice.Id)).Single().Content, "the snapshot was written with it");
+
+                    // The second guard expects Pending but the mission started: nothing of this batch may land.
+                    Mission orphan = new Mission("Orphan", "w") { VesselId = prereqs.Vessel.Id, VoyageId = prereqs.Voyage.Id };
+                    slot.Title = "Slot, refilled";
+                    started.Title = "Started, rewritten";
+                    MissionWriteBatch refused = new MissionWriteBatch();
+                    refused.Created.Add(orphan);
+                    refused.Updated.Add(new MissionGuardedWrite(slot, new[] { MissionStatusEnum.Pending }));
+                    refused.Updated.Add(new MissionGuardedWrite(started, new[] { MissionStatusEnum.Pending }));
+                    refused.Snapshots.Add(new MissionSnapshotSet(orphan.Id, snapshots));
+                    AssertFalse(await db.Missions.WriteBatchAsync(refused), "a failed guard refuses the batch");
+                    AssertNull(await db.Missions.ReadAsync(orphan.Id), "the new mission was rolled back");
+                    AssertEqual("Slot, filled", (await db.Missions.ReadAsync(slot.Id))!.Title, "the earlier update was rolled back");
+                    AssertEqual("Started", (await db.Missions.ReadAsync(started.Id))!.Title, "the guarded mission is untouched");
+                    AssertEqual(0, (await db.Playbooks.GetMissionSnapshotsAsync(orphan.Id)).Count, "no snapshot was written");
                 }
             }));
 

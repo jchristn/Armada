@@ -101,6 +101,8 @@ export interface DispatchDraft {
   stepAssignments: Record<string, StepAssignment>;
   /** Title used when several tasks are dispatched and no title was given (translated by the caller). */
   multiTaskTitle: string;
+  /** Mission mode; Implementation (the server default) is omitted from the request. */
+  mode?: 'Implementation' | 'Audit' | 'Research';
 }
 
 /** The createVoyage request for a dispatch draft (one task: the trimmed prompt). */
@@ -113,6 +115,7 @@ export function buildDispatchVoyageRequest(draft: DispatchDraft): VoyageCreateRe
     title: task.substring(0, 80),
     description: task,
     priority: draft.priority,
+    ...(draft.mode && draft.mode !== 'Implementation' ? { mode: draft.mode } : {}),
   }));
   return {
     title,

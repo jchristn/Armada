@@ -22,6 +22,16 @@ namespace Armada.Core.Services
     /// </summary>
     public class HarborMetricsRecorder
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Stores a context window a Harbor reports on exit for an endpoint that configures none (RS-7.8), or null to
+        /// ignore reports.
+        /// </summary>
+        public ModelContextDiscoveryService? ContextDiscovery { get; set; } = null;
+
+        #endregion
+
         #region Private-Members
 
         private readonly string _Header = "[HarborMetricsRecorder] ";
@@ -262,6 +272,14 @@ namespace Armada.Core.Services
                 else record.Outcome = HarborJobOutcomeEnum.Failed;
 
                 await _Database.HarborJobs.UpdateAsync(record, token).ConfigureAwait(false);
+
+                // RS-7.8: the Harbor read the endpoint's context window on its host; store it as discovered.
+                if (exited.DiscoveredContextLength.HasValue && ContextDiscovery != null && !String.IsNullOrEmpty(record.CaptainId))
+                {
+                    Captain? captain = await _Database.Captains.ReadAsync(record.CaptainId!, token).ConfigureAwait(false);
+                    if (captain != null && !String.IsNullOrEmpty(captain.ModelEndpointId))
+                        await ContextDiscovery.RecordReportedAsync(captain.ModelEndpointId, exited.DiscoveredContextLength, exited.DiscoveredContextSource, token).ConfigureAwait(false);
+                }
             }
             catch (Exception e) when (!(e is OperationCanceledException))
             {

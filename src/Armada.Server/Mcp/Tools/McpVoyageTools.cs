@@ -67,7 +67,8 @@ namespace Armada.Server.Mcp.Tools
                                     description = new { type = "string" },
                                     requestedCaptainId = new { type = "string", description = "Optional captain (cpt_ prefix) to run this mission (the first stage in a pipeline); overrides persona captain priorities" },
                                     tier = new { type = "string", description = "Optional minimum captain tier for this mission: Economy, Standard, or Premium" },
-                                    persona = new { type = "string", description = "Optional persona for a single-stage mission when no pipeline is given (defaults to Worker)" },
+                                    persona = new { type = "string", description = "Optional persona (e.g. Worker, Judge, Test Engineer). When every mission names one and no pipeline is given, each runs as one stage with its persona; a single-stage pipeline takes it; a multi-stage pipeline ignores it" },
+                                    mode = new { type = "string", description = "Optional mode: Implementation (default), Audit, or Research. Audit and Research are read-only report modes whose empty diff counts as success; every stage of the mission gets this mode" },
                                     key = new { type = "string", description = "Optional key naming this mission so a later mission can name it as parentKey" },
                                     parentKey = new { type = "string", description = "Optional key of an earlier mission in this dispatch: this mission becomes its child and starts once the parent finishes, on its result. Use it only when this mission needs the parent's code; unrelated missions run in parallel. An unknown or later key creates nothing" },
                                     branchStrategy = new { type = "string", description = "Optional branch relationship to the parent: New, ContinueParent (default for the first child) or ForkFromParent (default for later children)" },
@@ -124,79 +125,24 @@ namespace Armada.Server.Mcp.Tools
                     if (request.ApprovalOptions != null && (request.ApprovalOptions.ApproveAll || request.ApprovalOptions.TimeoutDecision == ApprovalTimeoutDecisionEnum.Approve)
                         && !McpToolHelpers.HasPresentedCredential())
                         return (object)McpToolError.Forbidden("Automatic approval requires an administrator's credential; unauthenticated loopback callers cannot enable it.");
-                    request.ApprovalOptions?.ValidateFor(caller);
-                    if (!String.IsNullOrEmpty(request.VesselId) && await McpCallerScope.ReadVesselAsync(database, caller, request.VesselId).ConfigureAwait(false) == null)
-                        return (object)McpToolError.NotFound("Vessel not found");
-                    if (!String.IsNullOrWhiteSpace(request.ObjectiveId) && await McpCallerScope.ReadObjectiveAsync(database, caller, request.ObjectiveId).ConfigureAwait(false) == null)
-                        return (object)McpToolError.NotFound("Objective not found");
-                    string title = request.Title;
-                    string description = request.Description ?? "";
-                    string vesselId = request.VesselId;
-                    List<MissionDescription> missions = request.Missions;
-                    List<SelectedPlaybook> selectedPlaybooks = request.SelectedPlaybooks ?? new List<SelectedPlaybook>();
-                    CollectionLimits.RequireRequestItems(missions, "Missions");
-                    CollectionLimits.RequireConfigItems(selectedPlaybooks, "SelectedPlaybooks");
-
-                    // Shared validation: objective existence, pipeline-by-name resolution, and bare-voyage
-                    // detection live in one place so MCP accepts and rejects the same inputs as REST.
-                    DispatchValidationResult validation = await admiral.ValidateDispatchAsync(
-                        request.ObjectiveId, request.PipelineId, request.Pipeline, vesselId, missions.Count, allowBareVoyage: true).ConfigureAwait(false);
-                    if (!validation.IsValid)
-                        return (object)McpToolError.InvalidArgument(validation.Message ?? "Invalid dispatch request", validation.Error.ToString());
-
-                    Objective? linkObjective = null;
-                    if (!String.IsNullOrWhiteSpace(request.ObjectiveId))
-                        linkObjective = await database.Objectives.ReadAsync(request.ObjectiveId!).ConfigureAwait(false);
-
-                    string? pipelineId = validation.ResolvedPipelineId;
-
-                    Voyage voyage;
-                    if (validation.IsBareVoyage)
+                    // One creation path for every surface (RS-4.1): validation, caller scope, pipeline, playbooks,
+                    // hierarchy, landing mode, and objective linking are the same as REST.
+                    Voyage voyage = await admiral.CreateVoyageAsync(caller, new VoyageCreationRequest
                     {
-                        // Bare voyage (missions added separately) -- parity with the REST bare-voyage path.
-                        if (selectedPlaybooks.Count > 0)
-                        {
-                            PlaybookService playbookService = new PlaybookService(database, logging ?? new LoggingModule());
-                            await playbookService.ResolveSelectionsAsync(
-                                String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId,
-                                selectedPlaybooks).ConfigureAwait(false);
-                        }
-
-                        voyage = new Voyage(title, description);
-                        voyage.TenantId = String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId;
-                        voyage.UserId = caller.UserId;
-                        voyage.ApprovalOptions = request.ApprovalOptions?.Snapshot();
-                        voyage.IsEvaluation = request.IsEvaluation;
-                        voyage = await database.Voyages.CreateAsync(voyage).ConfigureAwait(false);
-                        if (selectedPlaybooks.Count > 0)
-                        {
-                            voyage.SelectedPlaybooks = selectedPlaybooks;
-                            await database.Playbooks.SetVoyageSelectionsAsync(voyage.Id, selectedPlaybooks).ConfigureAwait(false);
-                        }
-                    }
-                    else
-                    {
-                        // The captain overrides go into the dispatch itself (parity with REST): the first stage is assigned
-                        // inline during dispatch, so overrides saved afterwards would miss it.
-                        string? overridesJson = request.CaptainAssignments != null && request.CaptainAssignments.Count > 0
-                            ? Armada.Core.Services.MissionService.SerializeCaptainOverrides(request.CaptainAssignments)
-                            : null;
-                        voyage = await admiral.DispatchVoyageAsync(title, description, vesselId, missions, pipelineId, selectedPlaybooks, overridesJson, request.LandingMode, approvalOptions: request.ApprovalOptions, isEvaluation: request.IsEvaluation).ConfigureAwait(false);
-                    }
-
-                    // A bare voyage has no missions yet: keep its overrides for the missions added to it later.
-                    if (validation.IsBareVoyage && request.CaptainAssignments != null && request.CaptainAssignments.Count > 0)
-                    {
-                        voyage.CaptainOverridesJson = Armada.Core.Services.MissionService.SerializeCaptainOverrides(request.CaptainAssignments);
-                        voyage = await database.Voyages.UpdateAsync(voyage).ConfigureAwait(false);
-                    }
-
-                    // Link the voyage to the objective (parity with REST).
-                    if (linkObjective != null && !linkObjective.VoyageIds.Contains(voyage.Id))
-                    {
-                        linkObjective.VoyageIds.Add(voyage.Id);
-                        await database.Objectives.UpdateAsync(linkObjective).ConfigureAwait(false);
-                    }
+                        Title = request.Title,
+                        Description = request.Description ?? "",
+                        VesselId = request.VesselId,
+                        Missions = request.Missions ?? new List<MissionDescription>(),
+                        PipelineId = request.PipelineId,
+                        PipelineName = request.Pipeline,
+                        SelectedPlaybooks = request.SelectedPlaybooks ?? new List<SelectedPlaybook>(),
+                        CaptainOverrides = request.CaptainAssignments ?? new List<CaptainAssignmentOverride>(),
+                        LandingMode = request.LandingMode,
+                        ApprovalOptions = request.ApprovalOptions,
+                        IsEvaluation = request.IsEvaluation,
+                        ObjectiveId = request.ObjectiveId,
+                        AllowBareVoyage = true
+                    }).ConfigureAwait(false);
 
                     return (object)voyage;
                 });
@@ -248,7 +194,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         pageNumber = new { type = "integer", description = "Page number (1-based, default 1)" },
                         pageSize = new { type = "integer", description = "Page size (1 to 1000, default 10; out-of-range values are normalized)" },
-                        status = new { type = "string", description = "Optional voyage status: Open, InProgress, Complete, Failed, or Cancelled" },
+                        status = new { type = "string", description = "Optional voyage status: Building, Open, InProgress, Complete, Failed, or Cancelled" },
                         order = new { type = "string", description = "CreatedDescending (default) or CreatedAscending" }
                     }
                 },

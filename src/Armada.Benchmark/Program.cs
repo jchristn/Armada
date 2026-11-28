@@ -89,7 +89,7 @@ namespace Armada.Benchmark
             {
                 AdmissionRunner runner = new AdmissionRunner(client, scenario, arguments.Text("repo-url", ""),
                     arguments.Text("capture-executable", "python3"), arguments.Text("capture-script", Path.Combine(root, "benchmarks", "stub", "usage.py")),
-                    arguments.Int("arm-timeout", 900), arguments.Int("warmup", 20));
+                    arguments.Int("arm-timeout", 900), arguments.Int("warmup", 20), arguments.Int("submit-interval-ms", 0));
                 if (String.IsNullOrWhiteSpace(arguments.Text("repo-url", ""))) throw new ArgumentException("--repo-url is required.");
                 report.Arms = await runner.RunAsync(arms).ConfigureAwait(false);
             }
@@ -147,7 +147,7 @@ namespace Armada.Benchmark
             Console.Error.WriteLine("[bench] " + message);
             Console.Error.WriteLine("Usage: Armada.Benchmark admission --repo-url <url> [--url http://127.0.0.1:25160] [--token default] [--candidates 10] [--missions 200] [--captain-concurrency 4]");
             Console.Error.WriteLine("         [--accounts 10,20,30,50,89] [--strategy MostRemainingAllowance] [--reserve 10] [--per-attempt 0.25] [--arms Enforce,Observe,Disabled]");
-            Console.Error.WriteLine("         [--warmup 20] [--arm-timeout 900] [--submit-concurrency 16] [--provider Sqlite] [--output file.json]");
+            Console.Error.WriteLine("         [--warmup 20] [--arm-timeout 900] [--submit-concurrency 16] [--submit-interval-ms 0] [--provider Sqlite] [--output file.json]");
             Console.Error.WriteLine("       Armada.Benchmark compare <baseline.json> <candidate.json> [--tolerance 0.20]");
             return 2;
         }

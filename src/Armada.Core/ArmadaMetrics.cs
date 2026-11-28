@@ -38,6 +38,42 @@ namespace Armada.Core
         /// <summary>Pending missions observed ready before/after three consecutive dispatch opportunities.</summary>
         public static readonly Counter<long> AdmissionStuck = _Meter.CreateCounter<long>("armada.admission.stuck");
 
+        /// <summary>
+        /// One per recorded stage attempt, exported as armada_stage_outcomes_total. Tags: persona, runtime, model,
+        /// disposition (Completed, Relaunched, OutputRepair, Escalated, Failed, ...), failure_kind, runtime_failure_kind,
+        /// and contract_repair (the deterministic repair kind, or None). The pipeline reliability panels and the
+        /// acceptance gate's per-model views read it (RELIABILITY_SIMPLICITY_PLAN.md RS-1.4).
+        /// </summary>
+        public static readonly Counter<long> StageOutcomes =
+            _Meter.CreateCounter<long>("armada.stage_outcomes", null, "Stage attempts by outcome");
+
+        // Stage attempts run from seconds to hours.
+        private static readonly InstrumentAdvice<double> _AttemptBuckets = new InstrumentAdvice<double>
+        {
+            HistogramBucketBoundaries = new double[] { 10, 30, 60, 120, 300, 600, 1200, 1800, 3600, 7200, 14400 }
+        };
+
+        /// <summary>
+        /// Stage attempt duration in seconds, exported as armada_stage_attempts_duration_seconds. Tags: persona, runtime,
+        /// model, disposition. Recorded only when the attempt's duration is known.
+        /// </summary>
+        public static readonly Histogram<double> StageAttemptSeconds =
+            _Meter.CreateHistogram<double>("armada.stage_attempts.duration_seconds", "s", "Stage attempt duration", null, _AttemptBuckets);
+
+        /// <summary>
+        /// Repairs Armada applied to a stage attempt, exported as armada_stage_repairs_total. Tags: persona, runtime,
+        /// model, kind (a contract repair kind, or Rerun for an output-repair relaunch).
+        /// </summary>
+        public static readonly Counter<long> StageRepairs =
+            _Meter.CreateCounter<long>("armada.stage_repairs", null, "Repairs applied to stage attempts");
+
+        /// <summary>
+        /// Stage attempts escalated to another captain, exported as armada_stage_escalations_total. Tags: persona,
+        /// runtime, model (the model escalated from), failure_kind.
+        /// </summary>
+        public static readonly Counter<long> StageEscalations =
+            _Meter.CreateCounter<long>("armada.stage_escalations", null, "Stage attempts escalated to another captain");
+
         /// <summary>Missions that reached Failed.</summary>
         public static readonly Counter<long> MissionsFailed =
             _Meter.CreateCounter<long>("armada.missions.failed", null, "Missions failed");

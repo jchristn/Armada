@@ -27,7 +27,7 @@ namespace Armada.Helm.Commands
             {
                 foreach (string id in settings.Ids)
                 {
-                    await client.PinBlackBoxAsync(id, cancellationToken).ConfigureAwait(false);
+                    await client.BlackBox.PinAsync(id, cancellationToken).ConfigureAwait(false);
                     if (!settings.Json) AnsiConsole.MarkupLine("[green]Pinned[/] " + Markup.Escape(id));
                 }
 

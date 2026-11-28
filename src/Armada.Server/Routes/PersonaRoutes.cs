@@ -151,7 +151,7 @@ namespace Armada.Server.Routes
                 .WithTag("Personas")
                 .WithSummary("Create a persona")
                 .WithDescription("Creates a new persona with a name, description, and prompt template reference.")
-                .WithRequestBody(OpenApiJson.BodyFor<Persona>("Persona data including optional ordered CaptainPriorities and availability/exhaustion policies", true))
+                .WithRequestBody(OpenApiJson.BodyFor<Persona>("Persona data including optional ordered CaptainPriorities, availability/exhaustion policies and EscalationLadder", true))
                 .WithResponse(201, OpenApiJson.For<Persona>("Created persona"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("A persona with that name already exists (Data: DuplicateEntityErrorDetail)"))
@@ -180,7 +180,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Personas")
                 .WithSummary("Update a persona")
-                .WithDescription("Updates a persona by name. Omitted fields (including DefaultCaptainId) are preserved; an explicit null DefaultCaptainId clears the default captain, and an empty CaptainPriorities list clears the hierarchy.")
+                .WithDescription("Updates a persona by name. Omitted fields (including DefaultCaptainId) are preserved; an explicit null DefaultCaptainId clears the default captain, an empty CaptainPriorities list clears the hierarchy, and an empty EscalationLadder clears the ladder.")
                 .WithParameter(OpenApiParameterMetadata.Path("name", "Persona name (e.g. Worker, Architect)"))
                 .WithRequestBody(OpenApiJson.BodyFor<PersonaUpdateRequest>("Updated persona data", true))
                 .WithResponse(200, OpenApiJson.For<Persona>("Updated persona"))

@@ -38,7 +38,7 @@ namespace Armada.Helm.Commands
                 if (vessel == null) return BlackBoxCli.NotFoundExitCode;
                 VesselUpsertRequest body = VesselUpsertRequest.From(vessel);
                 body.SerializeOverlappingMissions = settings.SerializeOverlappingMissions.Value;
-                Vessel? updated = await client.UpdateVesselAsync(vessel.Id, body, cancellationToken).ConfigureAwait(false);
+                Vessel? updated = await client.Vessels.UpdateAsync(vessel.Id, body, cancellationToken).ConfigureAwait(false);
                 if (settings.Json)
                 {
                     WritePureJson(updated);

@@ -41,20 +41,25 @@ Terminal states: `Landed`, `Failed`, `Cancelled`.
 
 4. **For each entry in a group** (sequential within the group):
    1. Mark the entry as `Testing`.
-   2. Fetch latest refs from the remote (`git fetch`).
+   2. Fetch latest refs from the remote (`git fetch`), once per repository for the whole group in this pass. A successful push updates the repository's `origin/<target>` itself, so the next entry integrates against the new target without another fetch.
    3. Create a temporary worktree from the current target branch.
    4. Merge the entry's branch into the worktree (`git merge --no-ff`).
    5. If the merge conflicts, mark the entry `Failed` and move on.
    6. Run the configured test command (if any) through the platform shell (`/bin/sh -c` or `cmd.exe /c`). If tests fail, mark `Failed`.
-   7. Push the integration branch to update the target (`git push origin integration:target`).
-   8. Mark the entry `Landed`.
-   9. Clean up the temporary worktree.
+   7. Push the verified commit to update the target (`git push origin <sha>:refs/heads/<target>`).
+   8. If the push is refused because the target moved (see below), requeue the entry and go back to step 2 with a fresh fetch.
+   9. Mark the entry `Landed`.
+   10. Clean up the temporary worktree.
+
+**Requeue on a moved target.** When the remote refuses the push, Armada fetches the target and asks git whether the remote target is an ancestor of the verified commit (`git merge-base --is-ancestor`, decided by its exit status, never by the text git prints). When it is not, another writer landed first and the push was not a fast-forward: the entry goes back to `Queued`, a `merge_queue.requeued` event is recorded, and the entry is integrated and verified again from a fresh fetch, up to `MergeQueueRequeueLimit` times (default 3) before it fails. A refusal while the target did not move (permissions, a protected branch, a hook) fails at once. The same limit applies to a lost landing handoff: a `WorkProduced` merge-queue mission with a passing stage check and no merge entry after five minutes has its branch enqueued again (event `mission.landing_handoff_requeued`, counted from the event log so a restart does not reset it), and is flagged `LandingFailed` only after the limit.
+
+**Batched landing (optional, off by default).** With `MergeQueueBatchSize` above 1, up to that many queued entries of one group that are processed in the same repository with the same test command are merged into one integration worktree, verified once, and published with one push. An entry that conflicts with the target or with an earlier entry of the batch fails as it would have serially, and the batch continues without it. When the batch's verification fails, it is split in half and each half is landed on its own; a half of one entry takes the ordinary path, so the failing entry fails alone and the others land. Every mission of a landed batch records the batch's published commit as its `CommitHash`. A moved target requeues the whole batch under the same limit. `benchmarks/run-landing-batch.sh` compares batched against serial landing.
 
 Every git and test subprocess run by the queue has a hard 10-minute timeout; a hung command is killed and the entry is marked `Failed` instead of wedging the queue.
 
 When an entry has a linked mission (`missionId`), the mission is reconciled with the entry's outcome: `Landed` moves the mission to `Complete`, and `Failed` moves it to `LandingFailed` (with the failure reason recorded). Missions that are already `Complete`, `Failed`, or `Cancelled` are left alone.
 
-Because each entry is landed immediately, the next entry in the same group always merges against the up-to-date target branch. This eliminates the cascade failures that occur with batch-style merge queues.
+Because each entry (or batch) is landed before the next one starts, the next entry in the same group always merges against the up-to-date target branch.
 
 ---
 
@@ -73,7 +78,9 @@ Because each entry is landed immediately, the next entry in the same group alway
 |---|---|
 | **Merge conflict** | Entry marked `Failed` with message. Worktree cleaned up. Linked mission moves to `LandingFailed`. Next entry in the same group continues. |
 | **Test failure** | Entry marked `Failed` with exit code and output truncated to 4096 characters. Worktree cleaned up. Linked mission moves to `LandingFailed`. Next entry continues. |
-| **Push failure** | Entry marked `Failed` with error message. Linked mission moves to `LandingFailed`. Typically means the remote rejected the push (force-push protection, etc.). |
+| **Push not a fast-forward** | The target moved after the entry was integrated. The entry is requeued and integrated again from a fresh fetch, up to `MergeQueueRequeueLimit` times; after that it is marked `Failed` (the reason names the limit) and the linked mission moves to `LandingFailed` with kind `Infra`. |
+| **Push refused** | The remote refused the push although the target did not move (force-push protection, a hook, permissions). Entry marked `Failed` with git's message. Linked mission moves to `LandingFailed`. |
+| **Batch verification failure** | With batched landing, the batch is split in half and each half retried, down to single entries; only the failing entry ends `Failed`. |
 | **Timeout** | A git or test subprocess that runs longer than 10 minutes is killed; the entry is marked `Failed`. |
 | **Vessel not found** | All entries in the group are marked `Failed` with a message indicating the repository path for the vessel could not be resolved. |
 | **Unexpected exception** | Entry marked `Failed` with error message. Best-effort worktree cleanup. Processing continues to the next entry. Group-level exceptions are caught by `ProcessGroupSafeAsync` and logged as warnings. |
@@ -123,6 +130,18 @@ When a mission's agent exits successfully, Armada sets the mission to `WorkProdu
 | `PullRequest` | Push the branch and create a pull request. Mission transitions to `PullRequestOpen` (or `LandingFailed` if the push or PR creation fails). Each health check polls open PRs; once merged, the mission transitions to `Complete`. When auto-merge is enabled (`AutoMergePullRequests`, global or per voyage), Armada also enables auto-merge on the PR. |
 | `MergeQueue` | Enqueue the mission branch into Armada's merge queue (target: the vessel's default branch) for serialized testing and landing. The mission stays `WorkProduced` while the entry is `Queued` or `Testing`, and its voyage stays `InProgress` (not `Complete`) until the entry settles: `Landed` moves the mission to `Complete`, a failure moves it to `LandingFailed`. |
 | `None` | No automated landing. The mission stays at `WorkProduced` for manual handling: merge its branch yourself (the dashboard and TUI mission pages offer **Merge in Manage Branches** instead of Land). Once the mission's commit is contained in the vessel's target branch (`git merge-base --is-ancestor`, checked right after a Manage Branches merge and on every health check), Armada moves the mission to `Complete`. |
+
+### The landing reconciler
+
+One reconciler (`LandingReconciler.SweepAsync`) runs on every health check. It reads the unlanded missions once (`WorkProduced`, `LandingFailed`, `Review`, `PullRequestOpen`, a page of up to 500 per status, continuing with the next page on the next check) and runs these cases on that one scan, in order; a mission one case changed is skipped by the later ones:
+
+1. **Landed entry.** A `WorkProduced` or `LandingFailed` mission whose latest merge entry is `Landed` is completed (an Admiral that stopped between marking the entry `Landed` and completing the mission leaves it that way).
+2. **Merged by hand.** A `WorkProduced` mission with landing mode `None` whose branch is contained in the target is completed (up to 25 per check).
+3. **Missing dock.** The missing worktree of an unlanded mission's dock is recreated from its branch.
+4. **Deferred landing.** A `LocalMerge` landing deferred on a dirty checkout is retried once the checkout is clean.
+5. **Landed elsewhere.** The stale `LandingFailed` check below.
+
+A case that throws is logged and the other cases still run.
 
 ### Reconciling stale LandingFailed missions
 
@@ -195,5 +214,8 @@ After a mission's work has landed, Armada can automatically clean up the mission
 - **`LandingMode`** (in `ArmadaSettings`, default `MergeAndPush`) -- global landing policy. Can be overridden per-vessel (`Vessel.LandingMode`) or per-voyage (`Voyage.LandingMode`).
 - **`BranchCleanupPolicy`** (in `ArmadaSettings`) -- global branch cleanup policy. Can be overridden per-vessel (`Vessel.BranchCleanupPolicy`).
 - **`MergeQueueTestCommand`** (in `ArmadaSettings`) -- default test command to run for entries that don't specify their own. Can be overridden per entry via the `testCommand` parameter on `enqueue_merge`.
+- **`MergeQueueRequeueLimit`** (default 3, 0 to 10, clamped) -- how many times a push that is not a fast-forward is requeued from a fresh fetch, and how many times a lost landing handoff is enqueued again, before the entry or mission fails. 0 fails at once.
+- **`MergeQueueBatchSize`** (default 1, which is off; 1 to 20, clamped) -- batched landing: up to this many entries of one group are merged, verified once, and pushed together, with bisection when verification fails.
+- **`MergeQueueLeaseSeconds`** (default 900, 5 to 14400, clamped) -- lifetime of the processing lease. The Admiral that holds it renews it before every entry, so a long pass with several builds is never taken over by another instance; a crashed holder's lease expires after this long.
 - **`DocksDirectory`** -- parent directory for temporary merge worktrees. Worktrees are created under `_merge-queue/` within this directory.
 - **`ReposDirectory`** -- fallback repository path when a vessel's `LocalPath` is not set.

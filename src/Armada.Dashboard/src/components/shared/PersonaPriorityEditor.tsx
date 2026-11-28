@@ -14,10 +14,21 @@ const ENDPOINT_TIP = 'For Mux, match an endpoint name ignoring case. For API End
 const AVAILABILITY_TIP = 'Try lower priorities: if no captain in a priority is idle, try the next one. Wait for the first priority: only ever use priority 1 and keep missions Pending until one is free.';
 const EXHAUSTION_TIP = 'When no priority has a free captain: Wait keeps the mission Pending and retries later; Use any eligible captain falls back to normal persona and tier routing. Not used when waiting for the first priority.';
 
-interface Props { value: PersonaRoutingForm; onChange: (value: PersonaRoutingForm) => void }
+interface Props {
+  value: PersonaRoutingForm;
+  onChange: (value: PersonaRoutingForm) => void;
+  /** Which list this editor edits: the captain priorities (default) or the escalation ladder (RS-5.6). */
+  list?: 'captainPriorities' | 'escalationLadder';
+}
 
-export default function PersonaPriorityEditor({ value, onChange }: Props) {
+const LADDER_TIP = 'Captain classes, lowest rung first, that a work stage moves up when its captain cannot finish: after its resumes, repeated no-op runs, repeated malformed tool calls or Judge rejections past the rework budget. The work continues on the same branch with the first free captain on a higher rung, up to MaxEscalations hops. Empty means escalation goes only to a captain with a higher tier.';
+
+export default function PersonaPriorityEditor({ value, onChange, list = 'captainPriorities' }: Props) {
   const { t } = useLocale();
+  const ladder = list === 'escalationLadder';
+  const items = value[list];
+  const set = (next: PersonaCaptainPriority[]) => onChange({ ...value, [list]: next });
+  const itemLabel = (number: number) => ladder ? t('Rung {{number}}', { number }) : t('Priority {{number}}', { number });
   const [endpoints, setEndpoints] = useState<ModelEndpoint[]>([]);
   const [endpointError, setEndpointError] = useState(false);
   useEffect(() => {
@@ -36,27 +47,30 @@ export default function PersonaPriorityEditor({ value, onChange }: Props) {
   const [announcement, setAnnouncement] = useState('');
   const dragged = useRef<number | null>(null);
   function update(index: number, patch: Partial<PersonaCaptainPriority>) {
-    onChange({ ...value, captainPriorities: value.captainPriorities.map((p, i) => i === index ? { ...p, ...patch } : p) });
+    set(items.map((p, i) => i === index ? { ...p, ...patch } : p));
   }
   function move(index: number, destination: number) {
-    if (destination < 0 || destination >= value.captainPriorities.length || index === destination) return;
-    const priorities = [...value.captainPriorities];
+    if (destination < 0 || destination >= items.length || index === destination) return;
+    const priorities = [...items];
     const [priority] = priorities.splice(index, 1);
     priorities.splice(destination, 0, priority);
-    onChange({ ...value, captainPriorities: priorities });
-    setAnnouncement(t('Priority {{number}}', { number: destination + 1 }));
+    set(priorities);
+    setAnnouncement(itemLabel(destination + 1));
   }
   return <fieldset className="persona-priority-editor form-fieldset">
-    <legend title={t('Ordered list of captain classes this persona\'s missions go to. Each entry matches captains on all the fields it sets. Leave it empty to use the default captain and normal routing.')}>{t('Captain priorities')}</legend>
-    <p className="text-dim">{t('Priorities run from top to bottom. Empty lists use the default captain routing.')}</p>
+    {ladder
+      ? <><legend title={t(LADDER_TIP)}>{t('Escalation ladder')}</legend>
+        <p className="text-dim">{t('Rungs run from the weakest captain at the top to the strongest at the bottom. An empty ladder escalates only to a higher tier.')}</p></>
+      : <><legend title={t('Ordered list of captain classes this persona\'s missions go to. Each entry matches captains on all the fields it sets. Leave it empty to use the default captain and normal routing.')}>{t('Captain priorities')}</legend>
+        <p className="text-dim">{t('Priorities run from top to bottom. Empty lists use the default captain routing.')}</p></>}
     <p className="text-dim persona-priority-help">{t('Drag to reorder, or use the arrows or position menu.')}</p>
     {endpointError && <p role="alert" className="text-danger">{t('Failed to load endpoints.')}</p>}
     <div className="persona-priority-list">
-      {value.captainPriorities.map((priority, index) => <fieldset
+      {items.map((priority, index) => <fieldset
         className={`persona-priority-class${dropTarget === index ? ' persona-priority-drop-target' : ''}`} key={index}
         onDragOver={e => { if (dragged.current !== null) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDropTarget(index); } }}
         onDrop={e => { e.preventDefault(); if (dragged.current !== null) move(dragged.current, index); dragged.current = null; setDropTarget(null); }}>
-        <legend title={t('Captains matching every field set here are tried in this order. Lower numbers are tried first.')}>{t('Priority {{number}}', { number: index + 1 })}</legend>
+        <legend title={t(ladder ? 'Captains matching every field set here form this rung. A failed captain moves to the next rung below it.' : 'Captains matching every field set here are tried in this order. Lower numbers are tried first.')}>{itemLabel(index + 1)}</legend>
         <div className="persona-priority-toolbar">
           <button type="button" className="btn btn-sm persona-priority-drag" draggable
             aria-label={t('Drag to reorder')} title={t('Drag onto another priority to move this one there. With the handle focused, Alt+Up and Alt+Down move it too.')}
@@ -66,12 +80,12 @@ export default function PersonaPriorityEditor({ value, onChange }: Props) {
             <span aria-hidden="true">⠿</span>
           </button>
           <label className="persona-priority-position" title={t('Move this priority to the chosen position. 1 is tried first.')}>{t('Position')}<select aria-label={t('Position')} title={t('Move this priority to the chosen position. 1 is tried first.')} value={index} onChange={e => move(index, Number(e.target.value))}>
-            {value.captainPriorities.map((_, position) => <option key={position} value={position}>{position + 1}</option>)}
+            {items.map((_, position) => <option key={position} value={position}>{position + 1}</option>)}
           </select></label>
           <div className="persona-priority-actions">
             <button type="button" className="btn btn-sm" disabled={index === 0} aria-label={t('Move up')} title={t('Move this priority up one place so it is tried earlier.')} onClick={() => move(index, index - 1)}><span aria-hidden="true">↑</span></button>
-            <button type="button" className="btn btn-sm" disabled={index === value.captainPriorities.length - 1} aria-label={t('Move down')} title={t('Move this priority down one place so it is tried later.')} onClick={() => move(index, index + 1)}><span aria-hidden="true">↓</span></button>
-            <button type="button" className="btn btn-sm" aria-label={t('Remove priority')} title={t('Remove this priority from the list. Nothing changes until you save the persona.')} onClick={() => onChange({ ...value, captainPriorities: value.captainPriorities.filter((_, i) => i !== index) })}><span aria-hidden="true">×</span></button>
+            <button type="button" className="btn btn-sm" disabled={index === items.length - 1} aria-label={t('Move down')} title={t('Move this priority down one place so it is tried later.')} onClick={() => move(index, index + 1)}><span aria-hidden="true">↓</span></button>
+            <button type="button" className="btn btn-sm" aria-label={t(ladder ? 'Remove rung' : 'Remove priority')} title={t('Remove this priority from the list. Nothing changes until you save the persona.')} onClick={() => set(items.filter((_, i) => i !== index))}><span aria-hidden="true">×</span></button>
           </div>
         </div>
         <div className="persona-priority-fields">
@@ -95,23 +109,23 @@ export default function PersonaPriorityEditor({ value, onChange }: Props) {
     <div className="persona-priority-add">
       {/* Choosing a runtime adds the priority at once: a separate pick-then-click step let a choice that was never added be
           saved as an empty list. */}
-      <label title={t('Choose a runtime to add it as a priority at the bottom of the list, so it is tried last. You can change it and add more fields after adding.')}>{t('Add priority')}<select aria-label={t('Add priority')} title={t('Choose a runtime to add it as a priority at the bottom of the list, so it is tried last. You can change it and add more fields after adding.')} value="" onChange={e => {
+      <label title={t('Choose a runtime to add it as a priority at the bottom of the list, so it is tried last. You can change it and add more fields after adding.')}>{t(ladder ? 'Add rung' : 'Add priority')}<select aria-label={t(ladder ? 'Add rung' : 'Add priority')} title={t('Choose a runtime to add it as a priority at the bottom of the list, so it is tried last. You can change it and add more fields after adding.')} value="" onChange={e => {
         if (!e.target.value) return;
-        onChange({ ...value, captainPriorities: [...value.captainPriorities, priorityTargetPatch(e.target.value)] });
-        setAnnouncement(t('Priority {{number}}', { number: value.captainPriorities.length + 1 }));
+        set([...items, priorityTargetPatch(e.target.value)]);
+        setAnnouncement(itemLabel(items.length + 1));
       }}>
         <option value="">{t('Choose a runtime to add')}</option>
         {targets.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
       </select></label>
     </div>
-    <div className="persona-priority-policies">
+    {!ladder && <div className="persona-priority-policies">
       <label title={t(AVAILABILITY_TIP)}>{t('When a priority is unavailable')}<select title={t(AVAILABILITY_TIP)} value={value.priorityAvailability} onChange={e => onChange({ ...value, priorityAvailability: e.target.value as PersonaRoutingForm['priorityAvailability'] })}>
         <option value="FallThrough">{t('Try lower priorities')}</option><option value="WaitForFirstPriority">{t('Wait for the first priority')}</option>
       </select></label>
       <label title={t(EXHAUSTION_TIP)}>{t('When all priorities are unavailable')}<select title={t(EXHAUSTION_TIP)} disabled={value.priorityAvailability === 'WaitForFirstPriority'} value={value.priorityExhaustion} onChange={e => onChange({ ...value, priorityExhaustion: e.target.value as PersonaRoutingForm['priorityExhaustion'] })}>
         <option value="Wait">{t('Wait')}</option><option value="UseEligibleCaptain">{t('Use any eligible captain')}</option>
       </select></label>
-    </div>
+    </div>}
     <span className="sr-only" aria-live="polite">{announcement}</span>
   </fieldset>;
 }

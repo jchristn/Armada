@@ -83,31 +83,37 @@ namespace Armada.Core.Services
             if (replacement != null) return await replacement.RunAsync(request, token).ConfigureAwait(false);
             BatteryDispatchResult result = new BatteryDispatchResult();
 
-            List<CaptainAssignmentOverride> overrides = new List<CaptainAssignmentOverride>
-            {
-                new CaptainAssignmentOverride("*", request.Captain.Id, null) { StrictCaptain = true, PromptVariant = request.PromptVariant }
-            };
-            MissionDescription mission = new MissionDescription(request.Title, request.Description)
-            {
-                RequestedCaptainId = request.Captain.Id,
-                Persona = request.Persona
-            };
+            // A pipeline run staffs each persona from its overrides and lets the pipeline create the stages; the default
+            // run sends one mission to one captain under the ModelEvaluation pipeline.
+            bool pipelineRun = !String.IsNullOrWhiteSpace(request.Pipeline) && request.CaptainOverrides != null && request.CaptainOverrides.Count > 0;
+            List<CaptainAssignmentOverride> overrides = pipelineRun
+                ? request.CaptainOverrides!.Select(o => new CaptainAssignmentOverride(o.Persona, o.CaptainId, o.FallbackTier) { StrictCaptain = true, PromptVariant = o.PromptVariant ?? request.PromptVariant }).ToList()
+                : new List<CaptainAssignmentOverride>
+                {
+                    new CaptainAssignmentOverride("*", request.Captain.Id, null) { StrictCaptain = true, PromptVariant = request.PromptVariant }
+                };
+            MissionDescription mission = pipelineRun
+                ? new MissionDescription(request.Title, request.Description)
+                : new MissionDescription(request.Title, request.Description)
+                {
+                    RequestedCaptainId = request.Captain.Id,
+                    Persona = request.Persona
+                };
 
             Voyage voyage;
             try
             {
-                voyage = await _Admiral.DispatchVoyageAsync(
-                    "Battery: " + request.Title,
-                    request.Description,
-                    request.Vessel.Id,
-                    new List<MissionDescription> { mission },
-                    BatteryFixtureService.PipelineName,
-                    null,
-                    JsonSerializer.Serialize(overrides),
-                    LandingModeEnum.None,
-                    token,
-                    null,
-                    true).ConfigureAwait(false);
+                voyage = await _Admiral.CreateVoyageAsync(null, new VoyageCreationRequest
+                {
+                    Title = "Battery: " + request.Title,
+                    Description = request.Description,
+                    VesselId = request.Vessel.Id,
+                    Missions = new List<MissionDescription> { mission },
+                    PipelineId = pipelineRun ? request.Pipeline! : BatteryFixtureService.PipelineName,
+                    CaptainOverrides = overrides,
+                    LandingMode = LandingModeEnum.None,
+                    IsEvaluation = true
+                }, token).ConfigureAwait(false);
             }
             catch (Exception ex) when (!(ex is OperationCanceledException))
             {

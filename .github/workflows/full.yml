@@ -187,7 +187,7 @@ jobs:
           placeholder="ci-validation-placeholder"
           for f in docker/armada/compose.yaml docker/armada/compose.split.yaml docker/proxy/compose.yaml; do
             echo "== $f"
-            ARMADA_INITIAL_ADMIN_PASSWORD="$placeholder" ARMADA_PROXY_PASSWORD="$placeholder" \
+            ARMADA_INITIAL_ADMIN_PASSWORD="$placeholder" ARMADA_PROXY_PASSWORD="$placeholder" ARMADA_GRAFANA_ADMIN_PASSWORD="$placeholder" \
               docker compose -f "$f" config --quiet
           done
 
@@ -195,7 +195,7 @@ jobs:
           # only come from that variable: no need to read docker's error text.
           check_required() {
             local file="$1" var="$2"
-            if ARMADA_INITIAL_ADMIN_PASSWORD="$placeholder" ARMADA_PROXY_PASSWORD="$placeholder" \
+            if ARMADA_INITIAL_ADMIN_PASSWORD="$placeholder" ARMADA_PROXY_PASSWORD="$placeholder" ARMADA_GRAFANA_ADMIN_PASSWORD="$placeholder" \
               env -u "$var" docker compose -f "$file" config --quiet >/dev/null 2>&1; then
               echo "::error::$file renders without $var; the secret must stay required."
               exit 1
@@ -205,3 +205,5 @@ jobs:
           check_required docker/armada/compose.yaml ARMADA_INITIAL_ADMIN_PASSWORD
           check_required docker/armada/compose.split.yaml ARMADA_INITIAL_ADMIN_PASSWORD
           check_required docker/proxy/compose.yaml ARMADA_PROXY_PASSWORD
+          check_required docker/armada/compose.yaml ARMADA_GRAFANA_ADMIN_PASSWORD
+          check_required docker/armada/compose.split.yaml ARMADA_GRAFANA_ADMIN_PASSWORD

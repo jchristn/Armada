@@ -832,7 +832,7 @@ namespace Armada.Core.BlackBox
                     });
                 }
                 BlackBoxBundleDocument doc = new BlackBoxBundleDocument { Preamble = BundlePreamble(entries.Count, groups.Count, gapsOnly), EntryCount = entries.Count, FingerprintCount = groups.Count, Groups = jsonGroups };
-                result.Content = JsonSerializer.Serialize(doc, BlackBoxJson.Options).Replace('—', '-');
+                result.Content = JsonSerializer.Serialize(doc, BlackBoxJson.Options).Replace('\u2014', '-');
                 return result;
             }
 
@@ -871,7 +871,7 @@ namespace Armada.Core.BlackBox
                 }
                 if (Encoding.UTF8.GetByteCount(sb.ToString()) > BlackBoxLimits.MaxBundleBytes) { result.Truncated = true; break; }
             }
-            string content = sb.ToString().Replace('—', '-').Replace('–', '-');
+            string content = sb.ToString().Replace('\u2014', '-').Replace('–', '-');
             if (r.RedactHosts) content = BlackBoxBriefRenderer.RedactHosts(content);
             result.Content = content;
             return result;

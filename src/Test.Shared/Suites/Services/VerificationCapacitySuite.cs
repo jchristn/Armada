@@ -110,7 +110,7 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(MissionStatusEnum.InProgress, resumed.Status, gate);
                     AssertEqual(8001, resumed.ProcessId); AssertEqual(1, resumed.StallRecoveryAttempts);
                     AssertEqual(1, headChecks); AssertEqual(1, h.Launches);
-                    AssertContains("broken build", resumed.Description!);
+                    AssertContains("broken build", Armada.Core.Services.MissionNotes.EffectiveDescription(resumed));
                 });
             Add("idle_captain_restart_replays_unfinished_verification", async () =>
             {
@@ -257,7 +257,7 @@ namespace Test.Shared.Suites.Services
                 h.Docks = new DockService(h.Log, h.Db, h.Settings, h.Git);
                 h.Captains = new CaptainService(h.Log, h.Db, h.Settings, h.Git, h.Docks);
                 h.Missions = new MissionService(h.Log, h.Db, h.Settings, h.Docks, h.Captains);
-                typeof(MissionService).GetField("_LocalCommands", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(h.Missions, h.Commands);
+                h.Missions.Context.LocalCommands = h.Commands;
                 h.Vessel = await h.Db.Vessels.CreateAsync(new Vessel("verification", "https://example.invalid/repo") { MaxParallelVoyages = 0, MaxParallelMissionsPerVoyage = 0 });
                 await h.Db.WorkflowProfiles.CreateAsync(new WorkflowProfile { Name = "checks", VesselId = h.Vessel.Id, Scope = WorkflowProfileScopeEnum.Vessel, Active = true, IsDefault = true, BuildCommand = "verify-fixture" });
                 h.Captain = await CaptainAssignmentFixture.CreateAsync(h.Db, new Captain("verify", AgentRuntimeEnum.Mux) { MaxConcurrency = 1 });

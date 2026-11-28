@@ -37,7 +37,7 @@ namespace Armada.Tui.Screens.Activity
         /// <inheritdoc />
         public override void Load()
         {
-            Call((client, token) => client.GetUsageLatestAsync(new UsageQuery { CaptainId = _CaptainId, PageNumber = _Page, PageSize = 25 }, token), result =>
+            Call((client, token) => client.Usage.GetLatestAsync(new UsageQuery { CaptainId = _CaptainId, PageNumber = _Page, PageSize = 25 }, token), result =>
             {
                 _Views = result?.Objects ?? new List<UsageSnapshotView>();
                 _Pages = result?.TotalPages ?? 1;
@@ -49,7 +49,7 @@ namespace Armada.Tui.Screens.Activity
         {
             if (_Capturing || Context.Clock.UtcNow < _NextEligible) return;
             _Capturing = true;
-            Call((client, token) => client.CaptureCaptainUsageAsync(_CaptainId!, null, token), receipt =>
+            Call((client, token) => client.Usage.CaptureCaptainAsync(_CaptainId!, null, token), receipt =>
             {
                 _Capturing = false;
                 _NextEligible = receipt?.NextEligibleUtc ?? (receipt?.Status == "Passive" ? DateTime.MinValue : Context.Clock.UtcNow.AddSeconds(60));

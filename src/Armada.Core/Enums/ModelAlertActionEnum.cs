@@ -37,6 +37,12 @@ namespace Armada.Core.Enums
         /// Hide the alert for a number of days (default 7).
         /// </summary>
         [EnumMember(Value = "Ignore")]
-        Ignore
+        Ignore,
+
+        /// <summary>
+        /// Set the profile's tier to the tier the scorecard data suggests (a TierSuggestion alert, RS-8.5).
+        /// </summary>
+        [EnumMember(Value = "ApplyTier")]
+        ApplyTier
     }
 }

@@ -97,7 +97,7 @@ namespace Armada.Tui.Services
             if (client == null) throw new ArgumentNullException(nameof(client));
             try
             {
-                I18nCatalog? catalog = await client.GetI18nCatalogAsync(token).ConfigureAwait(false);
+                I18nCatalog? catalog = await client.Support.GetI18nCatalogAsync(token).ConfigureAwait(false);
                 if (catalog == null) return false;
                 _Catalog = catalog;
                 return true;

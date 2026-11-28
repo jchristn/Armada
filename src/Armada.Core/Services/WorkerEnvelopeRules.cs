@@ -30,12 +30,12 @@ namespace Armada.Core.Services
         public const string ClampedEventType = "mission.worker_envelope_clamped";
 
         /// <summary>
-        /// Required tool: the model can call tools as served (<see cref="ModelProfileCapabilities.ToolsAvailable"/>).
+        /// Required tool: the model can call tools as served (<see cref="ModelProfileCapabilities.EffectiveToolsAvailable"/>).
         /// </summary>
         public const string ToolCalls = "tools";
 
         /// <summary>
-        /// Required tool: the model can use MCP tools as served (<see cref="ModelProfileCapabilities.McpAvailable"/>).
+        /// Required tool: the model can use MCP tools as served (<see cref="ModelProfileCapabilities.EffectiveMcpAvailable"/>).
         /// </summary>
         public const string Mcp = "mcp";
 
@@ -312,6 +312,31 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// The file limit section for a captain whose model profile sets <see cref="ModelProfileRendering.MaxFilesPerMission"/>
+        /// (RS-8.2): empty for the Architect and the Judge (they write no change) and when the profile sets no limit;
+        /// otherwise the smaller of the profile limit and the envelope's <see cref="WorkerEnvelope.MaxFiles"/>, and what to
+        /// do when the work does not fit.
+        /// </summary>
+        /// <param name="profileMaxFiles">The profile's maximum files per mission, or null.</param>
+        /// <param name="envelope">Effective envelope, or null.</param>
+        /// <param name="persona">Persona the prompt is for, or null for Worker.</param>
+        /// <returns>The section, or an empty string.</returns>
+        public static string FileLimitSection(int? profileMaxFiles, WorkerEnvelope? envelope, string? persona)
+        {
+            if (!profileMaxFiles.HasValue || profileMaxFiles.Value < 1) return "";
+            if (PersonaCatalog.Matches(persona, PersonaCatalog.Architect) || PersonaCatalog.Matches(persona, PersonaCatalog.Judge)) return "";
+            int limit = profileMaxFiles.Value;
+            string source = "This captain's model profile limits a mission to " + Files(profileMaxFiles.Value);
+            if (envelope?.MaxFiles.HasValue == true && envelope.MaxFiles.Value < limit)
+            {
+                limit = envelope.MaxFiles.Value;
+                source += " and the Worker envelope to " + Files(envelope.MaxFiles.Value);
+            }
+            return "## File Limit\n\nChange at most " + Files(limit) + " in this mission. " + source + ". "
+                + "Keep the change within the limit; report BLOCKED if the work cannot fit it, and name the files that would still need to change so the work can be split.\n";
+        }
+
+        /// <summary>
         /// Make sure an Architect or Judge prompt carries the envelope section. A customized template written before
         /// the <c>{WorkerEnvelope}</c> placeholder existed renders without it; the rendered section is then appended
         /// after the prompt (the stored template is never rewritten). Other personas, an empty section, and a prompt
@@ -360,8 +385,8 @@ namespace Armada.Core.Services
             {
                 if (String.IsNullOrWhiteSpace(raw)) continue;
                 string tool = raw.Trim().ToLowerInvariant();
-                bool? available = tool == ToolCalls ? profile.Capabilities.ToolsAvailable
-                    : tool == Mcp ? profile.Capabilities.McpAvailable
+                bool? available = tool == ToolCalls ? profile.Capabilities.EffectiveToolsAvailable
+                    : tool == Mcp ? profile.Capabilities.EffectiveMcpAvailable
                     : null;
                 if (!available.HasValue) return "model profile does not record " + ToolLabel(tool) + " (required by the Worker envelope)";
                 if (!available.Value) return "model profile has no " + ToolLabel(tool) + " (required by the Worker envelope)";
@@ -454,6 +479,11 @@ namespace Armada.Core.Services
         private static string Show(int? value)
         {
             return value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : "(no limit)";
+        }
+
+        private static string Files(int count)
+        {
+            return count + (count == 1 ? " file" : " files");
         }
 
         private static string ToolLabel(string tool)

@@ -375,7 +375,9 @@ namespace Test.Shared.Suites.Services
                 judge.DependsOnMissionId = worker.Id;
                 await testDb.Driver.Missions.UpdateAsync(judge).ConfigureAwait(false);
                 AssertFalse(await harness.Missions.TryAssignAsync(judge, harness.Vessel).ConfigureAwait(false), "A captain cannot approve its own implementation");
-                Captain reviewer = await AddCaptainAsync(testDb.Driver, "independent reviewer", CaptainStateEnum.Idle, null, null).ConfigureAwait(false);
+                // RS-8.7: exclusion compares model identity, so the independent reviewer runs another model.
+                Captain reviewer = new Captain("independent reviewer") { State = CaptainStateEnum.Idle, Model = "independent-model" };
+                reviewer = await testDb.Driver.Captains.CreateAsync(reviewer).ConfigureAwait(false);
                 AssertTrue(await harness.Missions.TryAssignAsync(judge, harness.Vessel).ConfigureAwait(false), "An independent captain can review the work");
                 AssertEqual(reviewer.Id, (await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false))!.CaptainId);
             }));
@@ -404,7 +406,9 @@ namespace Test.Shared.Suites.Services
                 judge.DependsOnMissionId = preceding.Id;
                 await testDb.Driver.Missions.UpdateAsync(judge).ConfigureAwait(false);
                 AssertFalse(await harness.Missions.TryAssignAsync(judge, harness.Vessel).ConfigureAwait(false), "A captain cannot approve its own implementation");
-                Captain reviewer = await AddCaptainAsync(testDb.Driver, "independent reviewer", CaptainStateEnum.Idle, null, null).ConfigureAwait(false);
+                // RS-8.7: exclusion compares model identity, so the independent reviewer runs another model.
+                Captain reviewer = new Captain("independent reviewer") { State = CaptainStateEnum.Idle, Model = "independent-model" };
+                reviewer = await testDb.Driver.Captains.CreateAsync(reviewer).ConfigureAwait(false);
                 AssertTrue(await harness.Missions.TryAssignAsync(judge, harness.Vessel).ConfigureAwait(false), "An independent captain can review the work");
                 AssertEqual(reviewer.Id, (await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false))!.CaptainId);
             }));

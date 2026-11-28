@@ -82,7 +82,7 @@ namespace Armada.Tui.Screens.Build
         public override void Load()
         {
             bool initial = !Loaded;
-            Call((c, t) => c.GetDockAsync(DockId, t), d =>
+            Call((c, t) => c.Docks.GetAsync(DockId, t), d =>
             {
                 if (d == null)
                 {
@@ -152,7 +152,7 @@ namespace Armada.Tui.Screens.Build
         {
             Confirm("Delete Dock", Tr("Delete dock {{name}}? This will clean up the git worktree and cannot be undone.", LocalizationArgs.Of("name", DockId)), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting dock", t => Context.Client.DeleteDockAsync(DockId, t), () =>
+                DeleteProgress.RunVoid(Context, "Deleting dock", t => Context.Client.Docks.DeleteAsync(DockId, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Dock {{id}} deleted.", LocalizationArgs.Of("id", DockId)));
                     Context.Navigate("/captains?tab=docks");

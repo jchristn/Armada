@@ -20,7 +20,7 @@ namespace Armada.Helm.Commands
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             return await RunBlackBoxAsync(settings.Json, async client =>
             {
-                BlackBoxStorageStatus? s = await client.GetBlackBoxStorageAsync(cancellationToken).ConfigureAwait(false);
+                BlackBoxStorageStatus? s = await client.BlackBox.GetStorageAsync(cancellationToken).ConfigureAwait(false);
                 if (settings.Json)
                 {
                     WritePureJson(s);

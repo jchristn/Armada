@@ -75,7 +75,7 @@ namespace Armada.Helm.Commands
                     try
                     {
                         // Only kill --print processes (captains), not interactive sessions
-                        // We can't easily inspect args, so skip this — the user can kill manually
+                        // We can't easily inspect args, so skip this: the user can kill manually
                     }
                     catch { }
                 }

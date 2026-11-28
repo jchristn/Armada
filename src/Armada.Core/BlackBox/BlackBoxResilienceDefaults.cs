@@ -60,16 +60,16 @@ namespace Armada.Core.BlackBox
         public const string Completion = "src/Armada.Core/Services/MissionService.cs:HandleCompletionAsync";
 
         /// <summary>Output contract repair.</summary>
-        public const string OutputRepair = "src/Armada.Core/Services/MissionService.cs:TryScheduleOutputRepairAsync";
+        public const string OutputRepair = "src/Armada.Core/Services/OutputRepairService.cs:TryScheduleOutputRepairAsync";
 
         /// <summary>Pipeline stage handoff.</summary>
-        public const string StageHandoff = "src/Armada.Core/Services/MissionService.Handoff.cs:TryHandoffToNextStageAsync";
+        public const string StageHandoff = "src/Armada.Core/Services/MissionHandoffService.cs:TryHandoffToNextStageAsync";
 
         /// <summary>Stage branch hardening.</summary>
-        public const string HardenStage = "src/Armada.Core/Services/MissionService.Handoff.cs:HardenStageBranchAsync";
+        public const string HardenStage = "src/Armada.Core/Services/MissionHandoffService.cs:HardenStageBranchAsync";
 
         /// <summary>Dangling handoff recovery.</summary>
-        public const string DanglingHandoffs = "src/Armada.Core/Services/MissionService.Handoff.cs:RecoverDanglingHandoffsAsync";
+        public const string DanglingHandoffs = "src/Armada.Core/Services/MissionHandoffService.cs:RecoverDanglingHandoffsAsync";
 
         /// <summary>Terminal process exit handling.</summary>
         public const string TerminalExit = "src/Armada.Core/Services/AdmiralService.cs:HandleTerminalProcessExitFailureAsync";
@@ -81,10 +81,10 @@ namespace Armada.Core.BlackBox
         public const string MissingHandoffs = "src/Armada.Core/Services/AdmiralService.cs:FlagMissingMergeHandoffsAsync";
 
         /// <summary>Unconfirmed stop recording.</summary>
-        public const string UnconfirmedStop = "src/Armada.Core/Services/AdmiralService.HarborLink.cs:RecordUnconfirmedStopAsync";
+        public const string UnconfirmedStop = "src/Armada.Core/Services/CaptainLinkMonitor.cs:RecordUnconfirmedStopAsync";
 
         /// <summary>Unreachable captain and reconnect reconciliation in the health check.</summary>
-        public const string HarborLinkEpisode = "src/Armada.Core/Services/AdmiralService.HarborLink.cs:CheckLinkEpisodeAsync";
+        public const string HarborLinkEpisode = "src/Armada.Core/Services/CaptainLinkMonitor.cs:CheckLinkEpisodeAsync";
 
         #endregion
 

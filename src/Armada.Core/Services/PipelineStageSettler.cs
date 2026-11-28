@@ -36,13 +36,13 @@ namespace Armada.Core.Services
                 missions.Where(m => !String.IsNullOrEmpty(m.DependsOnMissionId)).Select(m => m.DependsOnMissionId!),
                 StringComparer.Ordinal);
             int settled = 0;
+            // No voyage hook: this runs inside the voyage's own settlement.
+            MissionTransitions transitions = new MissionTransitions(database);
             foreach (Mission mission in missions)
             {
                 if (mission.Status != MissionStatusEnum.WorkProduced || !dependedOn.Contains(mission.Id)) continue;
-                mission.Status = MissionStatusEnum.Complete;
                 if (!mission.CompletedUtc.HasValue) mission.CompletedUtc = DateTime.UtcNow;
-                mission.LastUpdateUtc = DateTime.UtcNow;
-                await database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                if (!await transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.WorkProduced }, MissionStatusEnum.Complete, null, token).ConfigureAwait(false)) continue;
                 settled++;
             }
 

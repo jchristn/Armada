@@ -531,9 +531,9 @@ namespace Test.Shared.Suites.Services
                 };
                 endpoint.ApiKey = "azure-key";
 
-                using (CompletionClientBase client = ModelEndpointClientFactory.CreateCompletion(endpoint, CreateLogging()))
+                using (ProviderClientBase client = ModelEndpointClientFactory.CreateCompletion(endpoint, CreateLogging()))
                 {
-                    AssertEqual("gpt-4o-deployment", client.Model);
+                    AssertEqual("gpt-4o-deployment", client.Defaults.Completion?.Model);
                 }
                 return Task.CompletedTask;
             }));
@@ -589,9 +589,9 @@ namespace Test.Shared.Suites.Services
 
                 using (ClientBase client = ModelEndpointClientFactory.Create(embedding, CreateLogging()))
                 {
-                    AssertTrue(client is OpenAiEmbeddingClient, "Expected an OpenAI embedding client for an Embedding endpoint.");
+                    AssertTrue(client is OpenAiCompatibleClient, "Expected a Chat Completions client for an OpenAI Embedding endpoint.");
                     AssertEqual(45000, client.TimeoutMs);
-                    AssertEqual("text-embedding-3-small", ((EmbeddingClientBase)client).Model);
+                    AssertEqual("text-embedding-3-small", ((ProviderClientBase)client).Defaults.Embedding?.Model);
                 }
 
                 ModelEndpoint inference = new ModelEndpoint
@@ -605,8 +605,8 @@ namespace Test.Shared.Suites.Services
 
                 using (ClientBase client = ModelEndpointClientFactory.Create(inference, CreateLogging()))
                 {
-                    AssertTrue(client is OllamaCompletionClient, "Expected an Ollama completion client for an Inference endpoint.");
-                    AssertEqual("llama3", ((CompletionClientBase)client).Model);
+                    AssertTrue(client is OllamaClient, "Expected an Ollama client for an Inference endpoint.");
+                    AssertEqual("llama3", ((ProviderClientBase)client).Defaults.Completion?.Model);
                 }
                 return Task.CompletedTask;
             }));
@@ -623,10 +623,10 @@ namespace Test.Shared.Suites.Services
                 };
                 endpoint.ApiKey = "voyage-key";
 
-                using (EmbeddingClientBase client = ModelEndpointClientFactory.CreateEmbedding(endpoint, CreateLogging()))
+                using (ProviderClientBase client = ModelEndpointClientFactory.CreateEmbedding(endpoint, CreateLogging()))
                 {
-                    AssertTrue(client is VoyageAiEmbeddingClient, "Expected a Voyage AI embedding client.");
-                    AssertEqual("voyage-3", client.Model);
+                    AssertTrue(client is VoyageAiClient, "Expected a Voyage AI client.");
+                    AssertEqual("voyage-3", client.Defaults.Embedding?.Model);
                 }
                 return Task.CompletedTask;
             }));
@@ -682,13 +682,13 @@ namespace Test.Shared.Suites.Services
                         AssertEqual(provider == ModelProviderEnum.OllamaCloud ? "https://ollama.com:443" : "https://api.x.ai", created.BaseUrl);
                         ModelEndpoint stored = (await service.ReadAsync(auth, created.Id).ConfigureAwait(false))!;
                         AssertEqual(provider, stored.Provider);
-                        using (ClientBase client = ModelEndpointClientFactory.Create(stored, CreateLogging()))
+                        using (ProviderClientBase client = ModelEndpointClientFactory.Create(stored, CreateLogging()))
                         {
                             string expected = provider == ModelProviderEnum.OllamaCloud ? "OllamaCloud" : "XAi";
-                            AssertEqual(expected + (kind == ModelEndpointKindEnum.Inference ? "CompletionClient" : "EmbeddingClient"), client.GetType().Name);
+                            bool compatible = provider == ModelProviderEnum.XAI && kind == ModelEndpointKindEnum.Embedding;
+                            AssertEqual(compatible ? "OpenAiCompatibleClient" : expected + "Client", client.GetType().Name);
                             AssertEqual(34567, client.TimeoutMs);
-                            if (client is CompletionClientBase completion) AssertEqual("catalog-model", completion.Model);
-                            if (client is EmbeddingClientBase embedding) AssertEqual("catalog-model", embedding.Model);
+                            AssertEqual("catalog-model", kind == ModelEndpointKindEnum.Inference ? client.Defaults.Completion?.Model : client.Defaults.Embedding?.Model);
                         }
                         stored.ApiKey = null;
                         ModelEndpoint updated = await service.UpdateAsync(auth, stored).ConfigureAwait(false);

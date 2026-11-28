@@ -8,6 +8,7 @@ namespace Armada.Core.Database.Mysql.Implementations
     using MySqlConnector;
     using Armada.Core.Database;
     using Armada.Core.Database.Interfaces;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
 
     /// <summary>
@@ -18,16 +19,22 @@ namespace Armada.Core.Database.Mysql.Implementations
         #region Private-Members
 
         private static readonly string _InsertProfile = @"INSERT INTO model_profiles
-            (id, tenant_id, identity_key, runtime, provider, model, served_context_tokens, tools_available, mcp_available,
-             rendering_template, rendering_repeat_contract_at_end, rendering_max_files_per_mission, notes, created_utc, last_update_utc)
+            (id, tenant_id, identity_key, runtime, provider, model, served_context_tokens, served_context_source, tools_available, mcp_available,
+             rendering_template, rendering_repeat_contract_at_end, rendering_max_files_per_mission,
+             recovery_max_resumes, recovery_unclassified_resumes, recovery_transient_grace_minutes, recovery_judge_rework_rounds, recovery_output_repair_attempts, recovery_escalate_after_resumes,
+             timeout_stall_minutes, timeout_tool_wait_minutes, timeout_max_runtime_minutes, timeout_first_output_minutes, speed_tokens_per_second, speed_first_output_ms, speed_measured_utc, tier, suggested_tier, suggested_tier_reason, suggested_tier_samples, suggested_tier_utc, notes, created_utc, last_update_utc)
             VALUES
-            (@id, @tenant_id, @identity_key, @runtime, @provider, @model, @served_context_tokens, @tools_available, @mcp_available,
-             @rendering_template, @rendering_repeat_contract_at_end, @rendering_max_files_per_mission, @notes, @created_utc, @last_update_utc);";
+            (@id, @tenant_id, @identity_key, @runtime, @provider, @model, @served_context_tokens, @served_context_source, @tools_available, @mcp_available,
+             @rendering_template, @rendering_repeat_contract_at_end, @rendering_max_files_per_mission,
+             @recovery_max_resumes, @recovery_unclassified_resumes, @recovery_transient_grace_minutes, @recovery_judge_rework_rounds, @recovery_output_repair_attempts, @recovery_escalate_after_resumes,
+             @timeout_stall_minutes, @timeout_tool_wait_minutes, @timeout_max_runtime_minutes, @timeout_first_output_minutes, @speed_tokens_per_second, @speed_first_output_ms, @speed_measured_utc, @tier, @suggested_tier, @suggested_tier_reason, @suggested_tier_samples, @suggested_tier_utc, @notes, @created_utc, @last_update_utc);";
 
         private static readonly string _UpdateProfile = @"UPDATE model_profiles SET
             tools_available = @tools_available, mcp_available = @mcp_available, rendering_template = @rendering_template,
             rendering_repeat_contract_at_end = @rendering_repeat_contract_at_end,
-            rendering_max_files_per_mission = @rendering_max_files_per_mission, notes = @notes, last_update_utc = @last_update_utc
+            rendering_max_files_per_mission = @rendering_max_files_per_mission,
+            recovery_max_resumes = @recovery_max_resumes, recovery_unclassified_resumes = @recovery_unclassified_resumes, recovery_transient_grace_minutes = @recovery_transient_grace_minutes, recovery_judge_rework_rounds = @recovery_judge_rework_rounds, recovery_output_repair_attempts = @recovery_output_repair_attempts, recovery_escalate_after_resumes = @recovery_escalate_after_resumes,
+            timeout_stall_minutes = @timeout_stall_minutes, timeout_tool_wait_minutes = @timeout_tool_wait_minutes, timeout_max_runtime_minutes = @timeout_max_runtime_minutes, timeout_first_output_minutes = @timeout_first_output_minutes, speed_tokens_per_second = @speed_tokens_per_second, speed_first_output_ms = @speed_first_output_ms, speed_measured_utc = @speed_measured_utc, tier = @tier, suggested_tier = @suggested_tier, suggested_tier_reason = @suggested_tier_reason, suggested_tier_samples = @suggested_tier_samples, suggested_tier_utc = @suggested_tier_utc, notes = @notes, last_update_utc = @last_update_utc
             WHERE id = @id;";
 
         private static readonly string _InsertRevision = @"INSERT INTO model_profile_revisions
@@ -73,6 +80,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                     MysqlCommandHelper.Add(cmd, "@provider", profile.Identity.Provider);
                     MysqlCommandHelper.Add(cmd, "@model", profile.Identity.Model);
                     MysqlCommandHelper.Add(cmd, "@served_context_tokens", profile.Identity.ServedContextTokens);
+                    MysqlCommandHelper.Add(cmd, "@served_context_source", profile.Identity.ServedContextSource.HasValue ? profile.Identity.ServedContextSource.Value.ToString() : null);
                     MysqlCommandHelper.AddDate(cmd, "@created_utc", profile.CreatedUtc);
                     BindMutable(cmd, profile);
                 }, token).ConfigureAwait(false);
@@ -88,6 +96,27 @@ namespace Armada.Core.Database.Mysql.Implementations
                 "SELECT * FROM model_profiles WHERE id = @id;",
                 cmd => MysqlCommandHelper.Add(cmd, "@id", id), FromReader, token).ConfigureAwait(false);
             return rows.FirstOrDefault();
+        }
+
+        /// <inheritdoc />
+        public async Task<Dictionary<string, ModelProfile>> ReadManyAsync(IEnumerable<string?> ids, CancellationToken token = default)
+        {
+            if (ids == null) throw new ArgumentNullException(nameof(ids));
+            List<string> distinct = ids.Where(id => !String.IsNullOrEmpty(id)).Select(id => id!).Distinct(StringComparer.Ordinal).ToList();
+            Dictionary<string, ModelProfile> result = new Dictionary<string, ModelProfile>(StringComparer.Ordinal);
+            for (int offset = 0; offset < distinct.Count; offset += 500)
+            {
+                List<string> chunk = distinct.Skip(offset).Take(500).ToList();
+                string names = String.Join(", ", chunk.Select((string id, int i) => "@id" + i));
+                List<ModelProfile> rows = await MysqlCommandHelper.QueryAsync(_ConnectionString,
+                    "SELECT * FROM model_profiles WHERE id IN (" + names + ");",
+                    cmd =>
+                    {
+                        for (int i = 0; i < chunk.Count; i++) MysqlCommandHelper.Add(cmd, "@id" + i, chunk[i]);
+                    }, FromReader, token).ConfigureAwait(false);
+                foreach (ModelProfile row in rows) result[row.Id] = row;
+            }
+            return result;
         }
 
         /// <inheritdoc />
@@ -110,6 +139,26 @@ namespace Armada.Core.Database.Mysql.Implementations
                 await MysqlCommandHelper.ExecuteAsync(conn, tx, _UpdateProfile, cmd => BindMutable(cmd, profile), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
             return profile;
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> UpdateProbedCapabilitiesAsync(string profileId, bool? toolsAvailable, bool? mcpAvailable, DateTime probedUtc, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(profileId)) throw new ArgumentNullException(nameof(profileId));
+            int changed = 0;
+            await MysqlCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (MySqlConnection conn, MySqlTransaction tx) =>
+            {
+                changed = await MysqlCommandHelper.ExecuteAsync(conn, tx,
+                    "UPDATE model_profiles SET probed_tools_available = @probed_tools_available, probed_mcp_available = @probed_mcp_available, capabilities_probed_utc = @capabilities_probed_utc WHERE id = @id;",
+                    cmd =>
+                    {
+                        MysqlCommandHelper.Add(cmd, "@id", profileId);
+                        MysqlCommandHelper.Add(cmd, "@probed_tools_available", toolsAvailable);
+                        MysqlCommandHelper.Add(cmd, "@probed_mcp_available", mcpAvailable);
+                        MysqlCommandHelper.AddDate(cmd, "@capabilities_probed_utc", probedUtc);
+                    }, token).ConfigureAwait(false);
+            }, token).ConfigureAwait(false);
+            return changed == 1;
         }
 
         /// <inheritdoc />
@@ -285,8 +334,36 @@ namespace Armada.Core.Database.Mysql.Implementations
             MysqlCommandHelper.Add(cmd, "@rendering_template", profile.Rendering.Template);
             MysqlCommandHelper.Add(cmd, "@rendering_repeat_contract_at_end", profile.Rendering.RepeatContractAtEnd);
             MysqlCommandHelper.Add(cmd, "@rendering_max_files_per_mission", profile.Rendering.MaxFilesPerMission);
+            MysqlCommandHelper.Add(cmd, "@recovery_max_resumes", profile.Recovery.MaxResumes);
+            MysqlCommandHelper.Add(cmd, "@recovery_unclassified_resumes", profile.Recovery.UnclassifiedResumes);
+            MysqlCommandHelper.Add(cmd, "@recovery_transient_grace_minutes", profile.Recovery.TransientGraceMinutes);
+            MysqlCommandHelper.Add(cmd, "@recovery_judge_rework_rounds", profile.Recovery.JudgeReworkRounds);
+            MysqlCommandHelper.Add(cmd, "@recovery_output_repair_attempts", profile.Recovery.OutputRepairAttempts);
+            MysqlCommandHelper.Add(cmd, "@recovery_escalate_after_resumes", profile.Recovery.EscalateAfterResumes);
+            MysqlCommandHelper.Add(cmd, "@timeout_stall_minutes", profile.Timeouts.StallThresholdMinutes);
+            MysqlCommandHelper.Add(cmd, "@timeout_tool_wait_minutes", profile.Timeouts.ToolWaitHardLimitMinutes);
+            MysqlCommandHelper.Add(cmd, "@timeout_max_runtime_minutes", profile.Timeouts.MaxRuntimeMinutes);
+            MysqlCommandHelper.Add(cmd, "@timeout_first_output_minutes", profile.Timeouts.FirstOutputMinutes);
+            MysqlCommandHelper.Add(cmd, "@speed_tokens_per_second", profile.Speed.TokensPerSecond);
+            MysqlCommandHelper.Add(cmd, "@speed_first_output_ms", profile.Speed.FirstOutputMs);
+            MysqlCommandHelper.AddDate(cmd, "@speed_measured_utc", profile.Speed.MeasuredUtc);
+            MysqlCommandHelper.Add(cmd, "@tier", profile.Tiering.Tier.HasValue ? profile.Tiering.Tier.Value.ToString() : null);
+            MysqlCommandHelper.Add(cmd, "@suggested_tier", profile.Tiering.SuggestedTier.HasValue ? profile.Tiering.SuggestedTier.Value.ToString() : null);
+            MysqlCommandHelper.Add(cmd, "@suggested_tier_reason", profile.Tiering.SuggestedReason);
+            MysqlCommandHelper.Add(cmd, "@suggested_tier_samples", profile.Tiering.SuggestedSamples);
+            MysqlCommandHelper.AddDate(cmd, "@suggested_tier_utc", profile.Tiering.SuggestedUtc);
             MysqlCommandHelper.Add(cmd, "@notes", profile.Notes);
             MysqlCommandHelper.AddDate(cmd, "@last_update_utc", profile.LastUpdateUtc);
+        }
+
+        private static CaptainTierEnum? ReadTier(string? value)
+        {
+            return Enum.TryParse(value, true, out CaptainTierEnum tier) && Enum.IsDefined(tier) ? tier : null;
+        }
+
+        private static int? ReadRecovery(int? value, int min, int max)
+        {
+            return value.HasValue && value.Value >= min && value.Value <= max ? value : null;
         }
 
         private static ModelProfile FromReader(MySqlDataReader reader)
@@ -298,12 +375,34 @@ namespace Armada.Core.Database.Mysql.Implementations
             profile.Identity.Provider = MysqlCommandHelper.ReadString(reader["provider"]);
             profile.Identity.Model = MysqlCommandHelper.ReadString(reader["model"]);
             profile.Identity.ServedContextTokens = MysqlCommandHelper.ReadNullableInt(reader["served_context_tokens"]);
+            profile.Identity.ServedContextSource = Enum.TryParse(MysqlCommandHelper.ReadString(reader["served_context_source"]), true, out ContextLengthSourceEnum contextSource) ? contextSource : null;
             profile.Capabilities.ToolsAvailable = MysqlCommandHelper.ReadNullableBool(reader["tools_available"]);
             profile.Capabilities.McpAvailable = MysqlCommandHelper.ReadNullableBool(reader["mcp_available"]);
+            profile.Capabilities.ProbedToolsAvailable = MysqlCommandHelper.ReadNullableBool(reader["probed_tools_available"]);
+            profile.Capabilities.ProbedMcpAvailable = MysqlCommandHelper.ReadNullableBool(reader["probed_mcp_available"]);
+            profile.Capabilities.ProbedUtc = MysqlCommandHelper.ReadNullableDate(reader["capabilities_probed_utc"]);
             profile.Rendering.Template = MysqlCommandHelper.ReadString(reader["rendering_template"]);
             profile.Rendering.RepeatContractAtEnd = MysqlCommandHelper.ReadNullableBool(reader["rendering_repeat_contract_at_end"]);
             int? maxFiles = MysqlCommandHelper.ReadNullableInt(reader["rendering_max_files_per_mission"]);
             profile.Rendering.MaxFilesPerMission = maxFiles.HasValue && maxFiles.Value >= 1 ? maxFiles : null;
+            profile.Recovery.MaxResumes = ReadRecovery(MysqlCommandHelper.ReadNullableInt(reader["recovery_max_resumes"]), 0, 10);
+            profile.Recovery.UnclassifiedResumes = ReadRecovery(MysqlCommandHelper.ReadNullableInt(reader["recovery_unclassified_resumes"]), 0, 3);
+            profile.Recovery.TransientGraceMinutes = ReadRecovery(MysqlCommandHelper.ReadNullableInt(reader["recovery_transient_grace_minutes"]), 0, 120);
+            profile.Recovery.JudgeReworkRounds = ReadRecovery(MysqlCommandHelper.ReadNullableInt(reader["recovery_judge_rework_rounds"]), 1, 5);
+            profile.Recovery.OutputRepairAttempts = ReadRecovery(MysqlCommandHelper.ReadNullableInt(reader["recovery_output_repair_attempts"]), 0, 3);
+            profile.Recovery.EscalateAfterResumes = ReadRecovery(MysqlCommandHelper.ReadNullableInt(reader["recovery_escalate_after_resumes"]), 0, 10);
+            profile.Timeouts.StallThresholdMinutes = ReadRecovery(MysqlCommandHelper.ReadNullableInt(reader["timeout_stall_minutes"]), 1, 240);
+            profile.Timeouts.ToolWaitHardLimitMinutes = ReadRecovery(MysqlCommandHelper.ReadNullableInt(reader["timeout_tool_wait_minutes"]), 1, 1440);
+            profile.Timeouts.MaxRuntimeMinutes = ReadRecovery(MysqlCommandHelper.ReadNullableInt(reader["timeout_max_runtime_minutes"]), 1, 2880);
+            profile.Timeouts.FirstOutputMinutes = ReadRecovery(MysqlCommandHelper.ReadNullableInt(reader["timeout_first_output_minutes"]), 1, 240);
+            profile.Speed.TokensPerSecond = MysqlCommandHelper.ReadNullableDouble(reader["speed_tokens_per_second"]);
+            profile.Speed.FirstOutputMs = MysqlCommandHelper.ReadNullableLong(reader["speed_first_output_ms"]);
+            profile.Speed.MeasuredUtc = MysqlCommandHelper.ReadNullableDate(reader["speed_measured_utc"]);
+            profile.Tiering.Tier = ReadTier(MysqlCommandHelper.ReadString(reader["tier"]));
+            profile.Tiering.SuggestedTier = ReadTier(MysqlCommandHelper.ReadString(reader["suggested_tier"]));
+            profile.Tiering.SuggestedReason = MysqlCommandHelper.ReadString(reader["suggested_tier_reason"]);
+            profile.Tiering.SuggestedSamples = MysqlCommandHelper.ReadNullableInt(reader["suggested_tier_samples"]);
+            profile.Tiering.SuggestedUtc = MysqlCommandHelper.ReadNullableDate(reader["suggested_tier_utc"]);
             profile.Notes = MysqlCommandHelper.ReadString(reader["notes"]);
             profile.CreatedUtc = MysqlCommandHelper.ReadDate(reader["created_utc"]);
             profile.LastUpdateUtc = MysqlCommandHelper.ReadDate(reader["last_update_utc"]);

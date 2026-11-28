@@ -151,18 +151,15 @@ namespace Armada.Tui.Widgets
         }
 
         /// <summary>
-        /// Forget where children were placed, here and in every nested <see cref="RegionHost"/> scope, so the next
-        /// render records only what it draws (the shell calls it before each frame; a child that is not drawn then has
-        /// no rectangle, takes no clicks, and gets no focus box).
+        /// Forget where children were placed, here and in every nested scope (region hosts, panels, and the forms inside
+        /// them), so the next render records only what it draws (the shell calls it before each frame; a child that is
+        /// not drawn then has no rectangle, takes no clicks, and gets no focus box). A container that skips drawing its
+        /// children in a frame (a detail screen showing "Nothing to show until this record loads" in place of a panel,
+        /// or a form whose field scrolled out of view) therefore leaves no stale rectangle below it.
         /// </summary>
         public void ResetPlacements()
         {
-            foreach (IWidget child in _Children)
-            {
-                if (child is IFocusScopeOwner owner && owner.Scope.RegionHost && !ReferenceEquals(owner.Scope, this)) owner.Scope.ResetPlacements();
-            }
-
-            _Rects.Clear();
+            ResetPlacements(0);
         }
 
         /// <summary>
@@ -416,6 +413,17 @@ namespace Armada.Tui.Widgets
         #endregion
 
         #region Private-Methods
+
+        private void ResetPlacements(int depth)
+        {
+            if (depth > 16) return;
+            foreach (IWidget child in _Children)
+            {
+                if (child is IFocusScopeOwner owner && !ReferenceEquals(owner.Scope, this)) owner.Scope.ResetPlacements(depth + 1);
+            }
+
+            _Rects.Clear();
+        }
 
         private void SetIndex(int idx)
         {

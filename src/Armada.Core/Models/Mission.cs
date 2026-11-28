@@ -182,6 +182,48 @@ namespace Armada.Core.Models
 
         /// <summary>Original failed mission this rescue addresses; distinct from hierarchy ancestry.</summary>
         public string? RescueOfMissionId { get; set; }
+
+        /// <summary>
+        /// Number of times this mission was escalated to a stronger captain after its captain could not finish it.
+        /// Routing reads this column, never the description.
+        /// </summary>
+        public int EscalationCount { get; set; } = 0;
+
+        /// <summary>Captain that held the mission when it was last escalated; null when it was never escalated.</summary>
+        public string? EscalatedFromCaptainId { get; set; } = null;
+
+        /// <summary>Model that held the mission when it was last escalated; null when it was never escalated or unknown.</summary>
+        public string? EscalatedFromModel { get; set; } = null;
+
+        /// <summary>
+        /// When this Architect's fan-out finished writing every slice and dependency; null while it has not, or for any
+        /// other persona.
+        /// </summary>
+        public DateTime? FanOutCompletedUtc { get; set; } = null;
+
+        /// <summary>Architect mission whose plan created this Worker slice; null for a mission that is not a slice.</summary>
+        public string? ArchitectSourceMissionId { get; set; } = null;
+
+        /// <summary>Zero-based index of this slice in its Architect's plan; null for a mission that is not a slice.</summary>
+        public int? ArchitectPlanIndex { get; set; } = null;
+
+        /// <summary>
+        /// When the Admiral recorded its intent to launch this mission's captain, before the process started; null when no
+        /// launch is in flight.
+        /// </summary>
+        public DateTime? LaunchIntentUtc { get; set; } = null;
+
+        /// <summary>Identifier of the in-flight launch job named by <see cref="LaunchIntentUtc"/>; null when none.</summary>
+        public string? LaunchJobId { get; set; } = null;
+
+        /// <summary>
+        /// Notes Armada attached after the mission was created (handoffs, review feedback, repair, resume and escalation
+        /// notes), at most one per kind. The description never changes; captains receive it followed by these notes
+        /// (<see cref="Armada.Core.Services.MissionNotes.EffectiveDescription"/>).
+        /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
+        public List<MissionNote> Notes { get; set; } = new List<MissionNote>();
+
         /// <summary>Branch strategy for hierarchy dispatch.</summary>
         public MissionBranchStrategyEnum BranchStrategy { get; set; } = MissionBranchStrategyEnum.New;
         /// <summary>Recorded base branch for a forked mission.</summary>

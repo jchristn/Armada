@@ -126,6 +126,9 @@ describe('dashboard page routes', () => {
   beforeEach(() => fake.reset());
 
   it('opens every hub, tab and record kind on a page the dashboard has', () => {
+    assert.strictEqual(routeForId('mdl_1'), '/model-profiles/mdl_1');
+    assert.ok(isDashboardRoute('/model-profiles/mdl_1'));
+    assert.strictEqual(KIND_ROUTES.modelProfile, '/captains?tab=profiles');
     for (const [key, route] of Object.entries({ ...HUB_ROUTES, ...SOURCE_ROUTES, ...KIND_ROUTES })) assert.ok(isDashboardRoute(route), `${key} -> ${route}`);
     for (const hub of dashboardHubs()) assert.strictEqual(HUB_ROUTES[hub.key], hub.route, `hub ${hub.key}`);
     const specs = resourceCatalog({} as never);

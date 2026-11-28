@@ -199,7 +199,7 @@ namespace Armada.Tui.Screens.Operations
         public override void Load()
         {
             bool initial = !Loaded;
-            Call((c, t) => c.GetBlackBoxAsync(EntryId, false, t), e =>
+            Call((c, t) => c.BlackBox.GetAsync(EntryId, false, t), e =>
             {
                 if (e == null)
                 {
@@ -263,7 +263,7 @@ namespace Armada.Tui.Screens.Operations
             _DiffLoading = true;
             DiffView.Invalidate();
             if (CurrentPanelKey != "diff") SelectPanel("diff");
-            Call((c, t) => c.DiffBlackBoxEntriesAsync(EntryId, other, t), d =>
+            Call((c, t) => c.BlackBoxInsights.DiffEntriesAsync(EntryId, other, t), d =>
             {
                 if (CompareWithId != other) return;
                 _DiffLoading = false;
@@ -381,7 +381,7 @@ namespace Armada.Tui.Screens.Operations
             EnumerationQuery q = new EnumerationQuery();
             q.PageNumber = 1;
             q.PageSize = AttemptPageSize;
-            Call((c, t) => c.EnumerateMissionBlackBoxEntriesAsync(missionId!, q, t), r =>
+            Call((c, t) => c.BlackBox.EnumerateMissionEntriesAsync(missionId!, q, t), r =>
             {
                 OtherAttempts = (r?.Objects ?? new List<BlackBoxEntrySummary>()).Where(e => e.Id != EntryId).OrderByDescending(e => e.CreatedUtc).ToList();
                 then();
@@ -455,7 +455,7 @@ namespace Armada.Tui.Screens.Operations
             q.PageNumber = Math.Max(1, query.PageNumber);
             q.PageSize = Math.Max(1, query.PageSize);
             q.Order = Armada.Core.Enums.EnumerationOrderEnum.CreatedAscending;
-            BlackBoxTimelinePage? page = await Context.Client.GetBlackBoxTimelineAsync(EntryId, q, token).ConfigureAwait(false);
+            BlackBoxTimelinePage? page = await Context.Client.BlackBoxInsights.GetTimelineAsync(EntryId, q, token).ConfigureAwait(false);
             List<BlackBoxTimelineItem> rows = page?.Objects ?? new List<BlackBoxTimelineItem>();
             return new GridPage<BlackBoxTimelineItem>(rows, page?.TotalRecords ?? rows.Count);
         }
@@ -465,21 +465,21 @@ namespace Armada.Tui.Screens.Operations
             EnumerationQuery q = new EnumerationQuery();
             q.PageNumber = Math.Max(1, query.PageNumber);
             q.PageSize = Math.Max(1, query.PageSize);
-            EnumerationResult<BlackBoxNearbySuccess>? page = await Context.Client.ListBlackBoxNearbySuccessesAsync(EntryId, q, token).ConfigureAwait(false);
+            EnumerationResult<BlackBoxNearbySuccess>? page = await Context.Client.BlackBoxInsights.ListNearbySuccessesAsync(EntryId, q, token).ConfigureAwait(false);
             List<BlackBoxNearbySuccess> rows = page?.Objects ?? new List<BlackBoxNearbySuccess>();
             return new GridPage<BlackBoxNearbySuccess>(rows, page?.TotalRecords ?? rows.Count);
         }
 
         private async Task<GridPage<BlackBoxObjectSummary>> LoadObjectsAsync(GridQuery query, CancellationToken token)
         {
-            EnumerationResult<BlackBoxObjectSummary>? result = await Context.Client.ListBlackBoxObjectsAsync(EntryId, query.PageNumber, query.PageSize, token).ConfigureAwait(false);
+            EnumerationResult<BlackBoxObjectSummary>? result = await Context.Client.BlackBox.ListObjectsAsync(EntryId, query.PageNumber, query.PageSize, token).ConfigureAwait(false);
             List<BlackBoxObjectSummary> rows = result?.Objects ?? new List<BlackBoxObjectSummary>();
             return new GridPage<BlackBoxObjectSummary>(rows, result?.TotalRecords ?? rows.Count);
         }
 
         private void LoadNotes()
         {
-            Call((c, t) => c.ListBlackBoxNotesAsync(EntryId, 1, NotePageSize, t), r =>
+            Call((c, t) => c.BlackBox.ListNotesAsync(EntryId, 1, NotePageSize, t), r =>
             {
                 NoteRows = r?.Objects ?? new List<BlackBoxNote>();
                 Notes.Invalidate();
@@ -501,7 +501,7 @@ namespace Armada.Tui.Screens.Operations
 
         private void Download()
         {
-            Call((c, t) => c.DownloadBlackBoxAsync(EntryId, t), d =>
+            Call((c, t) => c.BlackBox.DownloadAsync(EntryId, t), d =>
             {
                 string name = String.IsNullOrEmpty(d.FileName) ? "blackbox-" + EntryId + ".zip" : d.FileName;
                 PathPrompt.AskSave(Context, "Download Black Box", name, path =>
@@ -523,7 +523,7 @@ namespace Armada.Tui.Screens.Operations
         {
             Confirm("Delete Black Box Entry", Tr("Delete black box entry {{id}} and its evidence? This cannot be undone.", LocalizationArgs.Of("id", EntryId)), () =>
             {
-                Call((c, t) => c.DeleteBlackBoxAsync(EntryId, t), r =>
+                Call((c, t) => c.BlackBox.DeleteAsync(EntryId, t), r =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Black box entry {{id}} deleted.", LocalizationArgs.Of("id", EntryId)));
                     Context.Navigate(TabLinks.BlackBoxPath);

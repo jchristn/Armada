@@ -127,22 +127,22 @@ namespace Armada.Tui.Screens.Operations
             _Screen.Call(async (c, t) =>
             {
                 MissionSelectionLoad load = new MissionSelectionLoad();
-                load.Summary = await c.GetCaptainSelectionAsync(id, t).ConfigureAwait(false);
+                load.Summary = await c.CaptainSelection.GetAsync(id, t).ConfigureAwait(false);
                 if (view == MissionSelectionViewEnum.History)
                 {
                     CaptainSelectionHistoryQuery query = new CaptainSelectionHistoryQuery { PageNumber = page, PageSize = PageSize, Outcome = outcome };
-                    load.History = await c.GetCaptainSelectionHistoryAsync(id, query, t).ConfigureAwait(false);
+                    load.History = await c.CaptainSelection.GetHistoryAsync(id, query, t).ConfigureAwait(false);
                 }
                 else if (view == MissionSelectionViewEnum.Preview)
                 {
-                    load.Preview = await c.PreviewCaptainSelectionAsync(id, page, PageSize, t).ConfigureAwait(false);
+                    load.Preview = await c.CaptainSelection.PreviewAsync(id, page, PageSize, t).ConfigureAwait(false);
                 }
                 else
                 {
                     CaptainSelectionDecisionView? target = load.Summary?.CurrentAttempt ?? load.Summary?.LatestDecision;
                     string? detailId = decisionId ?? target?.Id;
                     string? detailTenant = decisionId != null ? tenantId : target?.TenantId;
-                    if (detailId != null) load.Detail = await c.GetCaptainSelectionDecisionAsync(detailId, detailTenant, page, PageSize, t).ConfigureAwait(false);
+                    if (detailId != null) load.Detail = await c.CaptainSelection.GetDecisionAsync(detailId, detailTenant, page, PageSize, t).ConfigureAwait(false);
                 }
                 return load;
             }, r =>
@@ -271,7 +271,7 @@ namespace Armada.Tui.Screens.Operations
                     ReserveException = reserve.Value,
                     Reason = reason.Value.Trim()
                 };
-                _Screen.Call((c, t) => c.AuthorizeCaptainSelectionRecoveryAsync(missionId, request, t), r =>
+                _Screen.Call((c, t) => c.CaptainSelection.AuthorizeRecoveryAsync(missionId, request, t), r =>
                 {
                     d.Complete();
                     _Screen.Toast(NotificationSeverityEnum.Success, _Screen.Tr("usageSelection.recovery.record", LocalizationArgs.Of("revision", r?.Revision ?? 0)));

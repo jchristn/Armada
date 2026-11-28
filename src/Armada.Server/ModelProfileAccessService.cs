@@ -7,13 +7,15 @@ namespace Armada.Server
     using System.Threading.Tasks;
     using SyslogLogging;
     using Armada.Core.Database;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
+    using Armada.Core.Settings;
 
     /// <summary>
     /// Caller-scoped access to model profiles, shared by REST and MCP. Anyone signed in reads the profiles of their own
     /// tenant (a global admin reads every tenant); only a global admin or a tenant admin of the profile's tenant changes
-    /// the mutable parts (capabilities, rendering, notes) or marks revisions compatible. Revisions themselves are never
+    /// the mutable parts (capabilities, rendering, recovery policy, notes) or marks revisions compatible. Revisions themselves are never
     /// edited. Throws KeyNotFound (404), Argument (400) and UnauthorizedAccess (403) exceptions.
     /// </summary>
     public class ModelProfileAccessService
@@ -24,6 +26,7 @@ namespace Armada.Server
         private readonly DatabaseDriver _Database;
         private readonly LoggingModule _Logging;
         private readonly ModelScorecardService _Scorecards;
+        private readonly ArmadaSettings _Settings;
 
         #endregion
 
@@ -34,11 +37,13 @@ namespace Armada.Server
         /// </summary>
         /// <param name="database">Database driver.</param>
         /// <param name="logging">Logging module.</param>
-        /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
-        public ModelProfileAccessService(DatabaseDriver database, LoggingModule logging)
+        /// <param name="settings">Global settings, the defaults a profile's recovery policy overrides; null uses the defaults.</param>
+        /// <exception cref="ArgumentNullException">Thrown when database or logging is null.</exception>
+        public ModelProfileAccessService(DatabaseDriver database, LoggingModule logging, ArmadaSettings? settings = null)
         {
             _Database = database ?? throw new ArgumentNullException(nameof(database));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+            _Settings = settings ?? new ArmadaSettings();
             _Scorecards = new ModelScorecardService(database, logging);
         }
 
@@ -87,6 +92,8 @@ namespace Armada.Server
             profile.Measured = ModelProfileMeasured.From(revisions);
             if (revisions.Count > ModelProfile.MaxRevisions) revisions.RemoveRange(0, revisions.Count - ModelProfile.MaxRevisions);
             profile.Revisions = revisions;
+            profile.EffectiveRecovery = RecoveryPolicyResolver.Resolve(_Settings, profile);
+            profile.EffectiveTimeouts = TimeoutPolicyResolver.Resolve(_Settings, profile);
             return profile;
         }
 
@@ -128,17 +135,60 @@ namespace Armada.Server
             if (request == null) throw new ArgumentException("A request body is required.", nameof(request));
 
             if (request.Capabilities != null)
-                profile.Capabilities = new ModelProfileCapabilities { ToolsAvailable = request.Capabilities.ToolsAvailable, McpAvailable = request.Capabilities.McpAvailable };
+            {
+                // Only the administrator's values; the probed ones are written by probes (RS-8.1) and kept.
+                profile.Capabilities.ToolsAvailable = request.Capabilities.ToolsAvailable;
+                profile.Capabilities.McpAvailable = request.Capabilities.McpAvailable;
+            }
             if (request.Rendering != null)
             {
                 string? template = Blank(request.Rendering.Template);
                 if (template != null && template.Length > 256) throw new ArgumentException("Rendering.Template must be at most 256 characters.");
+                // The template names the persona prompt variant the profile's captains render (RS-8.2).
+                if (template != null)
+                {
+                    PromptVariantEnum? variant;
+                    try { variant = PromptVariantResolver.Parse(template); }
+                    catch (ArgumentException) { throw new ArgumentException("Rendering.Template must be Current, Lean or Compact."); }
+                    template = variant.HasValue ? variant.Value.ToString() : null;
+                }
                 profile.Rendering = new ModelProfileRendering
                 {
                     Template = template,
                     RepeatContractAtEnd = request.Rendering.RepeatContractAtEnd,
                     MaxFilesPerMission = request.Rendering.MaxFilesPerMission
                 };
+            }
+
+            if (request.Recovery != null)
+            {
+                profile.Recovery = new ModelProfileRecovery
+                {
+                    MaxResumes = request.Recovery.MaxResumes,
+                    UnclassifiedResumes = request.Recovery.UnclassifiedResumes,
+                    TransientGraceMinutes = request.Recovery.TransientGraceMinutes,
+                    JudgeReworkRounds = request.Recovery.JudgeReworkRounds,
+                    OutputRepairAttempts = request.Recovery.OutputRepairAttempts,
+                    EscalateAfterResumes = request.Recovery.EscalateAfterResumes
+                };
+            }
+
+            if (request.Timeouts != null)
+            {
+                profile.Timeouts = new ModelProfileTimeouts
+                {
+                    StallThresholdMinutes = request.Timeouts.StallThresholdMinutes,
+                    ToolWaitHardLimitMinutes = request.Timeouts.ToolWaitHardLimitMinutes,
+                    MaxRuntimeMinutes = request.Timeouts.MaxRuntimeMinutes,
+                    FirstOutputMinutes = request.Timeouts.FirstOutputMinutes
+                };
+            }
+
+            if (request.Tiering != null)
+            {
+                // RS-8.5: only the administrator's tier is editable; the suggestion is the model alert pass's.
+                if (request.Tiering.Tier.HasValue && !Enum.IsDefined(request.Tiering.Tier.Value)) throw new ArgumentException("Tiering.Tier must be Economy, Standard or Premium.");
+                profile.Tiering.Tier = request.Tiering.Tier;
             }
 
             if (request.Notes != null)

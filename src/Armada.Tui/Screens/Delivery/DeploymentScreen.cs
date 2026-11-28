@@ -111,7 +111,7 @@ namespace Armada.Tui.Screens.Delivery
         /// <inheritdoc />
         protected override Task<Deployment?> FetchAsync(CancellationToken token)
         {
-            return Context.Client.GetDeploymentAsync(EntityId, token);
+            return Context.Client.Deployments.GetAsync(EntityId, token);
         }
 
         /// <inheritdoc />
@@ -271,7 +271,7 @@ namespace Armada.Tui.Screens.Delivery
         {
             try
             {
-                EnumerationResult<RunbookExecution>? result = await Context.Client.ListRunbookExecutionsAsync(new RunbookExecutionQuery { DeploymentId = id, PageSize = 500 }, token).ConfigureAwait(false);
+                EnumerationResult<RunbookExecution>? result = await Context.Client.Runbooks.ListExecutionsAsync(new RunbookExecutionQuery { DeploymentId = id, PageSize = 500 }, token).ConfigureAwait(false);
                 return result?.Objects ?? new List<RunbookExecution>();
             }
             catch (ArmadaApiException)
@@ -326,10 +326,10 @@ namespace Armada.Tui.Screens.Delivery
             {
                 EntityUi.Run<Deployment?>(Context, ct =>
                 {
-                    if (action == "approve") return Context.Client.ApproveDeploymentAsync(d.Id, null, ct);
-                    if (action == "deny") return Context.Client.DenyDeploymentAsync(d.Id, null, ct);
-                    if (action == "verify") return Context.Client.VerifyDeploymentAsync(d.Id, ct);
-                    return Context.Client.RollbackDeploymentAsync(d.Id, ct);
+                    if (action == "approve") return Context.Client.Deployments.ApproveAsync(d.Id, null, ct);
+                    if (action == "deny") return Context.Client.Deployments.DenyAsync(d.Id, null, ct);
+                    if (action == "verify") return Context.Client.Deployments.VerifyAsync(d.Id, ct);
+                    return Context.Client.Deployments.RollbackAsync(d.Id, ct);
                 }, updated =>
                 {
                     if (updated != null)
@@ -350,7 +350,7 @@ namespace Armada.Tui.Screens.Delivery
             if (d == null) return;
             Context.Confirm("Delete Deployment", EntityUi.T(Context, "Delete \"{{title}}\"? This removes only the deployment record.", "title", d.Title), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting deployment", ct => Context.Client.DeleteDeploymentAsync(d.Id, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting deployment", ct => Context.Client.Deployments.DeleteAsync(d.Id, ct), () =>
                 {
                     EntityUi.Toast(Context, NotificationSeverityEnum.Warning, EntityUi.T(Context, "Deployment \"{{title}}\" deleted.", "title", d.Title));
                     Context.Navigate("/delivery?tab=deployments");
@@ -413,7 +413,7 @@ namespace Armada.Tui.Screens.Delivery
             if (d == null || String.IsNullOrEmpty(d.VesselId) || _Syncing) return;
             _Syncing = true;
             EntityUi.Toast(Context, NotificationSeverityEnum.Info, T("Syncing GitHub..."));
-            EntityUi.Run<GitHubActionsSyncResult?>(Context, ct => Context.Client.SyncGitHubActionsAsync(new GitHubActionsSyncRequest
+            EntityUi.Run<GitHubActionsSyncResult?>(Context, ct => Context.Client.Deployments.SyncGitHubActionsAsync(new GitHubActionsSyncRequest
             {
                 VesselId = d.VesselId,
                 WorkflowProfileId = d.WorkflowProfileId,

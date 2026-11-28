@@ -35,9 +35,10 @@ namespace Armada.Core.Services
         /// exit is classified from the provider error's machine error type when it is a known code, otherwise from its
         /// HTTP status (429, 402: usage limit; 401, 403: auth failure; 404: model unavailable; 408, 500, 502, 503, 504,
         /// 529: transient; 413, or a 400 whose message names the context or token limit: task failure). A generic
-        /// inference failure with no usable status is transient: the recovery budget bounds its retries. A non-zero exit
-        /// with no provider error, or with one that carries neither a known type nor a known status, is
-        /// <see cref="RuntimeFailureKindEnum.Crash"/>.
+        /// inference failure with no usable status is transient: the recovery budget bounds its retries. A process that
+        /// died abnormally (see <see cref="IsAbnormalExit"/>) without a classified provider error is
+        /// <see cref="RuntimeFailureKindEnum.Crash"/>. Any other non-zero exit with no provider error, or with one that
+        /// carries neither a known type nor a known status, is <see cref="RuntimeFailureKindEnum.Unclassified"/>.
         /// </summary>
         /// <param name="exitCode">The process exit code (null is treated as a non-zero failure).</param>
         /// <param name="providerError">The structured provider error, if any.</param>
@@ -45,17 +46,38 @@ namespace Armada.Core.Services
         public static RuntimeFailureKindEnum Classify(int? exitCode, RuntimeProviderError? providerError)
         {
             if (exitCode.HasValue && exitCode.Value == 0) return RuntimeFailureKindEnum.Clean;
-            if (providerError == null) return RuntimeFailureKindEnum.Crash;
+            if (providerError == null) return Unexplained(exitCode);
+
+            // RS-5.4: a 429 (or a rate-limit error type) is backpressure unless the provider says the quota is gone: an
+            // insufficient_quota or usage-limit type, a stated reset time, or a Retry-After longer than the resume cap.
+            if (IsRateLimit(providerError)) return IsExhaustedQuota(providerError) ? RuntimeFailureKindEnum.UsageLimit : RuntimeFailureKindEnum.Transient;
 
             RuntimeFailureKindEnum? fromType = ClassifyErrorType(providerError.ErrorType);
             if (fromType.HasValue) return fromType.Value;
+
+            // An open-model server names most failures only in its message (RS-5.3).
+            RuntimeFailureKindEnum? fromMessage = ClassifyErrorType(OpenModelErrorPatterns.Match(providerError.HttpStatusCode, providerError.Message));
+            if (fromMessage.HasValue) return fromMessage.Value;
 
             RuntimeFailureKindEnum? fromStatus = ClassifyHttpStatus(providerError.HttpStatusCode, providerError.Message);
             if (fromStatus.HasValue) return fromStatus.Value;
 
             if (IsGenericInferenceFailure(providerError.ErrorType)) return RuntimeFailureKindEnum.Transient;
 
-            return RuntimeFailureKindEnum.Crash;
+            return Unexplained(exitCode);
+        }
+
+        /// <summary>
+        /// Whether an exit code means the process died abnormally rather than exiting on its own: killed by a signal
+        /// (129 to 192, the shell convention of 128 plus the signal number, on Linux and macOS) or a negative code (a
+        /// Windows crash status such as 0xC0000005 read as a signed integer).
+        /// </summary>
+        /// <param name="exitCode">The process exit code, or null.</param>
+        /// <returns>True for an abnormal death.</returns>
+        public static bool IsAbnormalExit(int? exitCode)
+        {
+            if (!exitCode.HasValue) return false;
+            return exitCode.Value < 0 || (exitCode.Value > 128 && exitCode.Value <= 192);
         }
 
         /// <summary>
@@ -76,18 +98,36 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Provider error type a runtime reports when the captain stops at its iteration (model-turn) limit.
+        /// </summary>
+        public const string MaxIterationsReached = "max_iterations_reached";
+
+        /// <summary>
+        /// Whether the exit was the captain stopping at its iteration (model-turn) limit (RS-5.12), decided from the
+        /// provider error type, never from the message.
+        /// </summary>
+        /// <param name="error">Provider error, or null.</param>
+        /// <returns>True for an iteration-limit stop.</returns>
+        public static bool IsIterationLimit(RuntimeProviderError? error)
+        {
+            return error != null && String.Equals(error.ErrorType, MaxIterationsReached, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
         /// Every machine error type a built-in runtime is known to report, so a test can assert that each one has a
-        /// deliberate classification rather than falling through to <see cref="RuntimeFailureKindEnum.Crash"/> by accident.
+        /// deliberate classification rather than falling through to <see cref="RuntimeFailureKindEnum.Unclassified"/> by accident.
         /// Types classified only through their HTTP status are listed with the status-less outcome.
         /// </summary>
         public static readonly IReadOnlyList<string> KnownErrorTypes = new List<string>
         {
             "rate_limit_error", "rate_limit_exceeded", "insufficient_quota", "usage_limit_reached", "billing_error",
             "authentication_error", "permission_error", "invalid_api_key",
-            "not_found_error", "model_not_found",
+            "not_found_error", "model_not_found", "model_out_of_memory", "tool_calling_unsupported",
             "max_iterations_reached", "budget_exceeded", "degenerate_output", "incomplete_completion",
             "output_token_limit_reached", "tool_call_limit_reached", "context_limit_exceeded", "schema_validation_failed",
+            "tool_call_parse_error",
             "llm_connection_error", "llm_timeout", "llm_stream_error", "api_error", "server_error", "overloaded_error",
+            "unavailable_error", "runner_terminated", "model_loading", "proxy_timeout",
             "timeout_error", "inference_error", "llm_error", "error", "turn.failed",
             "runtime_error", "cancelled"
         };
@@ -105,9 +145,36 @@ namespace Armada.Core.Services
                 || kind == RuntimeFailureKindEnum.ModelUnavailable;
         }
 
+        /// <summary>
+        /// Longest Retry-After, in seconds, a rate-limited (429) captain is resumed after. A longer wait is a usage limit and
+        /// quarantines the captain until then.
+        /// </summary>
+        public const int MaxTransientRetryAfterSeconds = 600;
+
         #endregion
 
         #region Private-Methods
+
+        private static bool IsRateLimit(RuntimeProviderError error)
+        {
+            if (error.HttpStatusCode == 429) return true;
+            string type = (error.ErrorType ?? String.Empty).Trim().ToLowerInvariant();
+            return type == "rate_limit_error" || type == "rate_limit_exceeded";
+        }
+
+        private static bool IsExhaustedQuota(RuntimeProviderError error)
+        {
+            string type = (error.ErrorType ?? String.Empty).Trim().ToLowerInvariant();
+            if (type == "insufficient_quota" || type == "usage_limit_reached" || type == "billing_error") return true;
+            if (error.ResetUtc.HasValue) return true;
+            if (error.RetryAfterSeconds.HasValue && error.RetryAfterSeconds.Value > MaxTransientRetryAfterSeconds) return true;
+            return !String.IsNullOrEmpty(error.Message) && error.Message.Contains("insufficient_quota", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static RuntimeFailureKindEnum Unexplained(int? exitCode)
+        {
+            return IsAbnormalExit(exitCode) ? RuntimeFailureKindEnum.Crash : RuntimeFailureKindEnum.Unclassified;
+        }
 
         private static int Significance(RuntimeProviderError error)
         {
@@ -137,15 +204,18 @@ namespace Armada.Core.Services
                     return RuntimeFailureKindEnum.AuthFailure;
                 case "not_found_error":
                 case "model_not_found":
+                case OpenModelErrorPatterns.ModelOutOfMemory:
+                case OpenModelErrorPatterns.ToolCallingUnsupported:
                     return RuntimeFailureKindEnum.ModelUnavailable;
                 case "max_iterations_reached":
                 case "budget_exceeded":
-                case "degenerate_output":
+                case OpenModelErrorPatterns.DegenerateOutput:
                 case "incomplete_completion":
                 case "output_token_limit_reached":
                 case "tool_call_limit_reached":
                 case "context_limit_exceeded":
                 case "schema_validation_failed":
+                case OpenModelErrorPatterns.ToolCallParseError:
                     return RuntimeFailureKindEnum.TaskFailure;
                 case "llm_connection_error":
                 case "llm_timeout":
@@ -154,6 +224,10 @@ namespace Armada.Core.Services
                 case "server_error":
                 case "timeout_error":
                 case "overloaded_error":
+                case "unavailable_error":
+                case OpenModelErrorPatterns.RunnerTerminated:
+                case OpenModelErrorPatterns.ModelLoading:
+                case OpenModelErrorPatterns.ProxyTimeout:
                     // Overload is capacity backpressure, not an exhausted quota: retry with backoff rather than
                     // quarantining the captain as if its account were out of credit.
                     return RuntimeFailureKindEnum.Transient;
@@ -188,23 +262,10 @@ namespace Armada.Core.Services
                 case 413:
                     return RuntimeFailureKindEnum.TaskFailure;
                 case 400:
-                    return MentionsContextLimit(message) ? RuntimeFailureKindEnum.TaskFailure : (RuntimeFailureKindEnum?)null;
+                    return OpenModelErrorPatterns.MentionsContextLimit(message) ? RuntimeFailureKindEnum.TaskFailure : (RuntimeFailureKindEnum?)null;
                 default:
                     return null;
             }
-        }
-
-        private static bool MentionsContextLimit(string? message)
-        {
-            if (String.IsNullOrWhiteSpace(message)) return false;
-            string lower = message.ToLowerInvariant();
-            return lower.Contains("context length")
-                || lower.Contains("context window")
-                || lower.Contains("context_length")
-                || lower.Contains("maximum context")
-                || lower.Contains("too many tokens")
-                || lower.Contains("prompt is too long")
-                || lower.Contains("num_ctx");
         }
 
         private static bool IsGenericInferenceFailure(string? errorType)

@@ -79,7 +79,7 @@ namespace Armada.Runtimes.Tools.Tasks
         }
 
         /// <summary>
-        /// An optional running annotation on the task — a blocker, a decision, or a result. Null when the
+        /// An optional running annotation on the task: a blocker, a decision, or a result. Null when the
         /// task carries no note. A note is required when the status is <see cref="AgentTaskStatusEnum.Failed"/>.
         /// </summary>
         [JsonPropertyName("note")]

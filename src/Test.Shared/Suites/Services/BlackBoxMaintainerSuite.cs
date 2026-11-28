@@ -47,7 +47,7 @@ namespace Test.Shared.Suites.Services
                 AssertContains("Armada versions: 1.1.0", md.Content);
                 AssertContains("### FIX THIS", md.Content, "each failure mode carries the single brief, demoted under its group");
                 AssertFalse(md.Content.Contains("maintainer brief", StringComparison.Ordinal), "no separate maintainer brief");
-                AssertFalse(md.Content.Contains('—'), "no em-dashes");
+                AssertFalse(md.Content.Contains('\u2014'), "no em-dashes");
                 AssertEqual(5, (await bb.Service.GetBundleAsync(admin, new BlackBoxBundleRequest { Max = 5, AllFailures = true }).ConfigureAwait(false)).EntryCount, "max honored");
                 AssertEqual(50, (await bb.Service.GetBundleAsync(admin, new BlackBoxBundleRequest { Max = 500, AllFailures = true }).ConfigureAwait(false)).EntryCount, "max clamped to 50");
 

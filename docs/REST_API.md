@@ -20,7 +20,7 @@ This is an owner-approved compatibility exception for v1.3.0; see [compatibility
 
 Captain create/update accepts `MaxConcurrency` (JSON `maxConcurrency`), clamped to 1..`Concurrency.MaxCaptainConcurrency` (hard ceiling 256). Creation defaults to 1 for CLI runtimes and 4 for ApiEndpoint/Mux, or configured server defaults. Updates that omit it preserve the current value. Lowering it does not stop running work. REST, MCP and WebSocket return server-owned `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; client writes cannot replace these ownership fields. Planning/refinement/analysis are exclusive, and a quarantined captain accepts no new missions while existing work continues. The singular `CurrentMissionId` and `CurrentDockId` fields were removed in migration 121; use active mission IDs to find each mission’s dock and process. Admission serializes vessel checks separately from shared capacity claims, with bounded lock waits. A lock timeout leaves the mission Pending for retry; no new endpoint or request field is needed. Equivalent captains with fewer occupied slots are preferred after explicit/persona/tier routing. See [testing](CONCURRENCY_TESTING.md).
 
-**Version:** 1.4.0
+**Version:** 1.5.0
 **Base URL:** `http://localhost:7890`
 **Content-Type:** `application/json`
 
@@ -69,6 +69,7 @@ camelizes REST responses.
   - [Captains](#captains)
   - [Ask](#ask)
   - [CLI Permissions](#cli-permissions)
+  - [Stage Submissions](#stage-submissions)
   - [Black Box](#black-box)
   - [Evaluate (Model Probe Runs)](#evaluate-model-probe-runs)
   - [Model Profiles](#model-profiles)
@@ -304,6 +305,7 @@ without a declaration requires a global admin. The complete per-route list is th
 | `/api/v1/stage-outcomes` | GET, POST `.../enumerate`; `GET .../{id}`, `PUT .../{id}/cause`, `POST .../{id}/rule` | Authenticated | Global admins see every tenant; everyone else their own tenant (`404` for another tenant's outcome). Captain sessions get `403` |
 | `/api/v1/stage-outcomes/reclassify` | POST | TenantAdmin | A tenant admin only within their tenant; global admins any tenant or every tenant |
 | `/api/v1/handoff-artifacts/{id}`, `/api/v1/missions/{id}/handoff-artifacts` (also `POST .../enumerate`) | GET | Authenticated | Global admins see every tenant; everyone else their own tenant (`404` otherwise). A captain session (mission-scoped token) sees its own voyage, or its own mission and the stage it depends on; Ask sessions get `403` |
+| `/api/v1/missions/{id}/submissions` | GET | Authenticated | Same scope as handoff artifacts; Ask sessions get `403` |
 | `/api/v1/failure-cause-rules` | GET, POST, POST `.../enumerate`; `GET`, `PUT`, `DELETE .../{id}` | Authenticated | The caller's tenant plus rules for every tenant. Anyone in the tenant may write the tenant's rules; rules for every tenant (`TenantId` null) and built-in rules need a global admin (`403`) |
 | `/api/v1/captains/{id}/evaluate` | POST | TenantAdmin | Global admin, or a tenant admin of the captain's tenant (`404` for another tenant's captain). Captain sessions get `403` |
 | `/api/v1/model-endpoints/{id}/evaluate` | POST | Authenticated | Quick: anyone who can read the endpoint (the `GET /api/v1/model-endpoints/{id}` rules); `404` otherwise. Full: a global admin or a tenant admin (`403` otherwise) |
@@ -1219,7 +1221,7 @@ voyages, and signals. The same scoping applies to the MCP `status` tool and the 
     "LatencyMs": null,
     "CapabilityManifest": {
       "ProtocolVersion": "2026-04-03",
-      "ArmadaVersion": "1.4.0",
+      "ArmadaVersion": "1.5.0",
       "Features": [
         "remoteControl.handshake",
         "remoteControl.heartbeat",
@@ -1251,9 +1253,9 @@ Health check endpoint. **Does not require authentication.** `BuildVersion` and `
   "Timestamp": "2026-03-07T12:00:00Z",
   "StartUtc": "2026-03-07T08:00:00Z",
   "Uptime": "0.04:00:00",
-  "Version": "1.4.0",
+  "Version": "1.5.0",
   "ContractVersion": "1.0",
-  "BuildVersion": "1.4.0+<source-revision>",
+  "BuildVersion": "1.5.0+<source-revision>",
   "CommitHash": "<source-revision>",
   "Ports": {
     "Admiral": 7890,
@@ -1429,7 +1431,7 @@ refresh the output heartbeat. A failed stall recovery retains the mission's dock
 (including uncommitted and untracked work); inspect or recover it before explicitly
 reclaiming it. `MaxMissionRuntimeMinutes`, when enabled, remains an independent cap.
 
-Accepts partial updates to editable server settings and saves them to `settings.json`. Editable top-level fields: `DataRetentionDays`, `RequestHistoryRetentionDays`, `AdmiralPort`, `McpPort`, `MaxCaptains`, `HeartbeatIntervalSeconds`, `StallThresholdMinutes`, `StageCheckTimeoutMinutes` (1 to 240), `BlockDependentsOfFailedStages`, `IdleCaptainTimeoutSeconds`, `PlanningSessionInactivityTimeoutMinutes`, `PlanningSessionAbandonmentTimeoutMinutes`, `PlanningSessionRetentionDays`, `LandingMode` (the global landing mode: `LocalMerge`, `MergeAndPush`, `PullRequest`, `MergeQueue`, or `None`), `SelfVesselId`, `RebuildSlotRetentionCount`, `RemoteControl`, `Import`, `FleetActions`, `RepositoryHealth`, `Retention`, `Permissions`, `Ask`, and `Push`; omitted fields are unchanged. When `RemoteControl` is supplied, it replaces the full `RemoteControl` settings object (send `Password` or `EnrollmentToken` as `********` to keep the stored value). When `Import` is supplied, it replaces the full `Import` (vessel import) settings object; see [Vessel Import](#vessel-import) for the fields and their ranges. When `FleetActions` is supplied, it replaces the full `FleetActions` object (omitted fields take their defaults; values are clamped: `MaxConcurrency` 1-32, `DefaultTimeoutSeconds` 5-7200, `MaxOutputBytes` 1024-1048576, `RunRetentionDays` 1-3650) and applies immediately.
+Accepts partial updates to editable server settings and saves them to `settings.json`. Editable top-level fields: `DataRetentionDays`, `RequestHistoryRetentionDays`, `AdmiralPort`, `McpPort`, `MaxCaptains`, `HeartbeatIntervalSeconds`, `StallThresholdMinutes`, `StageCheckTimeoutMinutes` (1 to 240), `BlockDependentsOfFailedStages`, `AcceptLegacyMissionMarkers`, `OutputRepairNormalizerCaptainId` (an empty string clears it), `IdleCaptainTimeoutSeconds`, `PlanningSessionInactivityTimeoutMinutes`, `PlanningSessionAbandonmentTimeoutMinutes`, `PlanningSessionRetentionDays`, `LandingMode` (the global landing mode: `LocalMerge`, `MergeAndPush`, `PullRequest`, `MergeQueue`, or `None`), `SelfVesselId`, `RebuildSlotRetentionCount`, `RemoteControl`, `Import`, `FleetActions`, `RepositoryHealth`, `Retention`, `Permissions`, `Ask`, and `Push`, plus the 1.5.0 reliability settings `TimeoutScaleReferenceTokensPerSecond` (0 to 1000), `PromptVariantCompactMaxContextTokens` and `PromptVariantLeanMaxContextTokens` (0 to 2097152; out of range is `400` before anything changes), `MergeQueueRequeueLimit` (clamped 0-10), `MergeQueueBatchSize` (1-20), `MergeQueueLeaseSeconds` (5-14400), `UnclassifiedResumeLimit` (0-3), `JudgeReworkRounds` (1-5), `MaxEscalations` (0-5), `EscalateOnOpenEndpointBreaker`, and `RoutingData` (replaces the full object: `RankByOutcomes`, `SuggestTiers`, `MinimumSamples` 5-1000, `HalfLifeDays` 1-365); omitted fields are unchanged. GET returns every one of them. When `RemoteControl` is supplied, it replaces the full `RemoteControl` settings object (send `Password` or `EnrollmentToken` as `********` to keep the stored value). When `Import` is supplied, it replaces the full `Import` (vessel import) settings object; see [Vessel Import](#vessel-import) for the fields and their ranges. When `FleetActions` is supplied, it replaces the full `FleetActions` object (omitted fields take their defaults; values are clamped: `MaxConcurrency` 1-32, `DefaultTimeoutSeconds` 5-7200, `MaxOutputBytes` 1024-1048576, `RunRetentionDays` 1-3650) and applies immediately.
 
 Lists in settings are bounded (see [ENUMERATION.md](ENUMERATION.md)): `Import.AllowedRoots`, `Import.ExcludedDirectoryNames`, and `FleetActions.OfflineHarborIds` hold at most 256 entries each, and an update with more is rejected with `400` (`Data.Code` `CollectionLimitExceeded`, `Data.Field` naming the list) before anything is applied. `RepositoryHealth.ScoredCriteria` and `Push.Categories` keep one entry per defined value (duplicates and unknown values are dropped).
 
@@ -3201,7 +3203,8 @@ Create a new voyage with optional missions. Missions are automatically dispatche
 **Response:** `201 Created` - [Voyage](#voyage)
 
 **Errors:** `404` when `ObjectiveId`, `PipelineId`, or `Pipeline` names something that does not exist (an unknown
-pipeline is not replaced by the vessel or fleet default); `400` for other validation failures, including more than 1000
+pipeline is not replaced by the vessel or fleet default), or when `VesselId` is not visible to the caller (another
+tenant's vessel, or for a regular user another user's vessel); `400` for other validation failures, including more than 1000
 `Missions` or more than 256 `SelectedPlaybooks` (`Data.Code` `CollectionLimitExceeded`).
 
 ```bash
@@ -3459,6 +3462,9 @@ Create and dispatch a new mission. If a `VesselId` is provided, the Admiral will
 usually `Assigned` while the Admiral provisions the dock and launches the agent in the background; poll the mission (or
 watch `mission.status_changed`) for `InProgress`. A failed launch returns it to `Pending`. A mission no captain can take
 yet stays `Pending` and the response carries an `X-Armada-Warning` header.
+
+**Errors:** `404` when `VesselId` or `VoyageId` is not visible to the caller (another tenant's, or for a regular user
+another user's); `400` for an invalid Worker envelope.
 
 ```bash
 curl -X POST http://localhost:7890/api/v1/missions \
@@ -3939,7 +3945,7 @@ curl http://localhost:8080/api/v1/missions/msn_abc123/log?offset=100&lines=100 \
 
 #### GET /api/v1/missions/{id}/instructions
 
-Return the instructions file the captain was given for a mission. Resolves the live dock/worktree first (using the runtime-specific instructions file name, then common fallbacks such as `CLAUDE.md`, `CODEX.md`, `AGENTS.md`), and falls back to a saved instructions snapshot when no live worktree exists.
+Return the instructions file the captain was given for a mission. Resolves the live dock/worktree first (using the runtime-specific instructions file name, then common fallbacks such as `CLAUDE.md`, `AGENTS.override.md`, `ARMADA.md`, `AGENTS.md`), and falls back to a saved instructions snapshot when no live worktree exists.
 
 **Permission:** Authenticated
 
@@ -4804,7 +4810,10 @@ curl -X POST http://localhost:7890/api/v1/stage-outcomes/reclassify \
 
 A **handoff artifact** is the durable, versioned record one stage attempt hands to the next stage
 (docs/MODEL_HETEROGENEITY.md, 3.1). Armada stores one per stage attempt (Worker, Test Engineer, Judge, ...) when the
-attempt's exit has been handled, linked to its stage outcome (`StageOutcomeId`), mission, persona and captain. It holds:
+stage completes, in the same database write that prepares the next stage, linked to its stage outcome (`StageOutcomeId`),
+mission, persona and captain. `AttemptId` names the attempt: the mission id and the captain's launch time to the
+millisecond (for example `msn_abc123@20261126T090000123`, or `msn_abc123@unstarted`); it is null on artifacts stored
+before 1.5.0 (migration 137). It holds:
 `SchemaVersion` (1), numbered `Findings` (each with `File`, `Line`, `Severity` `Blocking`/`NonBlocking`/`Unknown`,
 `Summary` and `RequiredFix`, parsed from the stage's `Affected Case`, `Findings` and `Issues` sections), `Verdict`
 (`PASS`, `NEEDS_REVISION`, `BLOCKED`, `COMPLETE`, ...), `AcceptanceCriteria` (from the task description),
@@ -4827,6 +4836,13 @@ the file `.armada/handoff/<persona>-<missionId>.md` written into its worktree, g
 explicit list of what did not fit. A captain with neither MCP nor file access is told that nothing beyond the block can
 reach it. Nothing is inlined past the budget.
 
+A stage whose prior stage has earlier stages of its own (a Judge after a Test Engineer after a Worker) also gets an
+`Earlier stages (newest first)` section: the prior stage's artifact gets two thirds of the budget, and the earlier
+stages, up to 8 and only within the same voyage, share what is left, each with its verdict, required actions, open
+findings and the tail of its output. An earlier stage that does not fit is named with its artifact id. The launch only
+reads stored artifacts; a stage that completed before 1.5.0 has none, so Armada builds one from the stage for that
+launch without storing it and logs it as a legacy handoff.
+
 | Method | Path | Body | Response |
 |--------|------|------|----------|
 | GET | `/api/v1/missions/{id}/handoff-artifacts` | | `200` `EnumerationResult<HandoffArtifact>` of the mission, newest first, **without** `Output` and `Diff` (their lengths stay). Query: `pageNumber`, `pageSize` (1-1000, default 25); `400` for a value that does not parse; `404` when the mission is missing or out of scope |
@@ -4836,6 +4852,68 @@ reach it. Nothing is inlined past the budget.
 ```bash
 curl "http://localhost:7890/api/v1/missions/msn_abc123/handoff-artifacts?pageSize=5" -H "Authorization: Bearer <token>"
 curl http://localhost:7890/api/v1/handoff-artifacts/hoa_abc123 -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Stage Submissions
+
+A **stage submission** (`sbm_`) is a plan, verdict or result a captain submitted through `armada_submit_plan`,
+`armada_submit_verdict` or `armada_submit_result` (MCP only, with the mission's scoped token; see
+[MCP_API.md](MCP_API.md#stage-submissions)). Each accepted submission is stored on the mission attempt
+(`stage_submissions`, migration 138). The latest one of an attempt decides that attempt's plan, verdict or result over
+any marker line in the output; at completion it is appended to `AgentOutput` as an `[ARMADA:SUBMISSION]` block.
+
+| Method | Path | Body | Response |
+|--------|------|------|----------|
+| GET | `/api/v1/missions/{id}/submissions` | | `200` `StageSubmission[]` of the mission, newest first and at most the newest 200: `Id`, `TenantId`, `MissionId`, `AttemptId`, `Persona`, `Kind` (`Plan`, `Verdict`, `Result`), `Source` (`Mcp`, or `Native` for an API endpoint captain without MCP), `Submission` (`Kind` and the typed `Plan`, `Verdict` or `Result`) and `CreatedUtc`; `404` when the mission is missing or out of scope |
+
+Access follows the handoff artifact rules: global admins see every tenant, everyone else their own tenant, a captain
+session its own voyage or its own mission and the stage it depends on; Ask sessions get `403`.
+
+```bash
+curl http://localhost:7890/api/v1/missions/msn_abc123/submissions -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Reliability
+
+Pipeline reliability reads (1.5.0). Rules live in `ReliabilityAccessService`, shared with the MCP tools
+`get_mission_attempts`, `get_reliability_summary`, `list_gate_reports` and `get_gate_report`.
+
+| Method | Path | Body | Response |
+|--------|------|------|----------|
+| GET | `/api/v1/missions/{id}/attempts` | | `200` `MissionAttemptHistory`: `MissionId`, `VoyageId`, `Persona`, `Mode`, `Status`, `CaptainId`, `Tier`, `EscalationCount`, `EscalatedFromCaptainId`, `EscalatedFromModel`, `ReworkEscalated`, `RedispatchAttempts`, `OutputRepairAttempts`, `NoOpRedispatchAttempts`, `StallRecoveryAttempts`, and `Attempts` oldest first (`OutcomeId`, `Attempt`, `ReworkRound`, `CaptainId`, `CaptainName`, `Runtime`, `Model`, `ModelProvider`, `ModelEndpointId`, `Disposition`, `FailureKind`, `FailureReason`, `RuntimeFailureKind`, `ContractRepairKind`, `IsRepair`, `Escalated`, `NextCaptainId`, `JudgeVerdict`, `SuspectedCause`, `IsEvaluation`, `StartedUtc`, `EndedUtc`, `DurationMs`); `404` when the mission is missing or out of scope |
+| GET | `/api/v1/reliability/summary` | | `200` `ReliabilitySummary`: `FromUtc`, `ToUtc`, `OutcomesRead`, `Truncated`, `Totals`, paging, and `Rows` per (model, persona): `Attempts`, `Completed`, `Failed`, `Relaunched`, `Repairs`, `Escalations`, `Unclassified`, `CompletionRate`, `UnclassifiedRate`, `FailureKinds`, `RuntimeFailureKinds`, `MedianDurationMs` |
+| GET | `/api/v1/reliability/gate-reports` | | `200` `EnumerationResult<GateReport>`, newest first (`pageSize` 1-100, default 10) |
+| POST | `/api/v1/reliability/gate-reports` | `GateReport` | `201` the stored report with `Id` (`gate-` prefix) and `UploadedUtc` |
+| GET | `/api/v1/reliability/gate-reports/{id}` | | `200` one `GateReport`; `latest` returns the newest; `404` when none |
+
+CLI: `armada mission attempts <id>` and `armada battery report [id]`. `armada mission create` takes `--persona` and
+`--mode`; `armada persona ladder <name> --rung runtime=...,model=...,endpoint=...,tier=...` (repeat in order, or
+`--clear`) replaces a persona's escalation ladder; `armada model-profile update <id>` sets `--tier` and one recovery or
+timeout override per flag (`-1` clears it), reading the profile first so the other overrides keep their values.
+
+Attempts follow the mission read rules: a global admin sees every tenant, a tenant admin the tenant, a user their own
+missions. Each attempt is one stage outcome. `IsRepair` is true for an output repair rerun or a deterministic or
+format-only contract repair. `Escalated` is true when the mission moved to `NextCaptainId` after the attempt.
+
+The summary counts stage outcomes in a window: the last 14 days by default (`fromUtc`, `toUtc`), at most 90.
+`CompletionRate` is completed over completed, failed and escalated attempts. `UnclassifiedRate` is the share of
+attempts whose runtime exit was `Unclassified`. Production attempts only, unless `includeEvaluation=true`. Filters:
+`tenantId` (global admins; ignored otherwise), `model`, `persona`, `vesselId`. Sort: `sort` (`Attempts` (default),
+`CompletionRate`, `UnclassifiedRate`, `Repairs`, `Escalations`, `Failures`, `Model`, `Persona`) and `descending`
+(default true), paged with `pageNumber` and `pageSize` (1-1000, default 50). At most 50,000 outcomes are read
+(newest first); past that `Truncated` is true. Captain sessions get `403`.
+
+Gate reports are the acceptance gate output of `src/Armada.Gate` (G1 to G12 with per-pipeline counts). The runner
+uploads the report it wrote to `benchmarks/results` unless run with `--no-upload`. Only a global admin uploads.
+Global and tenant admins read. The Admiral keeps the newest 200 under `<data>/gate-reports/`. A report must hold at
+least one measure or pipeline and be at most 1 MiB.
+
+```bash
+curl "http://localhost:7890/api/v1/reliability/summary?persona=Worker&sort=CompletionRate" -H "Authorization: Bearer <token>"
 ```
 
 ---
@@ -4953,7 +5031,7 @@ The mission's current black box entry with its versioned record.
   "ObjectCount": 5,
   "SchemaVersion": 1,
   "RulesVersion": 1,
-  "ArmadaVersion": "1.4.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
+  "ArmadaVersion": "1.5.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
   "ArmadaCommit": "5de469cff2709733b1ffb68fbc45d1303e9e41be",
   "ReasonExcerpt": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
   "Summary": "Mission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).",
@@ -5331,7 +5409,7 @@ last seen). Body (`BlackBoxResilienceGapRequest`): `VesselId`, `Resolution`, `Ph
       "LatestMissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
       "LatestMissionTitle": "Retry landings deferred on a dirty checkout",
       "VesselName": "demo-api",
-      "ArmadaVersions": [ "1.4.0" ],
+      "ArmadaVersions": [ "1.5.0" ],
       "Severity": "High",
       "SelfHealable": "Yes",
       "Suspected": false,
@@ -5419,7 +5497,7 @@ versions (`Truncated` true when cut).
   "Truncated": false,
   "Versions": [
     {
-      "ArmadaVersion": "1.4.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
+      "ArmadaVersion": "1.5.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
       "Count": 1,
       "OpenCount": 1,
       "ArmadaFixedCount": 0,
@@ -6204,8 +6282,9 @@ curl http://localhost:7890/api/v1/model-probe-runs/mpr_abc123 -H "Authorization:
 ## Model Profiles
 
 A model profile is the model as served: a stable identity of runtime, provider, model and served context, shared by
-every captain and Harbor that runs it (docs/MODEL_HETEROGENEITY.md, The model profile). It is advisory: it does not set
-`Captain.Tier` and does not change routing or dispatch. Armada creates profiles itself when it records a captain's
+every captain and Harbor that runs it (docs/MODEL_HETEROGENEITY.md, The model profile). Most of it is
+advisory, but four sections are applied: `Rendering`, `Recovery`, `Timeouts` and `Tiering.Tier` change how the
+profile's captains are prompted, recovered, timed out and routed (a captain's own `Tier` still wins). Armada creates profiles itself when it records a captain's
 runtime and model (each stage outcome, and each Quick Evaluate run), and points the captain at its profile
 (`Captain.ModelProfileId`, server-owned; a captain update cannot set it). What changes over time is kept as immutable
 revisions (`mdv_` prefix): runtime version, model digest, sampling (`Temperature`, `TopP`), tool configuration and
@@ -6218,8 +6297,8 @@ never edited. Profile ids use the `mdl_` prefix.
 |---|---|---|---|
 | GET | `/api/v1/model-profiles` | | `200` `EnumerationResult<ModelProfile>` (without revisions), newest first. Query: `tenantId` (global admins), `runtime`, `provider` (case-insensitive), `model` (contains, case-insensitive), `pageNumber`, `pageSize` (1-1000, default 100); `400` for a page value that does not parse |
 | POST | `/api/v1/model-profiles/enumerate` | `ModelProfileQuery` (optional): `TenantId` (global admins), `Runtime`, `Provider`, `ModelContains`, `PageNumber`, `PageSize` | `200` the same page as the GET; `400` for a body that does not parse |
-| GET | `/api/v1/model-profiles/{id}` | | `200` `ModelProfile` with `Identity`, `Capabilities`, `Rendering`, `Notes`, `Revisions` (oldest first) and `Measured` (see below); `404` when missing or in another tenant |
-| PUT | `/api/v1/model-profiles/{id}` | `ModelProfileUpdateRequest`: `Capabilities` (`ToolsAvailable`, `McpAvailable`), `Rendering` (`Template`, `RepeatContractAtEnd`, `MaxFilesPerMission` 1 or more; null means no override), `Notes` (empty clears). An omitted section keeps its value | `200` the profile with revisions; `400` invalid value; `403` not an admin; `404` |
+| GET | `/api/v1/model-profiles/{id}` | | `200` `ModelProfile` with `Identity`, `Capabilities`, `Rendering`, `Recovery`, `EffectiveRecovery`, `Tiering` (`Tier`, `SuggestedTier`, `SuggestedReason`, `SuggestedSamples`, `SuggestedUtc`), `Timeouts`, `Speed` (`TokensPerSecond`, `FirstOutputMs`, `MeasuredUtc`, written by probe runs), `EffectiveTimeouts`, `Notes`, `Revisions` (oldest first) and `Measured` (see below); `404` when missing or in another tenant |
+| PUT | `/api/v1/model-profiles/{id}` | `ModelProfileUpdateRequest`: `Capabilities` (`ToolsAvailable`, `McpAvailable`; the read-only `ProbedToolsAvailable`, `ProbedMcpAvailable` and `ProbedUtc` are written by model probes and kept, and `EffectiveToolsAvailable` / `EffectiveMcpAvailable` are the administrator's value, else the probed one), `Rendering` (`Template`: `Current`, `Lean` or `Compact`, case-insensitive and stored in its canonical spelling: the persona prompt variant the profile's captains render; `RepeatContractAtEnd`: true repeats the output contract at the end of the launch prompt; `MaxFilesPerMission` 1 or more: writing personas are told to change at most that many files; null means no override), `Recovery` (see below; null values use the global setting), `Tiering` (only `Tier` is read: `Economy`, `Standard`, `Premium`, or null to classify from the model name; routing uses it for captains on the profile that set no tier), `Timeouts` (see below; null values use the measured-speed default or the global setting), `Notes` (empty clears). `Speed` is server-owned and ignored. An omitted section keeps its value | `200` the profile with revisions; `400` invalid value (including an unknown `Template`); `403` not an admin; `404` |
 | PUT | `/api/v1/model-profiles/{id}/revisions/{revisionId}/compatible-with` | `ModelProfileCompatibilityRequest`: `CompatibleWith` (revision ids of the same tenant; empty removes every mark). Symmetric | `200` `ModelProfileRevision` with `CompatibleWith`; `400` missing list or unknown revision; `403`; `404` profile or revision (of that profile) not found |
 | GET | `/api/v1/model-profiles/{id}/scorecard` | | `200` `ModelScorecard` for one persona (see [Model scorecard](#model-scorecard)). Query: `persona` (required), `vesselId`, `windowDays` (1-365, default 30), `windowMissions` (1-500, default 50); `400` missing persona, a window value out of range or not an integer; `404` when missing or in another tenant (checked before the query is validated) |
 
@@ -6231,11 +6310,42 @@ id). An incomplete report (a cancelled or timed-out run) is also recorded as an 
 `EvaluationIncomplete` true, but it never fills `Measured`, never replaces a complete report, and observations never
 pool into it. The list routes leave `Measured` null. MCP `get_model_profile` returns the same shape.
 
+`Recovery` holds the per-model recovery policy overrides for missions run by captains linked to the profile. Each value
+is null unless an administrator sets it, and null means the global setting applies:
+
+| Field | Range | Overrides | Effect |
+|---|---|---|---|
+| `MaxResumes` | 0-10 | `MaxRecoveryAttempts` | In-place resumes after a transient or task failure |
+| `UnclassifiedResumes` | 0-3 | `UnclassifiedResumeLimit` | In-place resumes after an `Unclassified` exit, never more than `MaxResumes` |
+| `TransientGraceMinutes` | 0-120 | `TransientOutageGraceMinutes` | How long a transient endpoint outage is ridden out past the resumes |
+| `JudgeReworkRounds` | 1-5 | `JudgeReworkRounds` | Automatic Judge rework rounds for a Worker slice; it can raise the global value but never lower it |
+| `OutputRepairAttempts` | 0-3 | `MaxOutputRepairAttempts` | Output-contract repair turns per mission |
+| `EscalateAfterResumes` | 0-10 | (`MaxResumes`) | Resumes after which a task or `Unclassified` failure moves up the persona's escalation ladder instead of resuming; never more than `MaxResumes`; transient outages keep resuming |
+
+`EffectiveRecovery` (single-profile reads only) is the policy in effect: the values after the overrides are
+applied (six with `EscalateAfterResumes`), plus `ModelProfileId`. Stall recovery of a captain whose process stopped reporting keeps using
+`MaxRecoveryAttempts`.
+
+`Timeouts` holds per-model timeout overrides (RS-8.8). Each value is null unless set:
+
+| Field | Range | Overrides | Effect |
+|---|---|---|---|
+| `StallThresholdMinutes` | 1-240 | `StallThresholdMinutes` | Minutes without output before a captain counts as stalled |
+| `ToolWaitHardLimitMinutes` | 1-1440 | `ToolWaitHardLimitMinutes` | Minutes a quiet runtime tool may run before the stall check applies anyway |
+| `MaxRuntimeMinutes` | 1-2880 | `MaxMissionRuntimeMinutes` | Minutes before a mission is failed as a runaway; ignored while the global value is 0 (no cap) |
+| `FirstOutputMinutes` | 1-240 | (the stall threshold) | Minutes a launched mission may wait for its first output; until then it replaces the stall threshold |
+
+A value the profile leaves null is not simply the global setting. When the profile's `Speed` says the model generates
+more slowly than `TimeoutScaleReferenceTokensPerSecond` (default 30), the global value is scaled up by the ratio, at
+most four times, so a model measured at 10 tokens per second gets a 30 minute stall threshold where the global value is
+10. `EffectiveTimeouts` (single-profile reads only) is the result: `ModelProfileId`, `SpeedScale` (1 to 4), each
+resolved value and its source (`Global`, `Measured` or `Profile`).
+
 ```bash
 curl "http://localhost:7890/api/v1/model-profiles?runtime=Mux&pageSize=10" -H "Authorization: Bearer <token>"
 curl -X PUT http://localhost:7890/api/v1/model-profiles/mdl_abc123 \
   -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
-  -d '{"rendering":{"template":"Compact","maxFilesPerMission":3},"notes":"Keep each mission to one objective."}'
+  -d '{"rendering":{"template":"Compact","maxFilesPerMission":3},"recovery":{"maxResumes":5,"judgeReworkRounds":3},"timeouts":{"stallThresholdMinutes":30},"tiering":{"tier":"Economy"},"notes":"Keep each mission to one objective."}'
 ```
 
 ### Model scorecard
@@ -6306,9 +6416,10 @@ recorded in the alert's `Actions`):
 |---|---|
 | `MoveDown` | Moves the persona's captain priority entries that name a model and select only this profile's captains to the bottom of the list (persona update) |
 | `RemoveFromPersona` | Removes those entries and clears the persona's default captain when it is on this profile (persona update) |
-| `CompactTemplate` | Unavailable: there is no prompt variant per model profile and persona (variants come from a voyage captain override or the captain's `promptVariant`, which applies to every persona) |
+| `CompactTemplate` | Unavailable as an action: set the profile's `Rendering.Template` to `Compact` instead (it applies to every persona the profile's captains run, after a voyage captain override and the captain's `promptVariant`) |
 | `Reevaluate` | Starts a Quick Evaluate of a captain on this profile (`evaluate_captain`), within the evaluation budgets |
 | `Ignore` | Hides the alert from the inbox for `Days` (1-365, default `ModelAlerts.DefaultIgnoreDays`, 7) |
+| `ApplyTier` | `TierSuggestion` alerts only (raised when `RoutingData.SuggestTiers` is on): sets the profile's `Tiering.Tier` to its suggested tier and resolves the alert. A `TierSuggestion` alert offers only `ApplyTier` and `Ignore`; another action returns `400` |
 
 | Method | Path | Body | Response |
 |---|---|---|---|
@@ -6370,7 +6481,7 @@ and `Evaluation.BatteryTaskTimeoutMinutes` (default 60) bounds each task's missi
 | DELETE | `/api/v1/battery/packs/{packId}/files` | Query `path` | `200` updated `BatteryPackDetail`; manifest deletion refused |
 | DELETE | `/api/v1/battery/packs/{packId}` | | `200` `{ Deleted: true }`; recursively deletes the pack |
 | POST | `/api/v1/battery/packs/{packId}/validate` | | `200` `BatteryPackInfo` with validation errors, without writing |
-| POST | `/api/v1/battery/runs` | `BatteryRunRequest`: `Packs` (required, at most 256), `CaptainId` (required), `RunCount` (1-10, default 3), `Seed` (optional), `CreateFixtureVessel` (default false) | `201` `BatteryRun` (queued; the tasks run in the background); `400` for no packs, an unknown or malformed pack, a bad run count, or a missing fixture vessel without `CreateFixtureVessel`; `403` not an admin; `404` unknown captain |
+| POST | `/api/v1/battery/runs` | `BatteryRunRequest`: `Packs` (required, at most 256), `CaptainId` (required), `RunCount` (1-10, default 3), `Seed` (optional), `CreateFixtureVessel` (default false), `PromptVariant` (optional), `Pipeline` (optional pipeline name: each Worker task runs as a voyage through every stage, graded on the final branch; other personas' tasks are skipped), `CaptainOverrides` (required with `Pipeline`: `[{ "Persona": "Judge", "CaptainId": "cpt_..." }]`, applied strictly) | `201` `BatteryRun` (queued; the tasks run in the background; `Pipeline` and the staffing are recorded in `ConfigurationJson`); `400` for no packs, an unknown or malformed pack, a bad run count, a missing fixture vessel without `CreateFixtureVessel`, an unknown pipeline, a pipeline without `CaptainOverrides`, or an unknown staffed captain; `403` not an admin; `404` unknown captain or a staffed captain in another tenant |
 | GET | `/api/v1/battery/runs/{id}` | | `200` `BatteryRun` with its outcome counts (`TotalTasks`, `PassedCount`, `FailedCount`, `CouldNotRunCount`, `PendingEvaluationCount`). The per-task results are not embedded; page them with the routes below. `404` |
 | GET | `/api/v1/battery/runs/{id}/results` | | `200` `EnumerationResult<BatteryTaskResult>` paged in the database, one per task attempt: `PackId`, `TaskId`, `Persona`, `Grader`, `Attempt`, `Outcome` (`Passed`/`Failed`/`CouldNotRun`/`PendingEvaluation`), `Score`, `Summary`, `Reason`, `Details` (commands, files, mutants, matched/missed seeded items, the first 256 false positives with `FalsePositiveCount`, verdict, schema error, rubric), `Output`, `VoyageId`, `MissionId`, `FixtureCommit`. Query: `pageNumber`, `pageSize` (1-1000, default 10), `status` (outcome filter), `order` (`CreatedDescending` default, `CreatedAscending`); `400` unknown outcome; `404` |
 | POST | `/api/v1/battery/runs/{id}/results/enumerate` | `EnumerationQuery` (optional): `PageNumber`, `PageSize`, `Order`, `Status` (outcome) | `200` the same page as the GET; querystring values override the body |
@@ -6394,6 +6505,22 @@ curl http://localhost:7890/api/v1/battery/runs/bat_abc123 -H "Authorization: Bea
 ```
 
 ---
+
+#### List and cancel runs
+
+| Method | Path | Body | Response |
+|--------|------|------|----------|
+| GET | `/api/v1/battery/runs` | | `200` `EnumerationResult<BatteryRun>`, newest first, without per-task results. Filters `captainId`, `status` (`Queued`, `Running`, `Completed`, `Failed`, `Cancelled`), `tenantId` (global admins); `pageSize` 1-1000, default 25 |
+| POST | `/api/v1/battery/runs/{id}/cancel` | optional `{ "Reason": "..." }` (at most 500 characters) | `200` the run after the stop |
+
+Cancelling stops a run as a stopped Full Evaluate does. No further task is dispatched, the open mission is cancelled
+(releasing its dock and captain), and the run ends `Cancelled` with the finished results kept and the reason in
+`FailureReason`. The call waits up to 10 seconds. A run still stopping comes back `Running`; poll
+`GET /api/v1/battery/runs/{id}`. A run this Admiral is not executing but still recorded `Queued` or `Running` is marked
+`Cancelled` directly. A finished run is returned unchanged. Cancelling needs a global admin or a tenant admin of the
+run's tenant (`403` otherwise, `404` for another tenant's run). The gate runner cancels its run when stopped with
+Ctrl+C. CLI: `armada battery runs`, `armada battery cancel <run> [--reason]`, and `armada battery report [id]` (the
+latest gate report, or one by ID).
 
 ### Push Notifications
 
@@ -6628,6 +6755,16 @@ Skipped entries include the entity ID and the reason (e.g., "Not found" or "Empt
 ### Events
 
 System events represent state changes and audit trail entries generated automatically by the server.
+
+Version 1.5.0 records four new event types that explain routing and landing decisions. They sit in the event log like
+any other and are the quickest way to see why a mission went where it did:
+
+| Event type | Recorded when | Payload |
+|---|---|---|
+| `mission.routing_ranked` | Outcome ranking (`RoutingData.RankByOutcomes`) ordered the captains of a tier for a mission | JSON list (at most 10) of `CaptainId`, `CaptainName`, `Score` and `Samples`; `Score` and `Samples` are null for a captain below the minimum sample count |
+| `mission.judge_strength_exception` | A pipeline with `JudgeStrength` `ProceedAndFlag` ran a Judge weaker than the work it reviews | none |
+| `merge_queue.requeued` | A push was refused because the target branch moved, and the entry went back to the queue (`MergeQueueRequeueLimit`) | none |
+| `mission.landing_handoff_requeued` | A lost landing handoff was enqueued again under the same limit | none |
 
 #### GET /api/v1/events
 
@@ -8218,8 +8355,22 @@ Create a new persona.
 | `CaptainPriorities` | object[] | no | Ordered matching classes (at most 256; more is a 400 with `Data.Code` `CollectionLimitExceeded`); defaults empty |
 | `PriorityAvailability` | enum | no | FallThrough (default) or WaitForFirstPriority |
 | `PriorityExhaustion` | enum | no | Wait (default) or UseEligibleCaptain; ignored by first-priority wait |
+| `EscalationLadder` | object[] | no | Escalation ladder, lowest rung first (at most 256), with the same matcher shape as a priority; defaults empty |
 
 Each priority has optional Runtime (AgentRuntimeEnum), Model (exact case-insensitive identifier, maximum 1024 characters), Endpoint (Mux endpoint name, case-insensitive, when Runtime is Mux; exact case-sensitive managed inference endpoint ID matching Captain.ModelEndpointId when Runtime is ApiEndpoint; maximum 1024 characters), and MinimumTier (Economy, Standard, Premium). At least one field is required. Entries combine their fields with AND; array order defines priority. Other runtimes cannot specify Endpoint. For example, `{ "Runtime": "ApiEndpoint", "Endpoint": "mep_your_endpoint" }` restricts the priority to captains bound to that endpoint. Runtime ApiEndpoint without Endpoint preserves the legacy any-API-captain match. Invalid routing returns 400. Persona reads and enumerations return these fields, including an empty CaptainPriorities array for legacy personas.
+
+`EscalationLadder` (RS-5.6) lists captain classes, lowest rung first, that a work stage of this persona moves up when
+its captain cannot finish: after its resumes are spent (or after the model profile's `EscalateAfterResumes`), after an
+`Unclassified` exit past its resume, after two unparsable tool calls in a row, after two iteration-limit stops in a row, after repeated no-op completions, or when
+the Judge rejects the work past the rework budget. The mission goes, on the same branch with the work so far, to the
+first eligible captain on a rung above the failed captain's rung (rung 1 when the failed captain matches none); past the
+top rung there is no escalation. With an empty ladder, escalation goes only to a captain with a strictly higher effective
+tier. A mission takes at most `MaxEscalations` hops (default 2). Planning and review stages, and missions whose voyage
+assigns the captain strictly, are never escalated. Standalone missions escalate too.
+
+```json
+{"Name":"Worker","PromptTemplateName":"persona.worker","EscalationLadder":[{"Model":"qwen3.8"},{"Model":"gpt-6.1"},{"Model":"claude-opus-5-5"}]}
+```
 
 ```json
 {"Name":"reviewer","PromptTemplateName":"persona.judge","CaptainPriorities":[{"Runtime":"Codex","MinimumTier":"Premium"},{"Runtime":"Mux","Endpoint":"local","Model":"gpt-oss:120b"}],"PriorityAvailability":"FallThrough","PriorityExhaustion":"Wait"}
@@ -8240,7 +8391,7 @@ curl -X POST http://localhost:7890/api/v1/personas \
 
 #### PUT /api/v1/personas/{name}
 
-Update an existing persona. Omitted routing fields preserve their stored values; an empty CaptainPriorities array clears the hierarchy. Null routing fields also preserve their values. An omitted `DefaultCaptainId` keeps the stored default captain; an explicit `null` or empty string clears it. Scope changes require administrator privileges.
+Update an existing persona. Omitted routing fields preserve their stored values; an empty CaptainPriorities array clears the hierarchy and an empty EscalationLadder clears the ladder. Null routing fields also preserve their values. An omitted `DefaultCaptainId` keeps the stored default captain; an explicit `null` or empty string clears it. Scope changes require administrator privileges.
 
 **Permission:** Authenticated
 
@@ -8257,6 +8408,7 @@ Update an existing persona. Omitted routing fields preserve their stored values;
 | `PromptTemplateName` | string | no | Updated prompt template name |
 | `DefaultCaptainId` | string? | no | Legacy preferred captain (must be visible to the caller); omitted keeps it, explicit null or empty clears it |
 | `CaptainPriorities` | object[]? | no | Ordered matching classes described under POST (at most 256); omitted/null preserves, empty clears |
+| `EscalationLadder` | object[]? | no | Escalation ladder described under POST (at most 256); omitted/null preserves, empty clears |
 | `PriorityAvailability` | enum? | no | FallThrough or WaitForFirstPriority; omitted/null preserves |
 | `PriorityExhaustion` | enum? | no | Wait or UseEligibleCaptain; omitted/null preserves |
 | `Scope` | enum? | no | TenantWide or UserSpecific; administrator-only change |
@@ -8366,6 +8518,7 @@ Create a new pipeline with stages.
 | `Name` | string | yes | Pipeline name |
 | `Description` | string | no | Pipeline description |
 | `Stages` | array | yes | Ordered list of pipeline stages |
+| `JudgeStrength` | string | no | Judge strength rule (RS-8.7): `Wait` (default when omitted), `ProceedAndFlag` or `Off`. A Judge must be at least the highest tier among the stages it reviews; `Wait` holds it with a `judge_strength` blocker until such a captain is free, `ProceedAndFlag` runs the best available Judge and records a `mission.judge_strength_exception` event |
 
 **Stage fields:**
 
@@ -8406,6 +8559,7 @@ Update an existing pipeline.
 |---|---|---|---|
 | `Description` | string | no | Updated description |
 | `Stages` | array | no | Updated ordered list of pipeline stages (replaces all existing stages) |
+| `JudgeStrength` | string | no | New Judge strength rule; omitted keeps the current rule. Voyages already created keep the rule they copied |
 
 **Response:** `200 OK` - Pipeline
 **Error:** `404` - Pipeline not found
@@ -8452,7 +8606,7 @@ Requests that violate either constraint are rejected with `400 Bad Request`.
 
 **Ollama Cloud and xAI endpoints**
 
-`OllamaCloud` and `XAI` support both `Inference` and `Embedding` through PolyPrompt 3.5.0. Both require an API key and accept only `ProviderDefault` or `Bearer` authentication. Credentials are write-only; omit the API key on update to preserve it.
+`OllamaCloud` and `XAI` support both `Inference` and `Embedding` through PolyPrompt 5.0.1 (xAI embeddings use the OpenAI-compatible `/v1/embeddings` route). Both require an API key and accept only `ProviderDefault` or `Bearer` authentication. Credentials are write-only; omit the API key on update to preserve it.
 
 Ollama Cloud uses the fixed URL `https://ollama.com:443` (omit the base URL or supply that address). Choose a hosted model; embedding availability depends on the cloud catalog. xAI defaults to `https://api.x.ai` when the base URL is omitted, uses the native Responses API for inference, and requires an explicit accessible embedding model for embeddings.
 
@@ -8559,7 +8713,7 @@ Create a model endpoint. Supply `ApiKey` to store a provider key; it is write-on
 | `Model` | string | no | Model name to target (Azure OpenAI: deployment name; Bedrock: Bedrock model id) |
 | `Region` | string | no | Cloud region. Required for `VertexAI` and `Bedrock`. |
 | `Project` | string | no | GCP project id. Required for `VertexAI`. |
-| `ApiVersion` | string | no | API version for `AzureOpenAI` (defaults to the current GA version when omitted). |
+| `ApiVersion` | string | no | Ignored since 1.5.0. `AzureOpenAI` uses the v1 API (`{BaseUrl}/openai/v1`, Chat Completions, `api-key` header), which takes no API version. |
 | `AccessKeyId` | string | no | AWS access key id for `Bedrock`. The paired secret access key is supplied write-only via `ApiKey`. |
 | `Dimensionality` | int | no | Embedding dimensionality (default 0) |
 | `TimeoutMs` | int | no | Request timeout in milliseconds (default 120000, clamped to 1000..600000) |
@@ -9297,7 +9451,7 @@ Create one scoped objective or backlog item.
   "BacklogState": "ReadyForPlanning",
   "Effort": "M",
   "Owner": "Delivery",
-  "TargetVersion": "1.4.0",
+  "TargetVersion": "1.5.0",
   "AcceptanceCriteria": ["Deployment verified in staging", "Incident rollback documented"],
   "NonGoals": ["Do not change release cadence"],
   "RolloutConstraints": ["Keep existing rollback path intact"],
@@ -11087,6 +11241,15 @@ An atomic unit of work assigned to a captain.
 | `PlaybookSnapshots` | array\<[MissionPlaybookSnapshot](#missionplaybooksnapshot)\> | `[]` | Immutable playbook materialization used for execution |
 | `ParentMissionId` | string? | null | Parent mission ID for sub-tasks |
 | `RescueOfMissionId` | string? | null | Server-owned rescue provenance, separate from hierarchy; cleared if the original is purged |
+| `EscalationCount` | int | 0 | Times the mission was escalated to a stronger captain; routing reads this, never the description |
+| `EscalatedFromCaptainId` | string? | null | Captain that held the mission when it was last escalated |
+| `EscalatedFromModel` | string? | null | Model that held the mission when it was last escalated |
+| `FanOutCompletedUtc` | datetime? | null | When an Architect's fan-out finished writing every slice and dependency |
+| `ArchitectSourceMissionId` | string? | null | Architect mission whose plan created this Worker slice |
+| `ArchitectPlanIndex` | int? | null | Zero-based index of this slice in its Architect's plan |
+| `LaunchIntentUtc` | datetime? | null | When the Admiral recorded its intent to launch the captain; null when no launch is in flight |
+| `LaunchJobId` | string? | null | Identifier of the in-flight launch job |
+| `Notes` | array\<MissionNote\> | `[]` | Notes Armada attached after creation (handoff, review feedback, reviewer guidance, prior Judge findings, output repair, resume, escalation, integration merge), at most one per `Kind`, each with `Body` and `UpdatedUtc`. The description never changes; captains receive it followed by these notes |
 | `BranchStrategy` | string | New | Persisted branch metadata; hierarchy execution is a later milestone |
 | `BaseBranchName` | string? | null | Server-owned base branch metadata |
 | `Depth` | int | 0 | Server-owned hierarchy depth |
@@ -11182,6 +11345,7 @@ A worker AI agent instance executing missions.
 | `LastProcessAliveUtc` | datetime? | null | When the captain's OS process was last seen alive (distinct from `LastHeartbeatUtc`, which advances only on agent output) |
 | `SupportsPlanningSessions` | bool | computed | Whether the captain's runtime supports planning sessions (read-only) |
 | `PlanningSessionSupportReason` | string? | computed | Why the captain cannot host planning sessions, if it cannot (read-only) |
+| `HarborUpdateRecommended` | bool | computed | True on captain reads when the Harbor running this captain's exclusive session or an active mission is missing a capability flag this Admiral expects (read-only; see Harbor `updateRecommended`) |
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `LastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
 
@@ -11406,7 +11570,7 @@ Aggregate status summary returned by the status endpoint.
     "LatencyMs": null,
     "CapabilityManifest": {
       "ProtocolVersion": "2026-04-03",
-      "ArmadaVersion": "1.4.0",
+      "ArmadaVersion": "1.5.0",
       "Features": [
         "remoteControl.handshake",
         "remoteControl.heartbeat",
@@ -11537,6 +11701,8 @@ A registered host-side runner (see the [Harbors](#harbors) endpoints). Only `Nam
 | `lastConnectedUtc` | datetime? | null | Last link-establishment timestamp (UTC) |
 | `createdUtc` | datetime | now | Creation timestamp (UTC) |
 | `lastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
+| `missingCapabilities` | string[] | [] | Read-only. Capability flags this Admiral expects that the Harbor did not advertise at its last handshake (see HARBOR_PROTOCOL.md, API captain capability flags); empty for a current or never-connected Harbor |
+| `updateRecommended` | bool | false | Read-only. True when `missingCapabilities` is not empty: the Admiral runs the earlier behavior for those features until the Harbor app is updated |
 
 ---
 
@@ -11639,7 +11805,7 @@ A managed reference to an external embedding or inference model behind a provide
 | `Model` | string? | null | Model name to target. Azure OpenAI: deployment name. Bedrock: Bedrock model id. |
 | `Region` | string? | null | Cloud region. Required for `VertexAI` and `Bedrock`. |
 | `Project` | string? | null | GCP project id. Required for `VertexAI`. |
-| `ApiVersion` | string? | null | API version for `AzureOpenAI` (defaults to the current GA version when omitted). |
+| `ApiVersion` | string? | null | Ignored since 1.5.0. `AzureOpenAI` uses the v1 API, which takes no API version. |
 | `AccessKeyId` | string? | null | AWS access key id for `Bedrock`. The paired secret access key is supplied write-only via `ApiKey`. |
 | `Dimensionality` | int | 0 | Embedding dimensionality |
 | `TimeoutMs` | int | 120000 | Request timeout in milliseconds (clamped to [1000, 600000]) |
@@ -11655,6 +11821,9 @@ A managed reference to an external embedding or inference model behind a provide
 | `LastHealthCheckUtc` | datetime? | null | Timestamp of the last probe (UTC) |
 | `LastHealthError` | string? | null | Error text from the last failed probe |
 | `LastLatencyMs` | int? | null | Latency of the last probe in milliseconds |
+| `DiscoveredContextLength` | int? | null | Read-only. The context window the model server reported for this endpoint's model, when `InferenceOptions.ContextLength` is not set: Ollama's served window (`/api/ps`) or Modelfile `num_ctx` (`/api/show`), or `max_model_len` from an OpenAI-compatible `/v1/models` (vLLM). Read at validation and before an API captain's first turn; a Harbor reads it on its own host. A configured `ContextLength` always wins. Changing the provider, base URL, or model clears it. See [Context discovery](CAPTAIN_ROUTING.md#context-discovery). |
+| `DiscoveredContextSource` | string? | null | Read-only. Where `DiscoveredContextLength` was read: `ollama /api/ps`, `ollama /api/show num_ctx`, or `/v1/models max_model_len`. |
+| `ContextDiscoveredUtc` | datetime? | null | Read-only. When `DiscoveredContextLength` was last read (UTC). |
 | `HealthHistory` | array | [] | Rolling series of recent probes (oldest first), each `{ TimestampUtc, Success }`, at most 500 records (the health check drops the oldest). Server-owned: a create or duplicate ignores a supplied history and an update leaves it unchanged. Drives the dashboard health-history bar. `Headers` and `InferenceOptions.AllowedTools` hold at most 256 entries each (400 `CollectionLimitExceeded`). |
 | `UptimePercentage` | double | 0 | Read-only. Percentage of retained probes that succeeded (0-100), derived from `HealthHistory`. |
 | `ConsecutiveSuccesses` | int | 0 | Read-only. Trailing run of successful probes, derived from `HealthHistory`. |
@@ -11748,7 +11917,7 @@ A mobile app installation registered for push notifications (see [Push Notificat
   "Platform": "Ios",
   "ExpoPushToken": "ExponentPushToken[****wxyz]",
   "DeviceName": "My iPhone",
-  "AppVersion": "1.4.0",
+  "AppVersion": "1.5.0",
   "Locale": "en-US",
   "Categories": ["AskProposal", "CliPermission"],
   "Active": true,
@@ -11900,9 +12069,11 @@ Ownership scope for Category B configuration entities (see [Data Scoping](#data-
 
 | Value | Description |
 |---|---|
-| `Open` | Created, missions being set up |
+| `Building` | Being created: its missions are written in one transaction and none is admitted until the voyage is `Open`. A creation that does not finish (an error, or a restart part-way) is moved to `Failed` by the next health check and its missions are cancelled |
+| `Open` | Every mission exists; waiting for its first mission to be admitted |
 | `InProgress` | Has active missions in progress |
 | `Complete` | All missions completed |
+| `Failed` | A mission failed the voyage, or its creation did not finish |
 | `Cancelled` | Voyage was cancelled |
 
 ---
@@ -12007,7 +12178,9 @@ Ownership scope for Category B configuration entities (see [Data Scoping](#data-
 #### PushCategoryEnum
 
 `AskProposal`, `CliPermission`, `MissionReview`, `DeploymentApproval`, `MissionFailed`, `LandingFailed`,
-`CaptainStalled`, `VoyageFinished` (see [Push Notifications](#push-notifications)).
+`CaptainStalled`, `VoyageFinished`, `ModelAlert`, `MissionEscalated` (kind `escalated`, once per applied escalation),
+`RecoveryExhausted` (kind `recovery_exhausted`, once per recovery incident that used up its rescue budget; sent to the
+owner and the tenant's admins) (see [Push Notifications](#push-notifications)).
 
 #### PushTestStatusEnum
 
@@ -12147,6 +12320,12 @@ A mission within a VoyageRequest.
 | `Description` | string | no | Mission description/instructions |
 | `RequestedCaptainId` | string? | null | Preferred captain; used when idle, otherwise dispatch falls back by `Tier` |
 | `Tier` | string? | null | Required/fallback capability tier (`CaptainTierEnum`) |
+| `Persona` | string? | null | Persona for this mission (`Worker`, `Judge`, `Test Engineer`, ...). When every mission names one and no pipeline is given, the vessel and fleet default pipelines are skipped and each mission runs as one stage with its persona; a single-stage pipeline takes it; a multi-stage pipeline picks its own personas and ignores it |
+| `Mode` | string? | null | `Implementation` (default), `Audit`, or `Research`. Audit and Research are read-only report modes whose empty diff counts as success; every stage of the mission gets this mode |
+| `Key` | string? | null | Names this mission so a later one in the same request can name it as `ParentKey` |
+| `ParentKey` | string? | null | Key of an earlier mission in the request: this mission becomes its child. An unknown or later key is a 400 and creates nothing |
+| `BranchStrategy` | string? | null | `New`, `ContinueParent` or `ForkFromParent` |
+| `OwnedPaths` | string[]? | null | Files or directories (trailing `/` for a directory) this mission may change |
 
 ---
 
@@ -12351,6 +12530,9 @@ Result of `POST /api/v1/model-endpoints/{id}/validate`. Describes the outcome of
 | `EmbeddingDimensions` | int \| null | Dimensionality returned by an embedding probe |
 | `SampleText` | string \| null | Sample completion text returned by an inference probe |
 | `Note` | string \| null | Validation only: set for an Admiral-local address (`localhost`, a loopback IP), saying a Harbor-hosted mission calls that address on the Harbor's computer, which the check did not reach |
+| `DiscoveredContextLength` | int \| null | Validation only: the context window the model server reported, when the endpoint sets no `contextLength` and does not require a Harbor; stored on the endpoint |
+| `DiscoveredContextSource` | string \| null | Where `DiscoveredContextLength` was read |
+| `ContextDiscoveryNote` | string \| null | Why discovery found no window (for example, the model is not loaded and its Modelfile sets no `num_ctx`) |
 | `TimestampUtc` | datetime | When the probe ran (UTC) |
 
 ---
@@ -12844,10 +13026,10 @@ Access-Control-Expose-Headers: Retry-After
 
 ### .NET SDK persona priorities
 
-`Armada.Client` 1.2.0 uses the shared `Armada.Core.Models.Persona` contract. `CreatePersonaAsync`, `GetPersonaAsync`, `ListPersonasAsync`, and `UpdatePersonaAsync` carry `CaptainPriorities`, `PriorityAvailability`, and `PriorityExhaustion` without additional SDK methods. Read the persona before editing it, then pass the updated object to `UpdatePersonaAsync`; this method sends the complete persona, including its routing settings. Clear `CaptainPriorities` to restore legacy routing.
+`Armada.Client` uses the shared `Armada.Core.Models.Persona` contract (1.2.0 and later; from 1.5.0 the persona calls are on `client.Personas`). `Personas.CreateAsync`, `Personas.GetAsync`, `Personas.ListAsync`, and `Personas.UpdateAsync` carry `CaptainPriorities`, `PriorityAvailability`, and `PriorityExhaustion` without additional SDK methods. Read the persona before editing it, then pass the updated object to `Personas.UpdateAsync`; this method sends the complete persona, including its routing settings. Clear `CaptainPriorities` to restore legacy routing.
 
 ```csharp
-Persona persona = (await client.GetPersonaAsync("reviewer"))!;
+Persona persona = (await client.Personas.GetAsync("reviewer"))!;
 persona.CaptainPriorities = new List<PersonaCaptainPriority>
 {
     new PersonaCaptainPriority { Runtime = AgentRuntimeEnum.Codex },
@@ -12855,7 +13037,7 @@ persona.CaptainPriorities = new List<PersonaCaptainPriority>
 };
 persona.PriorityAvailability = PersonaPriorityAvailabilityEnum.FallThrough;
 persona.PriorityExhaustion = PersonaPriorityExhaustionEnum.Wait;
-await client.UpdatePersonaAsync(persona.Name, persona);
+await client.Personas.UpdateAsync(persona.Name, persona);
 ```
 
 ### Persona prompt improvements
@@ -12969,7 +13151,7 @@ Existing event reads expose `concurrency.limit_exceeded` from health-tick observ
 
 Global occupancy counts Assigned/InProgress in a single SQL snapshot. Runtime and endpoint accounting match admission, including staged legacy Working-state compatibility and normalized shared endpoint URLs. Different alias limits are ambiguous and stay unknown. Unchanged observations are deduplicated within the process; startup resets the baseline. Observation does not preempt running work.
 
-`mission.admission_stuck` is scoped to its mission and links to that mission. Its payload contains `ReadyObservations` (3) and `MissionVersionUtc`. The monitor samples at most 64 Pending missions per tick in rotating three-tick windows, requiring the same Pending version to pass readiness before and after dispatch. Memory/global deferrals, launch-policy or placement waits, in-flight assignments and known preparation/launch failures do not count. Readiness probes do not persist routing preferences or claim/launch work. This is a sampled investigation signal, not proof that capacity stayed continuously available or an automatic retry/cancel. Unchanged episodes are deduplicated; changes/blockers reset the count. Event endpoints and response fields remain unchanged.
+`mission.admission_stuck` is scoped to its mission and links to that mission. Its payload contains `ReadyObservations` (3), `MissionVersionUtc`, `BlockedSinceUtc` (when the mission first waited for this reason), and `LastResult` (the last dispatch result summary). It is raised when the same Pending version was attempted by three consecutive heartbeat dispatch passes and every admission gate was open each time, yet no captain claim landed (for example a lost claim, a lock timeout, or an assignment error). The monitor reads the typed result each dispatch attempt records and never evaluates admission itself, so it claims, launches and persists nothing. Dependency, capacity, memory, launch-policy, placement and launch-failure waits are typed blockers and do not count. It is an investigation signal, not an automatic retry or cancel. Unchanged episodes are deduplicated; a version change, a blocker, or a pass that skips the mission resets the count. Event endpoints and response fields remain unchanged.
 
 ## v1.3.0 exclusive session ownership
 

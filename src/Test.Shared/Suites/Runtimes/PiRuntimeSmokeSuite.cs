@@ -152,6 +152,8 @@ namespace Test.Shared.Suites.Runtimes
 
         private static string? SkipReason(string provider)
         {
+            // These cases call a real model provider and spend its tokens, so they run only when asked for.
+            if (Environment.GetEnvironmentVariable("ARMADA_TEST_REAL_PI") != "1") return "Set ARMADA_TEST_REAL_PI=1 to run the real pi smoke cases.";
             string? path = HarborRuntimeDetector.ResolveOnPath("pi", Environment.GetEnvironmentVariable("PATH"), OperatingSystem.IsWindows());
             if (path == null) return "pi is not on PATH.";
             if (!RuntimeDetectionService.IsPiCommand(path)) return "The 'pi' on PATH is not the pi coding agent.";
@@ -228,6 +230,7 @@ namespace Test.Shared.Suites.Runtimes
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
                 tags: new List<string> { TestTags.EndToEnd },
+                skip: skipReason != null,
                 skipReason: skipReason);
         }
 

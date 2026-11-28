@@ -45,6 +45,33 @@ namespace Test.Shared.Suites.Database
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
+            cases.Add(CaseAsync("read_many_profiles", "ReadManyAsync returns every existing profile by id in one call, ignoring null, empty, repeated and unknown ids (RS-10.3)", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                List<string> ids = new List<string>();
+                for (int i = 0; i < 3; i++)
+                {
+                    ModelProfile profile = new ModelProfile
+                    {
+                        TenantId = "ten_many",
+                        Identity = new ModelProfileIdentity { Runtime = "ApiEndpoint", Provider = "Ollama", Model = "many-" + i }
+                    };
+                    await db.ModelProfiles.CreateAsync(profile, "key-many-" + i).ConfigureAwait(false);
+                    ids.Add(profile.Id);
+                }
+
+                Dictionary<string, ModelProfile> read = await db.ModelProfiles.ReadManyAsync(new string?[] { ids[0], ids[1], ids[1], null, "", "mdl_missing", ids[2] }).ConfigureAwait(false);
+                AssertEqual(3, read.Count, "three distinct existing profiles");
+                AssertEqual("many-1", read[ids[1]].Identity.Model);
+                AssertFalse(read.ContainsKey("mdl_missing"), "unknown ids are absent");
+                AssertEqual(0, (await db.ModelProfiles.ReadManyAsync(new string?[0]).ConfigureAwait(false)).Count, "no ids, no query result");
+
+                List<string?> many = Enumerable.Range(0, 1200).Select(i => (string?)("mdl_none_" + i)).ToList();
+                many.Add(ids[0]);
+                AssertEqual(1, (await db.ModelProfiles.ReadManyAsync(many).ConfigureAwait(false)).Count, "more than one chunk of ids");
+            }));
+
             cases.Add(CaseAsync("profile_roundtrip", "A fully and a minimally populated profile round-trip every persisted field", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
@@ -56,6 +83,9 @@ namespace Test.Shared.Suites.Database
                     Identity = new ModelProfileIdentity { Runtime = "Mux", Provider = "Ollama", Model = "qwen3.8:27b", ServedContextTokens = 131072 },
                     Capabilities = new ModelProfileCapabilities { ToolsAvailable = true, McpAvailable = false },
                     Rendering = new ModelProfileRendering { Template = "Compact", RepeatContractAtEnd = true, MaxFilesPerMission = 3 },
+                    Recovery = new ModelProfileRecovery { MaxResumes = 5, UnclassifiedResumes = 2, TransientGraceMinutes = 0, JudgeReworkRounds = 3, OutputRepairAttempts = 2 },
+                    Timeouts = new ModelProfileTimeouts { StallThresholdMinutes = 25, ToolWaitHardLimitMinutes = 120, MaxRuntimeMinutes = 600, FirstOutputMinutes = 15 },
+                    Speed = new ModelProfileSpeed { TokensPerSecond = 12.5, FirstOutputMs = 95000, MeasuredUtc = _Fixed },
                     Notes = "Slow but careful.",
                     CreatedUtc = _Fixed
                 };
@@ -73,6 +103,18 @@ namespace Test.Shared.Suites.Database
                 AssertEqual("Compact", read.Rendering.Template);
                 AssertEqual((bool?)true, read.Rendering.RepeatContractAtEnd);
                 AssertEqual((int?)3, read.Rendering.MaxFilesPerMission);
+                AssertEqual((int?)5, read.Recovery.MaxResumes);
+                AssertEqual((int?)2, read.Recovery.UnclassifiedResumes);
+                AssertEqual((int?)0, read.Recovery.TransientGraceMinutes, "0 round-trips as a value, not null");
+                AssertEqual((int?)3, read.Recovery.JudgeReworkRounds);
+                AssertEqual((int?)2, read.Recovery.OutputRepairAttempts);
+                AssertEqual((int?)25, read.Timeouts.StallThresholdMinutes);
+                AssertEqual((int?)120, read.Timeouts.ToolWaitHardLimitMinutes);
+                AssertEqual((int?)600, read.Timeouts.MaxRuntimeMinutes);
+                AssertEqual((int?)15, read.Timeouts.FirstOutputMinutes);
+                AssertEqual((double?)12.5, read.Speed.TokensPerSecond);
+                AssertEqual((long?)95000, read.Speed.FirstOutputMs);
+                AssertSameInstant(_Fixed, read.Speed.MeasuredUtc!.Value, "speed measured");
                 AssertEqual("Slow but careful.", read.Notes);
                 AssertSameInstant(_Fixed, read.CreatedUtc, "created");
                 AssertEqual(0, read.Revisions.Count, "ReadAsync returns no revisions");
@@ -92,6 +134,15 @@ namespace Test.Shared.Suites.Database
                 AssertNull(min.Rendering.Template, "template");
                 AssertNull(min.Rendering.RepeatContractAtEnd, "repeat");
                 AssertNull(min.Rendering.MaxFilesPerMission, "max files");
+                AssertNull(min.Recovery.MaxResumes, "max resumes");
+                AssertNull(min.Recovery.UnclassifiedResumes, "unclassified resumes");
+                AssertNull(min.Recovery.TransientGraceMinutes, "grace");
+                AssertNull(min.Recovery.JudgeReworkRounds, "rework rounds");
+                AssertNull(min.Recovery.OutputRepairAttempts, "repairs");
+                AssertNull(min.Timeouts.StallThresholdMinutes, "stall");
+                AssertNull(min.Timeouts.FirstOutputMinutes, "first output");
+                AssertNull(min.Speed.TokensPerSecond, "speed");
+                AssertNull(min.Speed.MeasuredUtc, "speed measured");
                 AssertNull(min.Notes, "notes");
                 AssertNull(await db.ModelProfiles.ReadAsync("mdl_missing").ConfigureAwait(false), "missing");
                 AssertNull(await db.ModelProfiles.ReadByIdentityKeyAsync("key-missing").ConfigureAwait(false), "missing key");
@@ -117,6 +168,7 @@ namespace Test.Shared.Suites.Database
                 profile.Identity = new ModelProfileIdentity { Runtime = "Codex", Model = "m2", ServedContextTokens = 4096 };
                 profile.Capabilities = new ModelProfileCapabilities { ToolsAvailable = false, McpAvailable = true };
                 profile.Rendering = new ModelProfileRendering { Template = "Full", RepeatContractAtEnd = false, MaxFilesPerMission = 1 };
+                profile.Recovery = new ModelProfileRecovery { MaxResumes = 0, JudgeReworkRounds = 5 };
                 profile.Notes = "edited";
                 await db.ModelProfiles.UpdateAsync(profile).ConfigureAwait(false);
 
@@ -131,17 +183,63 @@ namespace Test.Shared.Suites.Database
                 AssertEqual("Full", read.Rendering.Template);
                 AssertEqual((bool?)false, read.Rendering.RepeatContractAtEnd);
                 AssertEqual((int?)1, read.Rendering.MaxFilesPerMission);
+                AssertEqual((int?)0, read.Recovery.MaxResumes);
+                AssertEqual((int?)5, read.Recovery.JudgeReworkRounds);
+                AssertNull(read.Recovery.OutputRepairAttempts, "unset override stays null");
                 AssertEqual("edited", read.Notes);
 
                 profile.Capabilities = new ModelProfileCapabilities();
                 profile.Rendering = new ModelProfileRendering();
+                profile.Recovery = new ModelProfileRecovery();
                 profile.Notes = null;
                 await db.ModelProfiles.UpdateAsync(profile).ConfigureAwait(false);
                 ModelProfile cleared = (await db.ModelProfiles.ReadAsync(profile.Id).ConfigureAwait(false))!;
                 AssertNull(cleared.Capabilities.ToolsAvailable, "tools cleared");
                 AssertNull(cleared.Rendering.Template, "template cleared");
                 AssertNull(cleared.Rendering.MaxFilesPerMission, "max files cleared");
+                AssertNull(cleared.Recovery.MaxResumes, "recovery override cleared");
+                AssertNull(cleared.Recovery.JudgeReworkRounds, "rework override cleared");
                 AssertNull(cleared.Notes, "notes cleared");
+            }));
+
+            cases.Add(CaseAsync("probed_capabilities_round_trip", "RS-8.1: UpdateProbedCapabilitiesAsync writes only the probed columns; UpdateAsync never clears them", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                ModelProfile profile = new ModelProfile { TenantId = "ten_p", Identity = new ModelProfileIdentity { Runtime = "ApiEndpoint", Model = "qwen", ServedContextTokens = 32768 }, CreatedUtc = _Fixed };
+                profile.Capabilities = new ModelProfileCapabilities { McpAvailable = false };
+                profile.Notes = "kept";
+                await db.ModelProfiles.CreateAsync(profile, "key-p").ConfigureAwait(false);
+                ModelProfile fresh = (await db.ModelProfiles.ReadAsync(profile.Id).ConfigureAwait(false))!;
+                AssertNull(fresh.Capabilities.ProbedToolsAvailable, "nothing probed yet");
+                AssertNull(fresh.Capabilities.ProbedUtc, "no probe time yet");
+                DateTime lastUpdate = fresh.LastUpdateUtc;
+
+                AssertTrue(await db.ModelProfiles.UpdateProbedCapabilitiesAsync(profile.Id, true, true, _Fixed.AddHours(1)).ConfigureAwait(false), "updated");
+                AssertFalse(await db.ModelProfiles.UpdateProbedCapabilitiesAsync("mdl_missing", true, true, _Fixed).ConfigureAwait(false), "a missing profile is not updated");
+                ModelProfile read = (await db.ModelProfiles.ReadAsync(profile.Id).ConfigureAwait(false))!;
+                AssertEqual((bool?)true, read.Capabilities.ProbedToolsAvailable);
+                AssertEqual((bool?)true, read.Capabilities.ProbedMcpAvailable);
+                AssertSameInstant(_Fixed.AddHours(1), read.Capabilities.ProbedUtc!.Value, "probe time");
+                AssertNull(read.Capabilities.ToolsAvailable, "the administrator's tools value is untouched");
+                AssertEqual((bool?)false, read.Capabilities.McpAvailable, "the administrator's MCP value is untouched");
+                AssertEqual((bool?)true, read.Capabilities.EffectiveToolsAvailable, "probed tools in effect");
+                AssertEqual((bool?)false, read.Capabilities.EffectiveMcpAvailable, "the administrator's MCP value wins");
+                AssertEqual("kept", read.Notes, "notes untouched");
+                AssertSameInstant(lastUpdate, read.LastUpdateUtc, "a probe write is not an administrator edit");
+
+                read.Notes = "edited";
+                read.Capabilities = new ModelProfileCapabilities { ToolsAvailable = false };
+                await db.ModelProfiles.UpdateAsync(read).ConfigureAwait(false);
+                ModelProfile after = (await db.ModelProfiles.ReadAsync(profile.Id).ConfigureAwait(false))!;
+                AssertEqual((bool?)true, after.Capabilities.ProbedToolsAvailable, "UpdateAsync keeps the probed tools value");
+                AssertEqual((bool?)true, after.Capabilities.ProbedMcpAvailable, "UpdateAsync keeps the probed MCP value");
+                AssertEqual((bool?)false, after.Capabilities.EffectiveToolsAvailable, "the administrator's false wins");
+
+                AssertTrue(await db.ModelProfiles.UpdateProbedCapabilitiesAsync(profile.Id, false, false, _Fixed.AddHours(2)).ConfigureAwait(false), "a later probe corrects its own values");
+                ModelProfile corrected = (await db.ModelProfiles.ReadAsync(profile.Id).ConfigureAwait(false))!;
+                AssertEqual((bool?)false, corrected.Capabilities.ProbedToolsAvailable);
+                AssertEqual((bool?)false, corrected.Capabilities.ProbedMcpAvailable);
             }));
 
             cases.Add(CaseAsync("enumerate_filters_paging", "EnumerateAsync filters by tenant, runtime, provider and model text and pages newest first", TestTags.Positive, async () =>

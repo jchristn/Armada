@@ -47,7 +47,10 @@ namespace Test.Shared.Suites.Services
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
                 ReviewScenario scenario = await CreateScenarioAsync(testDb.Driver, true, approvalOptions: new RunApprovalOptions { ApproveAll = true }).ConfigureAwait(false);
+                long wakesBefore = scenario.Admiral.DispatchWakeRequests;
                 await scenario.Missions.HandleCompletionAsync(scenario.WorkerCaptain, scenario.WorkerMission.Id).ConfigureAwait(false);
+                AssertTrue(scenario.Admiral.DispatchWakeRequests > wakesBefore, "completion wakes the dispatcher");
+                await scenario.Admiral.DispatchOnceAsync().ConfigureAwait(false);
                 Mission reviewed = (await testDb.Driver.Missions.ReadAsync(scenario.WorkerMission.Id).ConfigureAwait(false))!;
                 AssertEqual(MissionStatusEnum.WorkProduced, reviewed.Status);
                 AssertFalse(reviewed.RequiresReview);
@@ -118,7 +121,10 @@ namespace Test.Shared.Suites.Services
                     beforeApprove.FailureReason = "stale failure";
                     await testDb.Driver.Missions.UpdateAsync(beforeApprove).ConfigureAwait(false);
 
+                    long wakesBefore = scenario.Admiral.DispatchWakeRequests;
                     await scenario.Missions.ApproveReviewAsync(scenario.WorkerMission.Id, "usr_reviewer", "Looks good").ConfigureAwait(false);
+                    AssertTrue(scenario.Admiral.DispatchWakeRequests > wakesBefore, "approval wakes the dispatcher");
+                    await scenario.Admiral.DispatchOnceAsync().ConfigureAwait(false);
 
                     Mission? approved = await testDb.Driver.Missions.ReadAsync(scenario.WorkerMission.Id).ConfigureAwait(false);
                     Mission? downstream = await testDb.Driver.Missions.ReadAsync(scenario.DownstreamMission!.Id).ConfigureAwait(false);
@@ -132,7 +138,7 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(downstream, "Downstream stage should still exist");
                     AssertEqual(MissionStatusEnum.InProgress, downstream!.Status, "Approval should release the next stage");
                     AssertEqual(branchName, downstream.BranchName, "Downstream stage should inherit the reviewed branch");
-                    AssertContains("## Prior Stage Output", downstream.Description ?? "", "Downstream description should include prior-stage handoff");
+                    AssertContains("## Prior Stage Output", Armada.Core.Services.MissionNotes.EffectiveDescription(downstream), "Downstream description should include prior-stage handoff");
                     AssertEqual(scenario.JudgeCaptain!.Id, downstream.CaptainId, "Judge stage should be assigned to the judge captain");
                 }
             }));
@@ -159,8 +165,8 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(branchName, retried.BranchName, "Retry should stay on the existing branch");
                     AssertEqual("usr_reviewer", retried.ReviewedByUserId, "Reviewer should be recorded");
                     AssertEqual("Add tests before continuing", retried.ReviewComment, "Denial comment should be recorded");
-                    AssertContains("## Review Feedback", retried.Description ?? "", "Retry description should embed review feedback");
-                    AssertContains("Add tests before continuing", retried.Description ?? "", "Retry description should include reviewer comment");
+                    AssertContains("## Review Feedback", Armada.Core.Services.MissionNotes.EffectiveDescription(retried), "Retry description should embed review feedback");
+                    AssertContains("Add tests before continuing", Armada.Core.Services.MissionNotes.EffectiveDescription(retried), "Retry description should include reviewer comment");
                     AssertNotNull(downstream, "Downstream stage should still exist");
                     AssertEqual(MissionStatusEnum.Pending, downstream!.Status, "Denied review should keep downstream work blocked");
                 }
@@ -325,7 +331,7 @@ namespace Test.Shared.Suites.Services
                 {
                     new MissionDescription("Implement review gate", "Implement the requested change.")
                 },
-                pipeline.Id, null, approvalOptions: approvalOptions).ConfigureAwait(false);
+                pipeline.Id, approvalOptions: approvalOptions).ConfigureAwait(false);
 
             List<Mission> voyageMissions = await db.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
             Mission workerMission = voyageMissions.First(m => String.Equals(m.Persona ?? "Worker", "Worker", StringComparison.OrdinalIgnoreCase));

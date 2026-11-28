@@ -146,7 +146,7 @@ namespace Armada.Tui.Screens.Build
         {
             ArmadaPageQuery q = new ArmadaPageQuery(1, 9999);
             q.With("userId", UserScope?.Value);
-            EnumerationResult<Captain>? result = await Context.Client.ListCaptainsAsync(q, token).ConfigureAwait(false);
+            EnumerationResult<Captain>? result = await Context.Client.Captains.ListAsync(q, token).ConfigureAwait(false);
             List<Captain> rows = result?.Objects ?? new List<Captain>();
             return new GridPage<Captain>(rows, rows.Count);
         }
@@ -178,7 +178,7 @@ namespace Armada.Tui.Screens.Build
         {
             List<string> ids = FilterLocal(_UsageCaptains).Skip((Grid.PageNumber - 1) * Grid.PageSize).Take(Math.Min(100, Grid.PageSize)).Select(c => c.Id).ToList();
             if (ids.Count == 0) return;
-            Call((client, token) => client.GetUsageLatestAsync(new UsageQuery { CaptainIds = ids, PageSize = 100 }, token), result => { _UsageViews = result?.Objects ?? new List<UsageSnapshotView>(); _UsageError = null; }, null, error => { _UsageError = Tr("Usage could not be loaded."); });
+            Call((client, token) => client.Usage.GetLatestAsync(new UsageQuery { CaptainIds = ids, PageSize = 100 }, token), result => { _UsageViews = result?.Objects ?? new List<UsageSnapshotView>(); _UsageError = null; }, null, error => { _UsageError = Tr("Usage could not be loaded."); });
         }
 
         /// <inheritdoc />
@@ -207,12 +207,14 @@ namespace Armada.Tui.Screens.Build
                     : "  [" + Tr("quarantined") + "]";
             }
 
+            if (c.HarborUpdateRecommended) text += "  [" + Tr("Harbor update recommended") + "]";
+
             return text;
         }
 
         private void Duplicate(Captain captain)
         {
-            Call((c, t) => c.CreateCaptainAsync(CaptainForm.DuplicatePayload(captain), t), created =>
+            Call((c, t) => c.Captains.CreateAsync(CaptainForm.DuplicatePayload(captain), t), created =>
             {
                 if (created == null) return;
                 Toast(NotificationSeverityEnum.Success, Tr("Captain \"{{name}}\" duplicated.", LocalizationArgs.Of("name", created.Name)));
@@ -224,7 +226,7 @@ namespace Armada.Tui.Screens.Build
         {
             Confirm("Stop Captain", Tr("Stop captain \"{{name}}\"? The captain process will be terminated.", LocalizationArgs.Of("name", captain.Name)), () =>
             {
-                Run((c, t) => c.StopCaptainAsync(captain.Id, t), () =>
+                Run((c, t) => c.Captains.StopAsync(captain.Id, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Captain \"{{name}}\" stopped.", LocalizationArgs.Of("name", captain.Name)));
                     Refresh();
@@ -236,7 +238,7 @@ namespace Armada.Tui.Screens.Build
         {
             Confirm("Recall Captain", Tr("Recall captain \"{{name}}\"? The captain will be recalled from its current mission.", LocalizationArgs.Of("name", captain.Name)), () =>
             {
-                Run((c, t) => c.RecallCaptainAsync(captain.Id, t), () =>
+                Run((c, t) => c.Captains.RecallAsync(captain.Id, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Captain \"{{name}}\" recalled.", LocalizationArgs.Of("name", captain.Name)));
                     Refresh();
@@ -248,7 +250,7 @@ namespace Armada.Tui.Screens.Build
         {
             Confirm("Restart Captain", Tr("Restart captain \"{{name}}\"? The captain will be deleted and recreated with the same saved configuration.", LocalizationArgs.Of("name", captain.Name)), () =>
             {
-                Run((c, t) => c.RestartCaptainAsync(captain.Id, t), () =>
+                Run((c, t) => c.Captains.RestartAsync(captain.Id, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Success, Tr("Captain \"{{name}}\" restarted.", LocalizationArgs.Of("name", captain.Name)));
                     Refresh();
@@ -260,7 +262,7 @@ namespace Armada.Tui.Screens.Build
         {
             Confirm("Delete Captain", Tr("Delete captain \"{{name}}\"? This cannot be undone.", LocalizationArgs.Of("name", captain.Name)), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting captain", t => Context.Client.DeleteCaptainAsync(captain.Id, t), () =>
+                DeleteProgress.RunVoid(Context, "Deleting captain", t => Context.Client.Captains.DeleteAsync(captain.Id, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Captain \"{{name}}\" deleted.", LocalizationArgs.Of("name", captain.Name)));
                     Refresh();
@@ -272,7 +274,7 @@ namespace Armada.Tui.Screens.Build
         {
             Confirm("Stop All Captains", Tr("Stop ALL captains? All captain processes will be terminated. This cannot be undone."), () =>
             {
-                Run((c, t) => c.StopAllCaptainsAsync(t), () =>
+                Run((c, t) => c.Captains.StopAllAsync(t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("All captains stopped."));
                     Refresh();
@@ -292,7 +294,7 @@ namespace Armada.Tui.Screens.Build
                     int failed = 0;
                     foreach (string id in ids)
                     {
-                        try { await Context.Client.DeleteCaptainAsync(id, t).ConfigureAwait(false); }
+                        try { await Context.Client.Captains.DeleteAsync(id, t).ConfigureAwait(false); }
                         catch (ArmadaApiException) { failed++; }
                     }
 

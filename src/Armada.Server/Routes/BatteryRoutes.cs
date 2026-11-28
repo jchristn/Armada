@@ -14,7 +14,7 @@ namespace Armada.Server.Routes
 
     /// <summary>
     /// REST routes for the fixture battery: GET /api/v1/battery/packs, POST /api/v1/battery/runs,
-    /// GET /api/v1/battery/runs/{id} and its paged results (GET .../results, POST .../results/enumerate). Rules live in <see cref="BatteryAccessService"/>, shared with MCP.
+    /// GET /api/v1/battery/runs (list), POST /api/v1/battery/runs/{id}/cancel, GET /api/v1/battery/runs/{id} and its paged results (GET .../results, POST .../results/enumerate). Rules live in <see cref="BatteryAccessService"/>, shared with MCP.
     /// </summary>
     public class BatteryRoutes
     {
@@ -113,7 +113,7 @@ namespace Armada.Server.Routes
                 if (denied != null) return denied;
                 try
                 {
-                    return (object)_Service.GetPack(ctx, req.Parameters["packId"]);
+                    return (object)_Service.Packs.GetPack(ctx, req.Parameters["packId"]);
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
@@ -135,7 +135,7 @@ namespace Armada.Server.Routes
                 if (denied != null) return denied;
                 try
                 {
-                    return (object)_Service.ReadPackFile(ctx, req.Parameters["packId"], ReadPackPath(req));
+                    return (object)_Service.Packs.ReadPackFile(ctx, req.Parameters["packId"], ReadPackPath(req));
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
@@ -158,7 +158,7 @@ namespace Armada.Server.Routes
                 if (denied != null) return denied;
                 try
                 {
-                    return (object)_Service.CreatePack(ctx, ReadPackBody<BatteryPackEditRequest>(req));
+                    return (object)_Service.Packs.CreatePack(ctx, ReadPackBody<BatteryPackEditRequest>(req));
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
@@ -180,7 +180,7 @@ namespace Armada.Server.Routes
                 if (denied != null) return denied;
                 try
                 {
-                    return (object)_Service.UpdatePackManifest(ctx, req.Parameters["packId"], ReadPackBody<BatteryPackEditRequest>(req).ManifestJson);
+                    return (object)_Service.Packs.UpdatePackManifest(ctx, req.Parameters["packId"], ReadPackBody<BatteryPackEditRequest>(req).ManifestJson);
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
@@ -203,7 +203,7 @@ namespace Armada.Server.Routes
                 if (denied != null) return denied;
                 try
                 {
-                    return (object)_Service.WritePackFile(ctx, req.Parameters["packId"], ReadPackPath(req), ReadPackBody<BatteryPackTextFile>(req).Content);
+                    return (object)_Service.Packs.WritePackFile(ctx, req.Parameters["packId"], ReadPackPath(req), ReadPackBody<BatteryPackTextFile>(req).Content);
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
@@ -227,7 +227,7 @@ namespace Armada.Server.Routes
                 if (denied != null) return denied;
                 try
                 {
-                    return (object)_Service.DeletePackFile(ctx, req.Parameters["packId"], ReadPackPath(req));
+                    return (object)_Service.Packs.DeletePackFile(ctx, req.Parameters["packId"], ReadPackPath(req));
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
@@ -250,7 +250,7 @@ namespace Armada.Server.Routes
                 if (denied != null) return denied;
                 try
                 {
-                    return (object)_Service.DeletePack(ctx, req.Parameters["packId"]);
+                    return (object)_Service.Packs.DeletePack(ctx, req.Parameters["packId"]);
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
@@ -272,7 +272,7 @@ namespace Armada.Server.Routes
                 if (denied != null) return denied;
                 try
                 {
-                    return (object)_Service.ValidatePack(ctx, req.Parameters["packId"]);
+                    return (object)_Service.Packs.ValidatePack(ctx, req.Parameters["packId"]);
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
@@ -307,9 +307,86 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Battery")
                 .WithSummary("Run the fixture battery")
-                .WithDescription("Runs the named packs against a captain: before each task the fixture is reset, then the task is dispatched as a mission on the pack's fixture vessel under the built-in ModelEvaluation pipeline (pinned to the captain, landing mode None) and graded per its manifest. Returns the queued run at once; poll GET /api/v1/battery/runs/{id}. runCount defaults to 3 (1-10). A task whose toolchain the Harbor lacks is CouldNotRun, never Failed; rubric-graded tasks are PendingEvaluation with the raw output stored. The seed, sampling settings, battery version and configuration revision are recorded; battery missions never count in production stage outcomes. Global admins and tenant admins of the captain's tenant only (403 otherwise). 400 for no packs, an unknown or malformed pack, or a missing fixture vessel without createFixtureVessel.")
-                .WithRequestBody(OpenApiJson.BodyFor<BatteryRunRequest>("Packs, captain, run count, seed, createFixtureVessel", true))
+                .WithDescription("Runs the named packs against a captain: before each task the fixture is reset, then the task is dispatched as a mission on the pack's fixture vessel under the built-in ModelEvaluation pipeline (pinned to the captain, landing mode None) and graded per its manifest. Returns the queued run at once; poll GET /api/v1/battery/runs/{id}. runCount defaults to 3 (1-10). With Pipeline (a pipeline name) and CaptainOverrides (a captain per persona, applied strictly), only Worker tasks run, each as a voyage through every stage of that pipeline graded on the final branch, which measures a mixed pipeline of models. A task whose toolchain the Harbor lacks is CouldNotRun, never Failed; rubric-graded tasks are PendingEvaluation with the raw output stored. The seed, sampling settings, battery version and configuration revision are recorded; battery missions never count in production stage outcomes. Global admins and tenant admins of the captain's tenant only (403 otherwise). 400 for no packs, an unknown or malformed pack, or a missing fixture vessel without createFixtureVessel.")
+                .WithRequestBody(OpenApiJson.BodyFor<BatteryRunRequest>("Packs, captain, run count, seed, createFixtureVessel, and optionally a pipeline with per-persona captains", true))
                 .WithResponse(201, OpenApiJson.For<BatteryRun>("The queued run"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Not an admin"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Get("/api/v1/battery/runs", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    return await _Service.EnumerateRunsAsync(ctx, ReadRunQuery(req)).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex);
+                }
+            },
+            api => api
+                .WithTag("Battery")
+                .WithSummary("List battery runs")
+                .WithDescription("One page of battery runs, newest first, without their per-task results. A global admin sees every tenant (tenantId filters); everyone else sees their own tenant. Captain sessions are refused. 400 for an unknown status or a non-numeric page value.")
+                .WithParameter(OpenApiParameterMetadata.Query("tenantId", "Tenant filter (global admins only; ignored otherwise)", false))
+                .WithParameter(OpenApiParameterMetadata.Query("captainId", "Captain filter (cpt_ prefix)", false))
+                .WithParameter(OpenApiParameterMetadata.Query("status", "Queued, Running, Completed, Failed or Cancelled", false))
+                .WithParameter(OpenApiParameterMetadata.Query("pageNumber", "Page number (default 1)", false, OpenApiSchemaMetadata.Integer()))
+                .WithParameter(OpenApiParameterMetadata.Query("pageSize", "Page size (1-1000, default 25)", false, OpenApiSchemaMetadata.Integer()))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<BatteryRun>>("One page of runs"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/battery/runs/enumerate", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    return await _Service.EnumerateRunsAsync(ctx, ReadOptionalBody<BatteryRunQuery>(req) ?? new BatteryRunQuery()).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex);
+                }
+            },
+            api => api
+                .WithTag("Battery")
+                .WithSummary("Enumerate battery runs")
+                .WithDescription("The POST form of GET /api/v1/battery/runs: one page of battery runs, newest first, without their per-task results. The JSON body (BatteryRunQuery) carries TenantId (global admins only), CaptainId, Status, PageNumber and PageSize (1-1000, default 25); an empty body returns the first page. Captain sessions are refused.")
+                .WithRequestBody(OpenApiJson.BodyFor<BatteryRunQuery>("Paging and filters", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<BatteryRun>>("One page of runs"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/battery/runs/{id}/cancel", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    BatteryRunCancelRequest body = ReadCancelBody(req);
+                    return await _Service.CancelRunAsync(ctx, req.Parameters["id"], body.Reason).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex);
+                }
+            },
+            api => api
+                .WithTag("Battery")
+                .WithSummary("Cancel a battery run")
+                .WithDescription("Stops a run as a stopped Full Evaluate does: no further task is dispatched, the open mission is cancelled (releasing its dock and captain), and the run ends Cancelled with the finished results kept. Waits up to 10 seconds for the stop, then returns the run (Running while its open mission is still stopping; poll GET /api/v1/battery/runs/{id}). A run this Admiral is not executing but still recorded Queued or Running is marked Cancelled. A finished run is returned unchanged. The body (optional) carries a reason of at most 500 characters. Global admins and tenant admins of the run's tenant only (403 otherwise); 404 when the run does not exist or belongs to another tenant.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Run ID (bat_ prefix)"))
+                .WithRequestBody(OpenApiJson.BodyFor<BatteryRunCancelRequest>("Optional reason", false))
+                .WithResponse(200, OpenApiJson.For<BatteryRun>("The run after the stop"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Not an admin"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
@@ -422,6 +499,61 @@ namespace Armada.Server.Routes
                     ?? throw new ArgumentException("A request body is required.");
             }
             catch (JsonException ex) { throw new ArgumentException("Invalid request body: " + ex.Message, ex); }
+        }
+
+        private T? ReadOptionalBody<T>(ApiRequest req) where T : class
+        {
+            string body = req.Http.Request.DataAsString ?? "";
+            if (String.IsNullOrWhiteSpace(body)) return null;
+            try
+            {
+                return JsonSerializer.Deserialize<T>(body, _JsonOptions);
+            }
+            catch (JsonException ex) { throw new ArgumentException("Invalid request body: " + ex.Message, ex); }
+        }
+
+        private static BatteryRunQuery ReadRunQuery(ApiRequest req)
+        {
+            BatteryRunQuery query = new BatteryRunQuery();
+            query.TenantId = QueryValueReader.Read(req.Query, "tenantId");
+            query.CaptainId = QueryValueReader.Read(req.Query, "captainId");
+            string? status = QueryValueReader.Read(req.Query, "status");
+            if (!String.IsNullOrWhiteSpace(status))
+            {
+                if (!Enum.TryParse(status.Trim(), true, out BatteryRunStatusEnum parsed) || !Enum.IsDefined(parsed))
+                    throw new ArgumentException("status must be Queued, Running, Completed, Failed or Cancelled.");
+                query.Status = parsed;
+            }
+
+            string? pageNumber = QueryValueReader.Read(req.Query, "pageNumber");
+            if (!String.IsNullOrWhiteSpace(pageNumber))
+            {
+                if (!Int32.TryParse(pageNumber, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number)) throw new ArgumentException("pageNumber must be an integer.");
+                query.PageNumber = number;
+            }
+
+            string? pageSize = QueryValueReader.Read(req.Query, "pageSize");
+            if (!String.IsNullOrWhiteSpace(pageSize))
+            {
+                if (!Int32.TryParse(pageSize, NumberStyles.Integer, CultureInfo.InvariantCulture, out int size)) throw new ArgumentException("pageSize must be an integer.");
+                query.PageSize = size;
+            }
+
+            return query;
+        }
+
+        private BatteryRunCancelRequest ReadCancelBody(ApiRequest req)
+        {
+            string body = req.Http.Request.DataAsString ?? String.Empty;
+            if (String.IsNullOrWhiteSpace(body)) return new BatteryRunCancelRequest();
+            try
+            {
+                return JsonSerializer.Deserialize<BatteryRunCancelRequest>(body, _JsonOptions) ?? new BatteryRunCancelRequest();
+            }
+            catch (JsonException ex)
+            {
+                throw new ArgumentException("Invalid request body: " + ex.Message, ex);
+            }
         }
 
         private BatteryRunRequest? ReadBody(ApiRequest req)

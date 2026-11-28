@@ -14,6 +14,8 @@ export const PUSH_CATEGORIES = [
   'CaptainStalled',
   'VoyageFinished',
   'ModelAlert',
+  'MissionEscalated',
+  'RecoveryExhausted',
 ] as const;
 
 export type PushCategory = (typeof PUSH_CATEGORIES)[number];

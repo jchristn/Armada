@@ -22,7 +22,7 @@ namespace Armada.Helm.Commands
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             return await RunBlackBoxAsync(false, async client =>
             {
-                BlackBoxDownload download = await client.DownloadBlackBoxAsync(settings.Id, cancellationToken).ConfigureAwait(false);
+                BlackBoxDownload download = await client.BlackBox.DownloadAsync(settings.Id, cancellationToken).ConfigureAwait(false);
                 string name = String.IsNullOrEmpty(download.FileName) ? "blackbox-" + settings.Id + ".zip" : Path.GetFileName(download.FileName);
                 string path = Path.GetFullPath(String.IsNullOrWhiteSpace(settings.Output) ? name : settings.Output!);
                 string? dir = Path.GetDirectoryName(path);

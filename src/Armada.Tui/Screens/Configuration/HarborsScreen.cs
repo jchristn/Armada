@@ -115,7 +115,7 @@ namespace Armada.Tui.Screens.Configuration
         {
             if (!CanCreate) return;
             bool wasEnabled = row.Enabled;
-            EntityUi.Run<Harbor?>(Context, ct => wasEnabled ? Context.Client.DisableHarborAsync(row.Id, ct) : Context.Client.EnableHarborAsync(row.Id, ct), h =>
+            EntityUi.Run<Harbor?>(Context, ct => wasEnabled ? Context.Client.Harbors.DisableAsync(row.Id, ct) : Context.Client.Harbors.EnableAsync(row.Id, ct), h =>
             {
                 EntityUi.Toast(Context, NotificationSeverityEnum.Success, EntityUi.T(Context, "Harbor \"{{name}}\" {{state}}.", "name", row.Name, "state", T(wasEnabled ? "disabled" : "enabled")));
                 Reload();
@@ -221,7 +221,7 @@ namespace Armada.Tui.Screens.Configuration
         protected override void BuildColumns(ArmadaGrid<Harbor> grid)
         {
             grid.AddColumn(new GridColumn<Harbor>("name", "Harbor", h => h.Name + (h.Enabled ? "" : " (" + T("disabled") + ")")) { Weight = 3, MinWidth = 14, Sortable = true, Pinned = true });
-            grid.AddColumn(new GridColumn<Harbor>("status", "Status", h => StatusBadge.Label(h.ConnectionStatus)) { Width = 15, Sortable = true, Style = (h, t) => StatusBadge.Style(h.ConnectionStatus, t) });
+            grid.AddColumn(new GridColumn<Harbor>("status", "Status", h => StatusBadge.Label(h.ConnectionStatus) + (h.UpdateRecommended ? "  [" + Context.Loc.T("update") + "]" : "")) { Width = 24, Sortable = true, Style = (h, t) => h.UpdateRecommended ? t.Warning : StatusBadge.Style(h.ConnectionStatus, t) });
             grid.AddColumn(new GridColumn<Harbor>("enabled", "Enabled", h => h.Enabled ? T("Yes") : T("No")) { Width = 8, Sortable = true });
             grid.AddColumn(new GridColumn<Harbor>("capabilities", "Capabilities", h => h.Capabilities.Count == 0 ? "-" : String.Join(", ", h.Capabilities.Select(c => c.Name))) { Weight = 3, Sortable = true });
             grid.AddColumn(new GridColumn<Harbor>("capacity", "Capacity", h => h.MaxConcurrentJobs.ToString(System.Globalization.CultureInfo.InvariantCulture)) { Width = 9, Sortable = true, Align = TUIKit.Widgets.CellAlignment.Right });
@@ -352,7 +352,7 @@ namespace Armada.Tui.Screens.Configuration
         /// <inheritdoc />
         protected override Task DeleteAsync(Harbor row, CancellationToken token)
         {
-            return Context.Client.DeleteHarborAsync(row.Id, token);
+            return Context.Client.Harbors.DeleteAsync(row.Id, token);
         }
 
         /// <inheritdoc />
@@ -409,7 +409,7 @@ namespace Armada.Tui.Screens.Configuration
                 string message = "";
                 try
                 {
-                    metrics = await Context.Client.GetHarborMetricsAsync(id, range).ConfigureAwait(false);
+                    metrics = await Context.Client.Harbors.GetMetricsAsync(id, range).ConfigureAwait(false);
                     if (metrics == null) message = "The server returned no activity for this Harbor.";
                 }
                 catch (ArmadaApiException ex)
@@ -457,7 +457,7 @@ namespace Armada.Tui.Screens.Configuration
 
         private async Task<List<Harbor>> ReadAllAsync(CancellationToken token)
         {
-            List<Harbor>? list = await Context.Client.ListHarborsAsync(token).ConfigureAwait(false);
+            List<Harbor>? list = await Context.Client.Harbors.ListAsync(token).ConfigureAwait(false);
             return list ?? new List<Harbor>();
         }
 

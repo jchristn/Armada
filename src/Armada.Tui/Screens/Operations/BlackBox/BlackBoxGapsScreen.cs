@@ -159,7 +159,7 @@ namespace Armada.Tui.Screens.Operations
             int number = Math.Max(1, query.PageNumber);
             if (size <= ServerPageSize)
             {
-                EnumerationResult<BlackBoxResilienceGap>? one = await Context.Client.EnumerateBlackBoxResilienceGapsAsync(BuildRequest(number, size), token).ConfigureAwait(false);
+                EnumerationResult<BlackBoxResilienceGap>? one = await Context.Client.BlackBox.EnumerateResilienceGapsAsync(BuildRequest(number, size), token).ConfigureAwait(false);
                 List<BlackBoxResilienceGap> rows = one?.Objects ?? new List<BlackBoxResilienceGap>();
                 return new GridPage<BlackBoxResilienceGap>(rows, one?.TotalRecords ?? rows.Count);
             }
@@ -172,7 +172,7 @@ namespace Armada.Tui.Screens.Operations
             long total = 0;
             for (int p = firstServerPage; collected.Count < size + skip; p++)
             {
-                EnumerationResult<BlackBoxResilienceGap>? page = await Context.Client.EnumerateBlackBoxResilienceGapsAsync(BuildRequest(p, ServerPageSize), token).ConfigureAwait(false);
+                EnumerationResult<BlackBoxResilienceGap>? page = await Context.Client.BlackBox.EnumerateResilienceGapsAsync(BuildRequest(p, ServerPageSize), token).ConfigureAwait(false);
                 if (page == null) break;
                 total = page.TotalRecords;
                 collected.AddRange(page.Objects);

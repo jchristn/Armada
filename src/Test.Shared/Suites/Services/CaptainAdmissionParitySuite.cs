@@ -118,8 +118,8 @@ namespace Test.Shared.Suites.Services
                     await h.Occupy(pinned); await h.Override(pinned, strict);
                     MissionAssignmentBlocker blocker = await h.ReadOnlyBlocker();
                     AssertEqual(strict ? MissionAssignmentBlockerReasonEnum.CaptainConcurrencyLimit : MissionAssignmentBlockerReasonEnum.AwaitingDispatch, blocker.Reason);
-                    AssertEqual(!strict, await h.Service.IsAdmissionReadyForMonitoringAsync(h.Mission));
                     AssertEqual(!strict, await h.Service.TryAssignAsync(h.Mission, h.Vessel));
+                    if (strict) AssertEqual(blocker.Reason, h.Service.GetAdmissionResult(h.Mission.Id)!.Blocker.Reason, "dispatch records the reason the blocker shows");
                     if (!strict) AssertEqual(fallback.Id, (await h.Db.Missions.ReadAsync(h.Mission.Id))!.CaptainId);
                     else
                     {
@@ -135,8 +135,8 @@ namespace Test.Shared.Suites.Services
                 await h.Captain("premium alternative", tier: CaptainTierEnum.Premium);
                 h.Mission.Tier = CaptainTierEnum.Premium; await h.Db.Missions.UpdateAsync(h.Mission); await h.Override(pinned, true);
                 AssertEqual(MissionAssignmentBlockerReasonEnum.AwaitingDispatch, (await h.ReadOnlyBlocker()).Reason);
-                AssertTrue(await h.Service.IsAdmissionReadyForMonitoringAsync(h.Mission));
                 AssertTrue(await h.Service.TryAssignAsync(h.Mission, h.Vessel));
+                AssertNull(h.Service.GetAdmissionResult(h.Mission.Id), "an assigned mission has no admission result");
                 AssertEqual(pinned.Id, (await h.Db.Missions.ReadAsync(h.Mission.Id))!.CaptainId);
             });
             Add("default_captain_uses_the_same_bypass_as_dispatch", async () =>
@@ -182,7 +182,8 @@ namespace Test.Shared.Suites.Services
                 await h.Occupy(occupied); await h.Captain("unrelated runtime"); await h.Override(pinned, true);
                 h.Settings.Agents = new() { new AgentSettings { Runtime = AgentRuntimeEnum.Mux, MaxConcurrent = 1 } };
                 AssertEqual(MissionAssignmentBlockerReasonEnum.RuntimeMissionLimit, (await h.ReadOnlyBlocker()).Reason);
-                AssertFalse(await h.Service.IsAdmissionReadyForMonitoringAsync(h.Mission)); AssertFalse(await h.Service.TryAssignAsync(h.Mission, h.Vessel));
+                AssertFalse(await h.Service.TryAssignAsync(h.Mission, h.Vessel));
+                AssertEqual(MissionAssignmentBlockerReasonEnum.RuntimeMissionLimit, h.Service.GetAdmissionResult(h.Mission.Id)!.Blocker.Reason, "dispatch records the same typed reason");
             });
             Add("full_eligible_captain_is_named_when_an_ineligible_one_is_free", async () =>
             {
@@ -190,6 +191,7 @@ namespace Test.Shared.Suites.Services
                 await h.Captain("judge only", allowed: "Judge");
                 MissionAssignmentBlocker blocker = await h.ReadOnlyBlocker(); AssertEqual(MissionAssignmentBlockerReasonEnum.CaptainConcurrencyLimit, blocker.Reason);
                 AssertTrue(blocker.Advice.Any(a => a.Action == AssignmentBlockerActionEnum.AddCaptain)); AssertFalse(await h.Service.TryAssignAsync(h.Mission, h.Vessel));
+                AssertEqual(blocker.Reason, h.Service.GetAdmissionResult(h.Mission.Id)!.Blocker.Reason, "dispatch records the reason the blocker shows");
             });
             Add("working_captain_with_free_but_ineligible_slots_has_an_explanation", async () =>
             {
@@ -197,6 +199,7 @@ namespace Test.Shared.Suites.Services
                 MissionAssignmentBlocker blocker = await h.ReadOnlyBlocker(); AssertEqual(MissionAssignmentBlockerReasonEnum.NoEligibleCaptain, blocker.Reason);
                 AssertEqual(false, blocker.Captains.Single().EligibleForMission); AssertContains("persona not allowed", blocker.Captains.Single().Detail);
                 AssertFalse(await h.Service.TryAssignAsync(h.Mission, h.Vessel));
+                AssertEqual(blocker.Reason, h.Service.GetAdmissionResult(h.Mission.Id)!.Blocker.Reason, "dispatch records the reason the blocker shows");
             });
             Add("effective_server_ceiling_is_not_a_configuration_write", async () =>
             {
@@ -210,6 +213,7 @@ namespace Test.Shared.Suites.Services
                 using Harness h = await Harness.CreateAsync(); Captain disabled = await h.Captain("inactive"); disabled.Active = false; await h.Db.Captains.UpdateAsync(disabled, updateActive: true);
                 await h.Captain("alternative"); h.Mission.RequestedCaptainId = disabled.Id; await h.Db.Missions.UpdateAsync(h.Mission);
                 AssertEqual(MissionAssignmentBlockerReasonEnum.NoEligibleCaptain, (await h.ReadOnlyBlocker()).Reason); AssertFalse(await h.Service.TryAssignAsync(h.Mission, h.Vessel));
+                AssertEqual(MissionAssignmentBlockerReasonEnum.NoEligibleCaptain, h.Service.GetAdmissionResult(h.Mission.Id)!.Blocker.Reason, "dispatch records the reason the blocker shows");
             });
             Add("launch_backoff_is_not_bypassed_by_an_untried_ineligible_captain", async () =>
             {
@@ -232,7 +236,7 @@ namespace Test.Shared.Suites.Services
                 using Harness h = await Harness.CreateAsync(); await h.Captain("ready");
                 h.Mission.WorkerEnvelope = new WorkerEnvelope { MinServedContextTokens = 32768 };
                 await h.Db.Missions.UpdateAsync(h.Mission);
-                await h.ReadOnlyBlocker(); await h.Service.IsAdmissionReadyForMonitoringAsync(h.Mission);
+                await h.ReadOnlyBlocker();
                 AssertEqual(0, (await h.Db.Events.EnumerateByMissionAsync(h.Mission.Id)).Count); AssertEqual(0, h.Launches);
                 AssertFalse(await h.Service.TryAssignAsync(h.Mission, h.Vessel));
                 AssertTrue((await h.Db.Events.EnumerateByMissionAsync(h.Mission.Id)).Any(e => e.EventType == WorkerEnvelopeRules.EventType));

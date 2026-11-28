@@ -14,6 +14,21 @@ namespace Armada.Client.Socket
         /// <summary>mission.changed: a mission's status changed (<see cref="EntityChangedEvent"/>).</summary>
         public const string MissionChanged = "mission.changed";
 
+        /// <summary>
+        /// A mission moved to another captain up its persona escalation ladder (payload <see cref="Armada.Core.Models.MissionAttemptChange"/>).
+        /// </summary>
+        public const string MissionEscalated = "mission.escalated";
+
+        /// <summary>
+        /// A mission attempt was repaired (contract or output repair; payload <see cref="Armada.Core.Models.MissionAttemptChange"/>).
+        /// </summary>
+        public const string MissionRepaired = "mission.repaired";
+
+        /// <summary>
+        /// A mission attempt started, ended or changed (payload <see cref="Armada.Core.Models.MissionAttemptChange"/>).
+        /// </summary>
+        public const string MissionAttemptChanged = "mission.attempt_changed";
+
         /// <summary>captain-selection.changed: a mission's selection state changed (<see cref="Armada.Core.Models.CaptainSelectionChange"/>); re-fetch detail.</summary>
         public const string CaptainSelectionChanged = "captain-selection.changed";
 
@@ -156,6 +171,8 @@ namespace Armada.Client.Socket
             foreach (string t in new[] { MissionChanged, VoyageChanged, CaptainChanged, DeploymentChanged, ObjectiveChanged, IncidentChanged })
                 map[t] = typeof(EntityChangedEvent);
             map[CaptainSelectionChanged] = typeof(Armada.Core.Models.CaptainSelectionChange);
+            foreach (string t in new[] { MissionEscalated, MissionRepaired, MissionAttemptChanged })
+                map[t] = typeof(Armada.Core.Models.MissionAttemptChange);
             foreach (string t in new[] { PlanningSessionChanged, PlanningSessionMessageCreated, PlanningSessionMessageUpdated, PlanningSessionTool, PlanningSessionThinking, PlanningSessionSummaryCreated, PlanningSessionDispatchCreated, PlanningSessionDeleted })
                 map[t] = typeof(PlanningSessionEvent);
             foreach (string t in new[] { RefinementSessionChanged, RefinementSessionMessageCreated, RefinementSessionMessageUpdated, RefinementSessionSummaryCreated, RefinementSessionApplied, RefinementSessionDeleted })

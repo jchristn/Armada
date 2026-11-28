@@ -157,7 +157,7 @@ triage works as before.
 |---|---|
 | `selfHealable`, `selfHealingProposal` | Yes, No or Unknown, and what Armada could have done automatically: retry with backoff, recreate the dock worktree from the branch, land through an integration worktree instead of a dirty checkout, regenerate generated files on conflict, rebase onto the moved target, serialize overlapping missions, re-request missing markers, refresh a stale lease, reconnect the Harbor and resume |
 | `detectionGapKind`, `detectionGap`, `invariant` | Why Armada did not catch or prevent it earlier (NoPreflightCheck, CheckTooLate, StateNotPersisted, Race, MissingInvariant, MissingRetry) and the invariant that should hold |
-| `codePointers`, `armadaVersion`, `armadaCommit` | The Armada source locations most likely involved (the failure site first, then the handoff and landing services: MissionLandingHandler, LandingService, LandingTargetSynchronization, LandingVerification, MergeQueueService, LandingIntegrityService, DockService, MissionService handoff and completion, AdmiralService recovery), at the build that failed |
+| `codePointers`, `armadaVersion`, `armadaCommit` | The Armada source locations most likely involved (the failure site first, then the handoff and landing services: MissionLandingHandler, LandingService, LandingTargetSynchronization, LandingVerification, MergeQueueService, LandingIntegrityService, DockService, MissionHandoffService, StageCompletionHandler, AdmiralService recovery), at the build that failed |
 | `proposedChanges` | Armada changes ranked by impact, each a mission brief (`title`, `change`, `acceptanceTest`, `codePointers`, `missionBrief` ready to dispatch on the Armada vessel) |
 | `severity`, `occurrences30Days`, `armadaVersionCount` | Severity escalates with recurrence of the fingerprint: seen once Medium, 3 or more times in 30 days High, 5 or more times or in 2 or more Armada versions Critical (a higher rule severity is kept) |
 | `regressionTest` | The test (suite and case) that would have caught it |
@@ -406,8 +406,8 @@ kind on the server, paged as you scroll, refreshed on `blackbox.*` events) with 
   WebSocket command) and the events `blackbox.captured`, `blackbox.capture_failed`, `blackbox.analyzed`,
   `blackbox.resolved`, `blackbox.deleted`, `blackbox.storage_fallback`, `blackbox.gc_completed` and
   `blackbox.recovery_run`, delivered to the entry's tenant. See [WEBSOCKET_API.md](WEBSOCKET_API.md).
-- .NET: `Armada.Client` has a method per route (`GetMissionBlackBoxAsync`, `GetBlackBoxBriefAsync`,
-  `RunBlackBoxRecoveryAsync`, ...).
+- .NET: `Armada.Client` has a method per route on `client.BlackBox` (`BlackBox.GetForMissionAsync`, `BlackBox.GetBriefAsync`,
+  `BlackBox.RunRecoveryAsync`, ...).
 
 Who sees what: a global administrator sees every tenant's entries, a tenant administrator their tenant's, and a
 user their own. An entry you cannot see reads exactly like one that does not exist (404 `BlackBoxNotFound`, never 403).
@@ -1019,7 +1019,7 @@ await BlackBox.RecordMissionFailureAsync(mission, statusBefore, BlackBoxStepEnum
 }, token).ConfigureAwait(false);
 ```
 
-The reference site is `MissionService.TryFailMissionForScopeViolationAsync` (`src/Armada.Core/Services/MissionService.cs`).
+The reference site is `MissionScopeGuard.TryFailMissionForScopeViolationAsync` (`src/Armada.Core/Services/MissionScopeGuard.cs`).
 Services that fail missions expose `public IBlackBoxCapture? BlackBox { get; set; }` and the Admiral assigns
 `runtime.Capture`. Voyages use `RecordVoyageFailureAsync(voyage, statusBefore, step, reason, configure, token)`.
 `BlackBoxCaptureContext` fields: Mission (required), StatusBefore, Step, CaptureMode, Exception, ExitCode,
@@ -1030,6 +1030,10 @@ cleared Mission.CaptainId before its write), Voyage, Dock, CallerMember, CallerF
 TargetTipBefore, TargetTipAfter, WorktreeExisted, CheckoutPath, BranchTip, GitOperation, GitStderr.
 `BlackBoxVoyageCaptureContext`: Voyage (required), StatusBefore, Step, CaptureMode, Reason, Exception, RootMissionId,
 SettlementRule, HaltReason, Note, CallerMember, CallerFile, CallerLine, Component.
+
+`Component` defaults to the calling file's name, so since 1.5.0 split `MissionService` into services, a mission
+capture names the service that failed it (`MissionLauncher`, `StageCompletionHandler`, `MissionScopeGuard` and so on)
+rather than `MissionService` or a partial file such as `MissionService.Completion`.
 
 What a capture does: numbers the attempt and supersedes the previous current entry (`CreateCurrentAsync`), builds
 Subject, Status, Site, Mechanism, Classification and Configuration (from the mission, vessel, voyage, captain, dock,
@@ -1057,9 +1061,9 @@ Site conventions (every failure write in plan 5.1 is wired; `Services.BlackBoxCa
 - Kind: an `OperatorStop` or External-phase entry (`OperatorTransition`, `VesselDeleted`) whose mission row has no
   `FailureKind` records `FailureKind` `OperatorAction` on the entry and in `classification.kind`, so every surface shows
   a kind.
-- Every mission capture whose status changed emits `mission.status_changed` with `MissionStatusChangedPayload`
-  (`PreviousStatus`), through `BlackBoxCapture.MissionStatusChanged` (the Admiral's `EmitMissionStatusChangedAsync`) or as
-  an event row, whether or not the black box is enabled.
+- `mission.status_changed` (with `MissionStatusChangedPayload` and `PreviousStatus`) is emitted by the status
+  transition itself (`MissionTransitions`), not by the capture, so it is recorded once per change whether or not the
+  black box is enabled.
 - Volatile facts: `DockService` writes the start commit into `Dock.GitAnchorsJson` on every provision (`DockStartCommit`)
   and `Mission.StartCommit` is set when the dock is recorded; checks read the `.start` file, then the anchors, then the
   mission. `BlackBoxCapture.Harbors` records `HarborConnectionManager.GetLinkState(harborId)` for Harbor-hosted docks.
@@ -1916,19 +1920,19 @@ Task<EnumerationResult<BlackBoxRecoveryStat>> EnumerateRecoveryStatsAsync(AuthCo
 ```
 
 Surfaces (REST tag `BlackBox`, every MCP tool read-only and in `AskToolPolicy`'s read-only allowlist, authorization
-`Authenticated`, resource `BlackBox`; client methods in `ArmadaClient.BlackBoxInsights.cs`):
+`Authenticated`, resource `BlackBox`; client methods on `ArmadaClient.BlackBoxInsights`, in `BlackBoxInsightsClient.cs`):
 
 | Feature | REST | MCP | Armada.Client |
 |---|---|---|---|
-| Overlap preview | `POST /api/v1/vessels/{id}/overlap-preview` | `preview_mission_overlap` | `PreviewMissionOverlapAsync` |
-| Reservations | `GET /api/v1/vessels/{id}/reservations`, `POST .../reservations/enumerate` | `list_vessel_reservations` | `ListVesselReservationsAsync` |
-| Brief lint | `POST /api/v1/missions/lint-brief` | `lint_mission_brief` | `LintMissionBriefAsync` |
-| Configuration doctor | `GET /api/v1/vessels/{id}/blackbox-doctor`, `POST .../blackbox-doctor/enumerate` | `get_vessel_blackbox_doctor` | `GetVesselBlackBoxDoctorAsync` |
-| Attempt diff | `GET /api/v1/blackbox/{id}/diff/{otherId}` | `diff_blackbox_entries` | `DiffBlackBoxEntriesAsync` |
-| Nearby successes | `GET /api/v1/blackbox/{id}/nearby-successes`, `POST .../nearby-successes/enumerate` | `list_blackbox_nearby_successes` | `ListBlackBoxNearbySuccessesAsync` |
-| Timeline | `GET /api/v1/blackbox/{id}/timeline`, `POST .../timeline/enumerate` | `get_blackbox_timeline` | `GetBlackBoxTimelineAsync` |
-| Cascade graph | `GET /api/v1/voyages/{id}/blackbox/cascade` | `get_voyage_blackbox_cascade` | `GetVoyageBlackBoxCascadeAsync` |
-| Recovery statistics | `GET /api/v1/blackbox/recovery-stats`, `POST .../recovery-stats/enumerate` | `get_blackbox_recovery_stats` | `GetBlackBoxRecoveryStatsAsync` |
+| Overlap preview | `POST /api/v1/vessels/{id}/overlap-preview` | `preview_mission_overlap` | `BlackBoxInsights.PreviewMissionOverlapAsync` |
+| Reservations | `GET /api/v1/vessels/{id}/reservations`, `POST .../reservations/enumerate` | `list_vessel_reservations` | `BlackBoxInsights.ListVesselReservationsAsync` |
+| Brief lint | `POST /api/v1/missions/lint-brief` | `lint_mission_brief` | `BlackBoxInsights.LintMissionBriefAsync` |
+| Configuration doctor | `GET /api/v1/vessels/{id}/blackbox-doctor`, `POST .../blackbox-doctor/enumerate` | `get_vessel_blackbox_doctor` | `BlackBoxInsights.GetVesselDoctorAsync` |
+| Attempt diff | `GET /api/v1/blackbox/{id}/diff/{otherId}` | `diff_blackbox_entries` | `BlackBoxInsights.DiffEntriesAsync` |
+| Nearby successes | `GET /api/v1/blackbox/{id}/nearby-successes`, `POST .../nearby-successes/enumerate` | `list_blackbox_nearby_successes` | `BlackBoxInsights.ListNearbySuccessesAsync` |
+| Timeline | `GET /api/v1/blackbox/{id}/timeline`, `POST .../timeline/enumerate` | `get_blackbox_timeline` | `BlackBoxInsights.GetTimelineAsync` |
+| Cascade graph | `GET /api/v1/voyages/{id}/blackbox/cascade` | `get_voyage_blackbox_cascade` | `BlackBoxInsights.GetVoyageCascadeAsync` |
+| Recovery statistics | `GET /api/v1/blackbox/recovery-stats`, `POST .../recovery-stats/enumerate` | `get_blackbox_recovery_stats` | `BlackBoxInsights.GetRecoveryStatsAsync` |
 
 #### Overlap warnings and chaining (13.1.1)
 
@@ -1936,7 +1940,7 @@ Surfaces (REST tag `BlackBox`, every MCP tool read-only and in `AskToolPolicy`'s
 (`ListTrackedFilesAsync` on the Admiral's repository through `VesselGitInspector`, cached five minutes; null for a
 vessel without a local repository), its active missions (`VesselGitInspector.ActiveMissionStatuses`, newest 200,
 `ActiveMissionsTruncated`), each with a `MissionFileSet` of likely files (its scoped-files directive through
-`MissionService.ParseMissionScopedFiles`, brief paths that exist in the tracked files, its dock's
+`MissionScopeGuard.ParseMissionScopedFiles`, brief paths that exist in the tracked files, its dock's
 `GitAnchorsSnapshot.RecentPathCommits`, and its `DiffSnapshot` or, for at most ten missions without one, its branch
 from its start commit or merge base), the vessel's hotspot directories (`EnumerateHotspotsAsync`, Conflicted rows, top
 1000) and the reservations they produce. `LikelyFiles(title, description, tracked)` gives a new mission's set (scoped

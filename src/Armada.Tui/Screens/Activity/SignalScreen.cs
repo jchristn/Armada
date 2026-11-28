@@ -135,19 +135,19 @@ namespace Armada.Tui.Screens.Activity
         /// </summary>
         public void Load()
         {
-            ScreenOps.Run(Context, () => Context.Client.GetSignalAsync(SignalId), s =>
+            ScreenOps.Run(Context, () => Context.Client.Signals.GetAsync(SignalId), s =>
             {
                 Signal = s;
                 Banner = s == null ? Context.Loc.T("Failed to load signal.") : "";
                 if (s == null) ShowUnavailable();
                 Rebuild();
             }, "Failed to load signal.", ex => { Banner = Context.Loc.T("Failed to load signal."); ShowUnavailable(); });
-            ScreenOps.Quiet(Context, () => Context.Client.GetEntityAsync("signals", SignalId), raw =>
+            ScreenOps.Quiet(Context, () => Context.Client.Entities.GetAsync("signals", SignalId), raw =>
             {
                 MissionId = raw?.As<SignalMissionLink>()?.MissionId;
                 Rebuild();
             });
-            ScreenOps.Quiet(Context, () => Context.Client.ListCaptainsAsync(new ArmadaPageQuery(1, 1000)), r =>
+            ScreenOps.Quiet(Context, () => Context.Client.Captains.ListAsync(new ArmadaPageQuery(1, 1000)), r =>
             {
                 _Captains = r?.Objects ?? new List<Captain>();
                 Rebuild();
@@ -162,8 +162,8 @@ namespace Armada.Tui.Screens.Activity
             if (Signal == null || Signal.Read) return;
             ScreenOps.Run(Context, async () =>
             {
-                await Context.Client.MarkSignalReadAsync(SignalId).ConfigureAwait(false);
-                return await Context.Client.GetSignalAsync(SignalId).ConfigureAwait(false);
+                await Context.Client.Signals.MarkReadAsync(SignalId).ConfigureAwait(false);
+                return await Context.Client.Signals.GetAsync(SignalId).ConfigureAwait(false);
             }, s =>
             {
                 if (s != null) Signal = s;
@@ -231,7 +231,7 @@ namespace Armada.Tui.Screens.Activity
             string id = Signal.Id;
             Context.Confirm("Delete", Context.Loc.T("Delete {{entity}} {{name}}?", LocalizationArgs.Of("entity", Context.Loc.T("Signal").ToLowerInvariant(), "name", id)), () =>
             {
-                DeleteProgress.Run(Context, "Deleting signal", ct => Context.Client.DeleteSignalsBatchAsync(new List<string> { id }, ct), r =>
+                DeleteProgress.Run(Context, "Deleting signal", ct => Context.Client.Signals.DeleteBatchAsync(new List<string> { id }, ct), r =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Signal {{id}} deleted.", LocalizationArgs.Of("id", id));
                     Context.Navigate("/activity?source=signals");

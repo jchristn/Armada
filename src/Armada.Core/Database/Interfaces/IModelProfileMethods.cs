@@ -30,6 +30,16 @@ namespace Armada.Core.Database.Interfaces
         Task<ModelProfile?> ReadAsync(string id, CancellationToken token = default);
 
         /// <summary>
+        /// Read several profiles by id (any tenant) in one query per 500 ids, without their revisions (RS-10.3). Ids
+        /// that match no row are absent from the result; null, empty and repeated ids are ignored.
+        /// </summary>
+        /// <param name="ids">Profile identifiers.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The profiles found, keyed by id.</returns>
+        /// <exception cref="System.ArgumentNullException">The id collection is null.</exception>
+        Task<Dictionary<string, ModelProfile>> ReadManyAsync(IEnumerable<string?> ids, CancellationToken token = default);
+
+        /// <summary>
         /// Read a profile by its identity key, without its revisions.
         /// </summary>
         /// <param name="identityKey">Normalized identity key.</param>
@@ -45,6 +55,19 @@ namespace Armada.Core.Database.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>The updated profile.</returns>
         Task<ModelProfile> UpdateAsync(ModelProfile profile, CancellationToken token = default);
+
+        /// <summary>
+        /// Record what a model probe measured about a profile's tool support (RS-8.1). Only the probed columns are written;
+        /// the administrator's capabilities, rendering, notes and LastUpdateUtc are unchanged.
+        /// </summary>
+        /// <param name="profileId">Profile identifier.</param>
+        /// <param name="toolsAvailable">Whether the probe found working tool calls, or null when not measured.</param>
+        /// <param name="mcpAvailable">Whether MCP tools are available as probed, or null when not measured.</param>
+        /// <param name="probedUtc">When the probe ran (UTC).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the profile exists and was updated.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when profileId is null or empty.</exception>
+        Task<bool> UpdateProbedCapabilitiesAsync(string profileId, bool? toolsAvailable, bool? mcpAvailable, DateTime probedUtc, CancellationToken token = default);
 
         /// <summary>
         /// List one page of profiles (without revisions), newest first, with the total count of matching rows.

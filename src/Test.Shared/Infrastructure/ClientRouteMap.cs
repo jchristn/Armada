@@ -11,7 +11,7 @@ namespace Test.Shared.Infrastructure
     using Armada.Client.Models;
 
     /// <summary>
-    /// Maps every public API method of <see cref="ArmadaClient"/> to the HTTP requests it sends, by invoking it with
+    /// Maps every public API method of the <see cref="ArmadaClient"/> sub-clients to the HTTP requests it sends, by invoking it with
     /// synthesized arguments against a <see cref="StubHttpHandler"/> that records each request. Used to compare the client
     /// with the server's route surface (docs/api-surface-1.0.json) and to list the methods the contract suites must cover.
     /// </summary>
@@ -20,17 +20,25 @@ namespace Test.Shared.Infrastructure
         #region Public-Methods
 
         /// <summary>
-        /// Public API methods of the client (every public instance method returning a Task, except
-        /// <see cref="ArmadaClient.SendRawAsync"/>, which takes any path), ordered by name.
+        /// Public API methods of the client: every public instance method returning a Task on each sub-client property
+        /// of <see cref="ArmadaClient"/> (<see cref="ArmadaClient.SendRawAsync"/>, which takes any path, is on the
+        /// client itself and is not included), ordered by qualified name.
         /// </summary>
         /// <returns>Methods.</returns>
-        public static List<MethodInfo> ApiMethods()
+        public static List<ClientApiMethod> ApiMethods()
         {
-            return typeof(ArmadaClient)
-                .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-                .Where(m => typeof(Task).IsAssignableFrom(m.ReturnType) && m.Name != nameof(ArmadaClient.SendRawAsync))
-                .OrderBy(m => m.Name, StringComparer.Ordinal)
-                .ToList();
+            List<ClientApiMethod> methods = new List<ClientApiMethod>();
+            foreach (PropertyInfo area in typeof(ArmadaClient).GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                if (!area.PropertyType.Name.EndsWith("Client", StringComparison.Ordinal)) continue;
+                if (area.PropertyType.Namespace != typeof(ArmadaClient).Namespace) continue;
+                foreach (MethodInfo method in area.PropertyType.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+                {
+                    if (typeof(Task).IsAssignableFrom(method.ReturnType)) methods.Add(new ClientApiMethod(area, method));
+                }
+            }
+
+            return methods.OrderBy(m => m.Name, StringComparer.Ordinal).ToList();
         }
 
         /// <summary>
@@ -40,13 +48,13 @@ namespace Test.Shared.Infrastructure
         /// <param name="method">Client method.</param>
         /// <param name="keepQuery">Keep each request's query string.</param>
         /// <returns>Requests, in order.</returns>
-        public static async Task<List<string>> RequestsOfAsync(MethodInfo method, bool keepQuery = false)
+        public static async Task<List<string>> RequestsOfAsync(ClientApiMethod method, bool keepQuery = false)
         {
             if (method == null) throw new ArgumentNullException(nameof(method));
             StubHttpHandler stub = new StubHttpHandler();
             using (ArmadaClient client = new ArmadaClient(new ArmadaClientOptions("http://127.0.0.1:9"), stub))
             {
-                object?[] args = method.GetParameters().Select(Synthesize).ToArray();
+                object?[] args = method.Method.GetParameters().Select(Synthesize).ToArray();
                 try
                 {
                     Task task = (Task)method.Invoke(client, args)!;

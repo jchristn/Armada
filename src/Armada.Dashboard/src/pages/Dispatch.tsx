@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { listVessels, listPipelines, listCaptains, listPersonas, createVoyage, getVesselReadiness } from '../api/client';
 import { listAll } from '../api/paging';
-import type { Vessel, Pipeline, SelectedPlaybook, VesselReadinessResult, Captain, Persona } from '../types/models';
+import type { Vessel, Pipeline, SelectedPlaybook, VesselReadinessResult, Captain, Persona, MissionMode } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import PlaybookSelector from '../components/shared/PlaybookSelector';
@@ -27,6 +27,9 @@ import {
   type StepAssignment,
 } from '../lib/dispatchRequest';
 
+// Same text as the VoyageCreate mode field, so the translation is shared.
+const DISPATCH_MODE_HELP = 'Implementation changes code. Audit and Research are read-only: the captain writes a report, and an empty diff counts as success. Every step of the mission uses this mode.';
+
 export default function Dispatch() {
   const { t } = useLocale();
   const { pushToast } = useNotifications();
@@ -46,6 +49,7 @@ export default function Dispatch() {
   const [objectiveId, setObjectiveId] = useState('');
   const [prompt, setPrompt] = useState('');
   const [priority, setPriority] = useState(100);
+  const [mode, setMode] = useState<MissionMode>('Implementation');
   const [approvalOptions, setApprovalOptions] = useState({ ...DEFAULT_RUN_APPROVALS });
   const [selectedPlaybooks, setSelectedPlaybooks] = useState<SelectedPlaybook[]>([]);
   const [dispatching, setDispatching] = useState(false);
@@ -150,6 +154,7 @@ export default function Dispatch() {
         selectedPlaybooks,
         stepAssignments,
         multiTaskTitle: t('Multi-task voyage'),
+        mode,
       });
       const missions = request.missions;
       const voyage = await createVoyage({ ...request, approvalOptions });
@@ -254,6 +259,14 @@ export default function Dispatch() {
                 max={1000}
                 title={t('Dispatch order from 0 to 1000. Lower numbers are assigned to a captain first; the default is 100.')}
               />
+            </div>
+            <div className="form-group">
+              <label title={t(DISPATCH_MODE_HELP)}>{t('Mode')}</label>
+              <select aria-label={t('Mode')} title={t(DISPATCH_MODE_HELP)} value={mode} onChange={(e) => setMode(e.target.value as MissionMode)}>
+                <option value="Implementation">{t('Implementation')}</option>
+                <option value="Audit">{t('Audit (read-only)')}</option>
+                <option value="Research">{t('Research (read-only)')}</option>
+              </select>
             </div>
             <div className="form-group">
               <label title={t('Name for the voyage this creates. Leave blank to use the first 80 characters of the description.')}>{t('Voyage Title')}</label>

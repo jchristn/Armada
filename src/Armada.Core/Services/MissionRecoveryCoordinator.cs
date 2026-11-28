@@ -10,13 +10,15 @@ namespace Armada.Core.Services
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
 
     /// <summary>
     /// Reconciles autonomous mission recovery from Armada's own evidence. Each maintenance pass:
     /// classifies recently failed missions and opens an incident for the recoverable ones; dispatches a
     /// bounded rescue mission per incident and re-dispatches when a rescue itself fails (up to a cap); and
-    /// advances incidents Open -&gt; Mitigated -&gt; Closed as their rescue missions land. Nothing here requires a
+    /// advances incidents Open -&gt; Mitigated -&gt; Closed as their rescue missions land, closing only after a later pass
+    /// confirms the landed rescue is still Complete. Nothing here requires a
     /// human -- the state transitions are driven entirely by mission outcomes.
     /// </summary>
     public class MissionRecoveryCoordinator
@@ -28,7 +30,23 @@ namespace Armada.Core.Services
         /// </summary>
         public IBlackBoxCapture? BlackBox { get; set; } = null;
 
+        /// <summary>
+        /// Escalation rules to notify when an incident uses up its rescue budget (RS-5.9), or null for none.
+        /// </summary>
+        public IEscalationService? Escalation { get; set; } = null;
+
+        /// <summary>
+        /// Called once per incident when it uses up its rescue budget, with the original mission and the incident (push
+        /// notifications), or null. Exceptions are logged and ignored.
+        /// </summary>
+        public Action<Mission, Incident>? OnRecoveryExhausted { get; set; } = null;
+
         #endregion
+
+        /// <summary>
+        /// Mission status transitions (RS-3.5); the server replaces this with the instance shared across services.
+        /// </summary>
+        public MissionTransitions Transitions { get; set; }
 
         #region Private-Members
 
@@ -42,6 +60,7 @@ namespace Armada.Core.Services
         private static readonly TimeSpan _FailureLookback = TimeSpan.FromHours(24);
         private const int MaxDiffExcerptChars = 4000;
         private const int MaxRescueTaskChars = 3000;
+        private static readonly BlackBoxRedactor _Redactor = new BlackBoxRedactor();
         private const string ExhaustedNote = "Autonomous rescue exhausted the attempt budget; needs a human.";
 
         private static readonly MissionStatusEnum[] _ActiveStatuses = new[]
@@ -70,6 +89,7 @@ namespace Armada.Core.Services
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _Database = database ?? throw new ArgumentNullException(nameof(database));
+            Transitions = new MissionTransitions(database, logging);
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Incidents = new IncidentService(_Database);
         }
@@ -125,10 +145,15 @@ namespace Armada.Core.Services
 
         private async Task ReconcileIncidentAsync(AuthContext auth, Incident incident, int maxAttempts, CancellationToken token)
         {
-            // Second step of the lifecycle: a mitigated incident closes once the fix has held for a cycle.
+            // Second step of the lifecycle: a mitigated incident closes only after a verification pass shows the fix held
+            // (RS-5.9). Otherwise it reopens, and the next pass rescues again while the budget allows.
             if (incident.Status == IncidentStatusEnum.Mitigated)
             {
-                await TransitionAsync(auth, incident, IncidentStatusEnum.Closed, "Fix landed and held; incident closed.", token).ConfigureAwait(false);
+                string? broken = await FindBrokenMitigationAsync(incident, token).ConfigureAwait(false);
+                if (broken == null)
+                    await TransitionAsync(auth, incident, IncidentStatusEnum.Closed, "Fix landed and held; incident closed.", token).ConfigureAwait(false);
+                else
+                    await TransitionAsync(auth, incident, IncidentStatusEnum.Open, "Verification failed: " + broken + " Recovery continues.", token).ConfigureAwait(false);
                 return;
             }
 
@@ -168,26 +193,23 @@ namespace Armada.Core.Services
                 Mission? unresolved = await _Database.Missions.ReadAsync(original.Id, token).ConfigureAwait(false);
                 if (unresolved != null && (unresolved.Status == MissionStatusEnum.Failed || unresolved.Status == MissionStatusEnum.LandingFailed))
                 {
-                    unresolved.Status = MissionStatusEnum.Complete;
                     unresolved.FailureReason = "Resolved by landed rescue " + landed.Id + ". Prior failure: " + unresolved.FailureReason;
                     unresolved.CompletedUtc = DateTime.UtcNow;
-                    unresolved.LastUpdateUtc = DateTime.UtcNow;
-                    await _Database.Missions.TryUpdateIfStatusAsync(unresolved, new[] { MissionStatusEnum.Failed, MissionStatusEnum.LandingFailed }, token).ConfigureAwait(false);
+                    await Transitions.TryTransitionAsync(unresolved, new[] { MissionStatusEnum.Failed, MissionStatusEnum.LandingFailed }, MissionStatusEnum.Complete, null, token).ConfigureAwait(false);
                 }
                 await TransitionAsync(auth, incident, IncidentStatusEnum.Mitigated, "A rescue mission landed successfully.", token).ConfigureAwait(false);
                 return;
             }
 
-            bool anyActive = rescues.Any(m => _ActiveStatuses.Contains(m.Status));
-            if (anyActive) return; // A rescue is in flight; wait for it.
-
-            // No rescue in flight and none succeeded: dispatch another if the budget allows.
+            // No rescue succeeded: wait for one in flight, dispatch another while the budget allows, or give up (RS-5.10).
             // The budget (MaxMissionRecoveryAttempts, at most 5) bounds RescueMissionIds; the link-list limit is checked too
             // so an incident edited by hand to hold many ids is never pushed past it.
-            if (incident.RecoveryAttempts < maxAttempts && incident.RescueMissionIds.Count < CollectionLimits.MaxLinkedIds)
+            RecoveryDecision decision = DecideRescue(incident, maxAttempts, rescues.Any(m => _ActiveStatuses.Contains(m.Status)));
+            if (decision.First.Action == RecoveryActionEnum.Wait) return;
+            if (decision.First.Action == RecoveryActionEnum.Rescue)
             {
                 if (String.IsNullOrEmpty(incident.MissionId)) return;
-                Mission? rescueMission = await DispatchRescueAsync(original, incident, token).ConfigureAwait(false);
+                Mission? rescueMission = await DispatchRescueAsync(original, incident, rescues, token).ConfigureAwait(false);
                 if (rescueMission == null) return;
                 incident.RescueMissionIds.Add(rescueMission.Id);
                 incident.RecoveryAttempts += 1;
@@ -209,6 +231,24 @@ namespace Armada.Core.Services
                         + String.Join(", ", rescues.Select(r => r.Id + " (" + r.Status + ")"))
                         + (lastRescue?.LastBlackBoxEntryId != null ? "; last rescue entry " + lastRescue.LastBlackBoxEntryId : "") + ".";
                 }, token).ConfigureAwait(false);
+
+                // The one notification that the rescue budget is used up (RS-5.9). The note above gates it, so it fires once
+                // per incident rather than on every failure.
+                if (Escalation != null)
+                {
+                    await Escalation.FireAsync(EscalationTriggerEnum.RecoveryExhausted, original.Id,
+                        "Mission " + original.Id + " used " + incident.RecoveryAttempts + " of " + maxAttempts
+                        + " rescue attempt(s) without landing; incident " + incident.Id + " needs a human.", token).ConfigureAwait(false);
+                }
+
+                try
+                {
+                    OnRecoveryExhausted?.Invoke(original, incident);
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Warn(_Header + "recovery-exhausted notification for incident " + incident.Id + " failed: " + ex.Message);
+                }
             }
         }
 
@@ -217,16 +257,16 @@ namespace Armada.Core.Services
             DateTime cutoff = DateTime.UtcNow - _FailureLookback;
 
             List<Mission> failed = new List<Mission>();
-            failed.AddRange(await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Failed, token).ConfigureAwait(false));
-            failed.AddRange(await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.LandingFailed, token).ConfigureAwait(false));
+            failed.AddRange(await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Failed, cutoff, token).ConfigureAwait(false));
+            failed.AddRange(await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.LandingFailed, cutoff, token).ConfigureAwait(false));
 
             foreach (Mission mission in failed)
             {
                 if (linkedMissionIds.Contains(mission.Id)) continue;
                 if (mission.LastUpdateUtc < cutoff) continue;
 
-                MissionFailureKindEnum kind = MissionFailureClassifier.Classify(mission);
-                if (!MissionFailureClassifier.IsRecoverable(kind)) continue;
+                MissionFailureKindEnum kind = FailureKindMapper.FromMission(mission);
+                if (!FailureKindMapper.IsRecoverable(kind)) continue;
                 if (!await IsRescueEligibleAsync(mission, token).ConfigureAwait(false)) continue;
 
                 Incident incident = await _Incidents.CreateAsync(auth, new IncidentUpsertRequest
@@ -239,18 +279,19 @@ namespace Armada.Core.Services
                     MissionId = mission.Id,
                     VoyageId = mission.VoyageId,
                     Impact = "Mission " + mission.Id + " failed: " + Trim(mission.FailureReason, 500),
-                    RootCause = "Classified failure kind: " + kind
+                    RootCause = "Classified failure kind: " + kind,
+                    // Written with the incident, so a restart can never find a recovery incident without its kind (RS-2.6).
+                    FailureKind = kind.ToString()
                 }, token).ConfigureAwait(false);
 
-                incident.FailureKind = kind.ToString();
-                await UpdateIncidentAsync(auth, incident, token).ConfigureAwait(false);
+                CrashPoints.Hit(CrashPointNames.RecoveryIncidentCreated);
                 linkedMissionIds.Add(mission.Id);
                 _Logging.Info(_Header + "opened incident " + incident.Id + " for failed mission " + mission.Id + " (" + kind + ")");
 
                 // Dispatch the first rescue immediately when the budget allows.
-                if (maxAttempts > 0 && incident.RescueMissionIds.Count < CollectionLimits.MaxLinkedIds)
+                if (DecideRescue(incident, maxAttempts, false).First.Action == RecoveryActionEnum.Rescue)
                 {
-                    Mission? rescueMission = await DispatchRescueAsync(mission, incident, token).ConfigureAwait(false);
+                    Mission? rescueMission = await DispatchRescueAsync(mission, incident, new List<Mission>(), token).ConfigureAwait(false);
                     if (rescueMission == null) continue;
                     incident.RescueMissionIds.Add(rescueMission.Id);
                     incident.RecoveryAttempts += 1;
@@ -260,6 +301,17 @@ namespace Armada.Core.Services
                     _Logging.Info(_Header + "dispatched first rescue " + rescueMission.Id + " for incident " + incident.Id);
                 }
             }
+        }
+
+        private static RecoveryDecision DecideRescue(Incident incident, int maxAttempts, bool rescueInFlight)
+        {
+            return RecoveryPolicyEngine.Decide(new RecoveryFacts(RecoverySiteEnum.Incident)
+            {
+                Rescues = incident.RecoveryAttempts,
+                RescueBudget = maxAttempts,
+                RescueInFlight = rescueInFlight,
+                RescueLinksFull = incident.RescueMissionIds.Count >= CollectionLimits.MaxLinkedIds
+            });
         }
 
         private async Task<bool> IsRescueEligibleAsync(Mission mission, CancellationToken token)
@@ -280,12 +332,24 @@ namespace Armada.Core.Services
             return !voyageMissions.Any(m => String.Equals(m.DependsOnMissionId, mission.Id, StringComparison.Ordinal));
         }
 
-        private async Task<Mission?> DispatchRescueAsync(Mission original, Incident incident, CancellationToken token)
+        private async Task<Mission?> DispatchRescueAsync(Mission original, Incident incident, List<Mission> previousRescues, CancellationToken token)
         {
             // The rescue is a fresh, standalone Worker mission (no voyage attachment, so it never re-opens a
             // terminal voyage) linked back through RescueOfMissionId and the incident. The normal pending-dispatch
             // sweep assigns it on the next health cycle.
             List<Mission> peers = await _Database.Missions.EnumerateByVesselAsync(original.VesselId!, token).ConfigureAwait(false);
+
+            // A rescue of this mission that the incident does not reference yet (an Admiral that stopped between creating
+            // the rescue and recording it) is adopted, in any status, instead of dispatching another one (RS-2.6).
+            // Only Armada's own rescues are adopted; an operator's re-apply of the same work suppresses a rescue instead.
+            Mission? orphan = peers.FirstOrDefault(m => m.IsRescue && m.RescueOfMissionId == original.Id && m.TenantId == original.TenantId
+                && !incident.RescueMissionIds.Contains(m.Id));
+            if (orphan != null)
+            {
+                _Logging.Info(_Header + "adopting rescue " + orphan.Id + " (" + orphan.Status + ") of " + original.Id + " into incident " + incident.Id);
+                return orphan;
+            }
+
             Mission? existing = peers.FirstOrDefault(m => m.Id != original.Id && m.TenantId == original.TenantId
                 && _ActiveStatuses.Contains(m.Status)
                 && (m.RescueOfMissionId == original.Id || String.Equals(m.Title, original.Title, StringComparison.OrdinalIgnoreCase)
@@ -316,10 +380,32 @@ namespace Armada.Core.Services
             rescue.Tier = original.Tier;
             rescue.Priority = Math.Max(0, original.Priority - 50);
             rescue.Title = "[Rescue] " + original.Title;
-            rescue.Description = HasRecordedWork(original) ? BuildIntegrationRescueBrief(original, incident) : BuildRescueBrief(original, incident);
-            rescue.Status = MissionStatusEnum.Pending;
 
+            // RS-5.8: the first rescue retries at the original's tier. From the second on, the captain whose rescue just
+            // failed is excluded: the rescue is pinned to the escalation selector's choice (the Worker ladder, or a
+            // strictly higher tier). With no such captain it stays unpinned, bounded by the rescue budget.
+            Mission lastAttempt = previousRescues.LastOrDefault(r => r.Status == MissionStatusEnum.Failed || r.Status == MissionStatusEnum.LandingFailed) ?? original;
+            if (previousRescues.Count > 0)
+            {
+                string? failedCaptainId = lastAttempt.CaptainId ?? original.CaptainId;
+                EscalationChoice? choice = await CaptainEscalationSelector.ChooseAsync(_Database, rescue, failedCaptainId, new List<Mission>(), token).ConfigureAwait(false);
+                if (choice != null)
+                {
+                    rescue.RequestedCaptainId = choice.Captain.Id;
+                    rescue.EscalatedFromCaptainId = failedCaptainId;
+                    rescue.EscalationCount = 1;
+                    _Logging.Info(_Header + "rescue of " + original.Id + " goes to " + choice.Captain.Name + " (" + choice.Describe() + "), not " + (failedCaptainId ?? "the failed captain"));
+                }
+                else
+                {
+                    _Logging.Warn(_Header + "no stronger captain for rescue of " + original.Id + "; dispatching it unpinned");
+                }
+            }
+
+            string lastAttemptSection = await RenderLastAttemptAsync(lastAttempt, token).ConfigureAwait(false);
+            rescue.Description = HasRecordedWork(original) ? BuildIntegrationRescueBrief(original, incident, lastAttemptSection) : BuildRescueBrief(original, incident, lastAttemptSection);
             rescue = await _Database.Missions.CreateAsync(rescue, token).ConfigureAwait(false);
+            CrashPoints.Hit(CrashPointNames.RecoveryRescueCreated);
             return rescue;
         }
 
@@ -344,7 +430,7 @@ namespace Armada.Core.Services
             return !String.IsNullOrWhiteSpace(original.CommitHash) && !String.IsNullOrWhiteSpace(original.BranchName);
         }
 
-        private static string BuildIntegrationRescueBrief(Mission original, Incident incident)
+        private static string BuildIntegrationRescueBrief(Mission original, Incident incident, string lastAttemptSection)
         {
             string commit = original.CommitHash!.Trim();
             string branch = original.BranchName!.Trim();
@@ -357,21 +443,21 @@ namespace Armada.Core.Services
                 "3. Fix only what the failure below requires, stay strictly in scope, and rerun the relevant build and tests.\n\n" +
                 "## Original Mission\n" +
                 original.Title + "\n\n" +
-                (String.IsNullOrWhiteSpace(original.Description) ? "" : BoundRescueDescription(original.Description) + "\n\n") +
+                (String.IsNullOrWhiteSpace(MissionNotes.EffectiveDescription(original)) ? "" : BoundRescueDescription(MissionNotes.EffectiveDescription(original)) + "\n\n") +
                 "## Failure To Fix\n" +
                 "Classified kind: " + (incident.FailureKind ?? "Unknown") + "\n" +
-                "Reason: " + Trim(original.FailureReason, 1500) + "\n\n";
+                "Reason: " + Trim(original.FailureReason, 1500) + "\n\n" + lastAttemptSection;
 
             if (!String.IsNullOrWhiteSpace(original.DiffSnapshot))
             {
                 brief += "## Prior Attempt Diff (already in commit " + commit + ")\n```diff\n" + Trim(original.DiffSnapshot, MaxDiffExcerptChars) + "\n```\n\n";
             }
 
-            brief += "End with a standalone `[ARMADA:RESULT] COMPLETE` line and a brief summary of how the commit was integrated.";
+            brief += "Close with a brief summary of how the commit was integrated, followed by the completion line in the Output Contract section at the end of these instructions.";
             return brief;
         }
 
-        private static string BuildRescueBrief(Mission original, Incident incident)
+        private static string BuildRescueBrief(Mission original, Incident incident, string lastAttemptSection)
         {
             string brief =
                 "This is an autonomous RESCUE mission. A prior attempt at the work below failed and needs a " +
@@ -379,18 +465,39 @@ namespace Armada.Core.Services
                 "Re-implement the change correctly, addressing the failure, and stay strictly in scope.\n\n" +
                 "## Original Mission\n" +
                 original.Title + "\n\n" +
-                (String.IsNullOrWhiteSpace(original.Description) ? "" : BoundRescueDescription(original.Description) + "\n\n") +
+                (String.IsNullOrWhiteSpace(MissionNotes.EffectiveDescription(original)) ? "" : BoundRescueDescription(MissionNotes.EffectiveDescription(original)) + "\n\n") +
                 "## Failure To Fix\n" +
                 "Classified kind: " + (incident.FailureKind ?? "Unknown") + "\n" +
-                "Reason: " + Trim(original.FailureReason, 1500) + "\n\n";
+                "Reason: " + Trim(original.FailureReason, 1500) + "\n\n" + lastAttemptSection;
 
             if (!String.IsNullOrWhiteSpace(original.DiffSnapshot))
             {
                 brief += "## Prior Attempt Diff (for reference)\n```diff\n" + Trim(original.DiffSnapshot, MaxDiffExcerptChars) + "\n```\n\n";
             }
 
-            brief += "End with a standalone `[ARMADA:RESULT] COMPLETE` line and a brief summary of the fix.";
+            brief += "Close with a brief summary of the fix, followed by the completion line in the Output Contract section at the end of these instructions.";
             return brief;
+        }
+
+        // The failed attempt's output tail and black box hint (RS-5.8, reusing the RS-5.7 escalation memory), as a brief
+        // section ending in a blank line, or an empty string when nothing is known.
+        private async Task<string> RenderLastAttemptAsync(Mission attempt, CancellationToken token)
+        {
+            EscalationMemory memory = new EscalationMemory(attempt.FailureReason ?? String.Empty, BlackBoxSweeper.InferStep(attempt), attempt.FailureKind ?? FailureKindMapper.FromMission(attempt));
+            if (!String.IsNullOrEmpty(attempt.CaptainId))
+            {
+                Captain? captain = await _Database.Captains.ReadAsync(attempt.CaptainId!, token).ConfigureAwait(false);
+                memory.FromCaptainName = captain?.Name;
+                memory.FromModel = String.IsNullOrWhiteSpace(captain?.Model) ? null : captain!.Model;
+            }
+            if (!String.IsNullOrWhiteSpace(attempt.AgentOutput))
+                memory.OutputTail = _Redactor.Redact(BlackBoxLimits.Tail(attempt.AgentOutput!.TrimEnd(), EscalationMemoryRenderer.MaxOutputTailChars));
+            EscalationMemoryRenderer.ApplyHint(memory);
+            string facts = EscalationMemoryRenderer.RenderFacts(memory);
+            if (facts.Length == 0) return String.Empty;
+            string who = memory.FromCaptainName == null ? "" : " by " + memory.FromCaptainName + (memory.FromModel == null ? "" : " (" + memory.FromModel + ")");
+            string header = "## Last Failed Attempt\n" + (attempt.IsRescue ? "Rescue " + attempt.Id + who + " failed: " + Trim(attempt.FailureReason, 1500) + "\n" : "Mission " + attempt.Id + who + ".\n");
+            return header + facts + "\n\n";
         }
 
         private async Task<List<Incident>> ReadRecoveryIncidentsAsync(AuthContext auth, CancellationToken token)
@@ -411,6 +518,21 @@ namespace Armada.Core.Services
             }
 
             return results;
+        }
+
+        private async Task<string?> FindBrokenMitigationAsync(Incident incident, CancellationToken token)
+        {
+            // A landed rescue can still move from Complete to Failed when a later handoff fails, so the fix holds only while
+            // some rescue is still Complete.
+            List<string> states = new List<string>();
+            foreach (string rescueId in incident.RescueMissionIds)
+            {
+                Mission? rescue = await _Database.Missions.ReadAsync(rescueId, token).ConfigureAwait(false);
+                if (rescue == null) continue;
+                if (rescue.Status == MissionStatusEnum.Complete) return null;
+                states.Add(rescue.Id + " is " + rescue.Status);
+            }
+            return "no rescue is still Complete (" + (states.Count > 0 ? String.Join(", ", states) : "none found") + ").";
         }
 
         private async Task TransitionAsync(AuthContext auth, Incident incident, IncidentStatusEnum status, string note, CancellationToken token)

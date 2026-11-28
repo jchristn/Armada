@@ -425,19 +425,14 @@ namespace Armada.Server.WebSocket
                     string voyDesc = voyageData.Description ?? "";
                     string voyVesselId = voyageData.VesselId ?? "";
 
-                    List<MissionDescription> missionDescs = voyageData.Missions ?? new List<MissionDescription>();
-                    CollectionLimits.RequireRequestItems(missionDescs, "Missions");
-
-                    Voyage createdVoyage;
-                    if (String.IsNullOrEmpty(voyVesselId) || missionDescs.Count == 0)
+                    Voyage createdVoyage = await _Admiral.CreateVoyageAsync(caller, new VoyageCreationRequest
                     {
-                        createdVoyage = new Voyage(voyTitle, voyDesc);
-                        createdVoyage = await _Database.Voyages.CreateAsync(createdVoyage).ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        createdVoyage = await _Admiral.DispatchVoyageAsync(voyTitle, voyDesc, voyVesselId, missionDescs).ConfigureAwait(false);
-                    }
+                        Title = voyTitle,
+                        Description = voyDesc,
+                        VesselId = voyVesselId,
+                        Missions = voyageData.Missions ?? new List<MissionDescription>(),
+                        AllowBareVoyage = true
+                    }).ConfigureAwait(false);
                     return new { type = "command.result", action = "create_voyage", data = (object)createdVoyage };
 
                 case "cancel_voyage":
@@ -629,11 +624,12 @@ namespace Armada.Server.WebSocket
                     else
                     {
                         MissionStatusEnum tmBefore = tmMission.Status;
-                        tmMission.Status = tmNewStatus;
-                        tmMission.LastUpdateUtc = DateTime.UtcNow;
                         if (tmNewStatus == MissionStatusEnum.Complete || tmNewStatus == MissionStatusEnum.Failed || tmNewStatus == MissionStatusEnum.LandingFailed || tmNewStatus == MissionStatusEnum.Cancelled)
                             tmMission.CompletedUtc = DateTime.UtcNow;
-                        await _Database.Missions.UpdateAsync(tmMission).ConfigureAwait(false);
+                        MissionTransitionRequest tmManual = new MissionTransitionRequest { To = tmNewStatus, Operator = true, Message = "Mission " + tmId + " transitioned to " + tmNewStatus };
+                        tmManual.AllowedFrom.Add(tmBefore);
+                        if (!await _Admiral.Transitions.TryTransitionAsync(tmMission, tmManual).ConfigureAwait(false))
+                            return WebSocketCommandError.Create("transition_mission_status", WebSocketCommandErrorCodeEnum.Conflict, "Mission " + tmId + " changed to " + tmMission.Status + " before the transition was recorded");
                         await BlackBoxOperatorCapture.RecordTransitionAsync(BlackBoxCapture, tmMission, tmBefore, "WebSocket").ConfigureAwait(false);
                         Signal tmSignal = new Signal(SignalTypeEnum.Progress, "Mission " + tmId + " transitioned to " + tmNewStatus);
                         if (!String.IsNullOrEmpty(tmMission.CaptainId)) tmSignal.FromCaptainId = tmMission.CaptainId;
@@ -1213,6 +1209,7 @@ namespace Armada.Server.WebSocket
 
                 case "create_pipeline":
                     Pipeline newPipeline = JsonSerializer.Deserialize<WebSocketDataCommand<Pipeline>>(rawBody, _JsonOptions)?.Data!;
+                    newPipeline.JudgeStrength ??= Armada.Core.Enums.JudgeStrengthPolicyEnum.Wait;
                     CollectionBounds.Validate(newPipeline);
                     await DuplicateEntityGuard.EnsurePipelineNameAvailableAsync(_Database, newPipeline).ConfigureAwait(false);
                     newPipeline = await _Database.Pipelines.CreateAsync(newPipeline).ConfigureAwait(false);
@@ -1227,6 +1224,7 @@ namespace Armada.Server.WebSocket
                     {
                         Pipeline patchPipeline = JsonSerializer.Deserialize<WebSocketDataCommand<Pipeline>>(rawBody, _JsonOptions)?.Data!;
                         if (patchPipeline.Description != null) existPipeline.Description = patchPipeline.Description;
+                        if (patchPipeline.JudgeStrength.HasValue) existPipeline.JudgeStrength = patchPipeline.JudgeStrength;
                         if (patchPipeline.Stages != null && patchPipeline.Stages.Count > 0)
                         {
                             existPipeline.Stages = patchPipeline.Stages;

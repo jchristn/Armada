@@ -40,7 +40,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "get_model_profile",
-                "Get one model profile visible to the caller (the model as served: runtime, provider, model and served context) with its capabilities, rendering overrides, notes and immutable revisions (runtime version, model digest, sampling, tool configuration, compatibleWith, firstSeenUtc), oldest first. Profiles are advisory: they do not set a captain's tier or change routing. A captain's modelProfileId points at its profile.",
+                "Get one model profile visible to the caller (the model as served: runtime, provider, model and served context) with its capabilities, rendering overrides, recovery policy overrides (recovery) and the policy in effect for its captains (effectiveRecovery: maxResumes, unclassifiedResumes, transientGraceMinutes, judgeReworkRounds, outputRepairAttempts, escalateAfterResumes), notes and immutable revisions (runtime version, model digest, sampling, tool configuration, compatibleWith, firstSeenUtc), oldest first. Profiles are advisory: they do not set a captain's tier or change routing. A captain's modelProfileId points at its profile.",
                 new
                 {
                     type = "object",
@@ -116,6 +116,37 @@ namespace Armada.Server.Mcp.Tools
                     };
                     ModelProfileQuery query = ModelProfileRoutes.ParseQuery(key => values.TryGetValue(key, out string? v) ? v : null);
                     return (object)await service.ListAsync(caller, query).ConfigureAwait(false);
+                });
+
+            register(
+                "update_model_profile",
+                "Update the mutable parts of a model profile, as PUT /api/v1/model-profiles/{id}: capabilities, rendering (template Current, Lean or Compact), recovery policy overrides, per-profile timeouts, the administrator's tier, and notes. A section left out keeps its value; inside a section, a null value uses the global setting. Admins only. Returns the profile with its effective recovery policy and timeouts.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        id = new { type = "string", description = "Profile ID (mpf_ prefix)" },
+                        capabilities = new { type = "object", description = "toolsAvailable, mcpAvailable (booleans or null)" },
+                        rendering = new { type = "object", description = "template (Current, Lean, Compact or null), repeatContractAtEnd, maxFilesPerMission" },
+                        recovery = new { type = "object", description = "maxResumes 0-10, unclassifiedResumes 0-3, transientGraceMinutes 0-120, judgeReworkRounds 1-5, outputRepairAttempts 0-3, escalateAfterResumes; null uses the global setting" },
+                        timeouts = new { type = "object", description = "stallThresholdMinutes, toolWaitHardLimitMinutes, maxRuntimeMinutes, firstOutputMinutes; null uses the global (speed-scaled) value" },
+                        tiering = new
+                        {
+                            type = "object",
+                            description = "The administrator's tier for captains on this model; null clears it. The suggested tier is read-only.",
+                            properties = new { tier = new { type = new[] { "string", "null" }, @enum = new object?[] { "Economy", "Standard", "Premium", null } } }
+                        },
+                        notes = new { type = "string", description = "Notes (at most 4000 characters); empty clears" }
+                    },
+                    required = new[] { "id" }
+                },
+                async (args) =>
+                {
+                    if (service == null) return (object)McpToolError.Unavailable(UnavailableMessage);
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    ModelProfileUpdateArgs request = Read<ModelProfileUpdateArgs>(args);
+                    return (object)await service.UpdateAsync(caller, request.Id, request).ConfigureAwait(false);
                 });
         }
 

@@ -18,19 +18,19 @@ namespace Armada.Core.Database.Mysql.Implementations
         #region Private-Members
 
         private static readonly string _Insert = @"INSERT INTO handoff_artifacts
-            (id, tenant_id, user_id, mission_id, voyage_id, vessel_id, stage_outcome_id, persona, captain_id, captain_name,
+            (id, tenant_id, user_id, mission_id, voyage_id, vessel_id, stage_outcome_id, attempt_id, persona, captain_id, captain_name,
              attempt, rework_round, schema_version, verdict, branch_name, commit_hash, findings_json, acceptance_criteria_json,
              required_actions_json, check_results_json, commit_references_json, completion_lines_json, output, output_length,
              output_complete, diff, diff_length, diff_complete, diff_pointer, created_utc, last_update_utc)
             VALUES
-            (@id, @tenant_id, @user_id, @mission_id, @voyage_id, @vessel_id, @stage_outcome_id, @persona, @captain_id, @captain_name,
+            (@id, @tenant_id, @user_id, @mission_id, @voyage_id, @vessel_id, @stage_outcome_id, @attempt_id, @persona, @captain_id, @captain_name,
              @attempt, @rework_round, @schema_version, @verdict, @branch_name, @commit_hash, @findings_json, @acceptance_criteria_json,
              @required_actions_json, @check_results_json, @commit_references_json, @completion_lines_json, @output, @output_length,
              @output_complete, @diff, @diff_length, @diff_complete, @diff_pointer, @created_utc, @last_update_utc);";
 
         private static readonly string _Update = @"UPDATE handoff_artifacts SET
             user_id = @user_id, mission_id = @mission_id, voyage_id = @voyage_id, vessel_id = @vessel_id,
-            stage_outcome_id = @stage_outcome_id, persona = @persona, captain_id = @captain_id, captain_name = @captain_name,
+            stage_outcome_id = @stage_outcome_id, attempt_id = @attempt_id, persona = @persona, captain_id = @captain_id, captain_name = @captain_name,
             attempt = @attempt, rework_round = @rework_round, schema_version = @schema_version, verdict = @verdict,
             branch_name = @branch_name, commit_hash = @commit_hash, findings_json = @findings_json,
             acceptance_criteria_json = @acceptance_criteria_json, required_actions_json = @required_actions_json,
@@ -107,6 +107,35 @@ namespace Armada.Core.Database.Mysql.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<HandoffArtifact?> ReadByAttemptAsync(string missionId, string attemptId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
+            if (String.IsNullOrEmpty(attemptId)) throw new ArgumentNullException(nameof(attemptId));
+            List<HandoffArtifact> rows = await MysqlCommandHelper.QueryAsync(_ConnectionString,
+                "SELECT * FROM handoff_artifacts WHERE mission_id = @mission_id AND attempt_id = @attempt_id ORDER BY created_utc DESC, id DESC LIMIT 1;",
+                cmd =>
+                {
+                    MysqlCommandHelper.Add(cmd, "@mission_id", missionId);
+                    MysqlCommandHelper.Add(cmd, "@attempt_id", attemptId);
+                }, FromReader, token).ConfigureAwait(false);
+            return rows.FirstOrDefault();
+        }
+
+        /// <summary>
+        /// Insert an artifact inside a caller's transaction (the pipeline handoff batch).
+        /// </summary>
+        /// <param name="conn">Open connection.</param>
+        /// <param name="tx">Transaction.</param>
+        /// <param name="artifact">Artifact.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Task.</returns>
+        internal static async Task InsertAsync(MySqlConnection conn, MySqlTransaction tx, HandoffArtifact artifact, CancellationToken token)
+        {
+            artifact.LastUpdateUtc = DateTime.UtcNow;
+            await MysqlCommandHelper.ExecuteAsync(conn, tx, _Insert, cmd => Bind(cmd, artifact, true), token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
         public async Task<EnumerationResult<HandoffArtifact>> EnumerateAsync(HandoffArtifactQuery query, CancellationToken token = default)
         {
             if (query == null) throw new ArgumentNullException(nameof(query));
@@ -177,6 +206,7 @@ namespace Armada.Core.Database.Mysql.Implementations
             MysqlCommandHelper.Add(cmd, "@voyage_id", artifact.VoyageId);
             MysqlCommandHelper.Add(cmd, "@vessel_id", artifact.VesselId);
             MysqlCommandHelper.Add(cmd, "@stage_outcome_id", artifact.StageOutcomeId);
+            MysqlCommandHelper.Add(cmd, "@attempt_id", artifact.AttemptId);
             MysqlCommandHelper.Add(cmd, "@persona", artifact.Persona);
             MysqlCommandHelper.Add(cmd, "@captain_id", artifact.CaptainId);
             MysqlCommandHelper.Add(cmd, "@captain_name", artifact.CaptainName);
@@ -212,6 +242,7 @@ namespace Armada.Core.Database.Mysql.Implementations
             artifact.VoyageId = MysqlCommandHelper.ReadString(reader["voyage_id"]);
             artifact.VesselId = MysqlCommandHelper.ReadString(reader["vessel_id"]);
             artifact.StageOutcomeId = MysqlCommandHelper.ReadString(reader["stage_outcome_id"]);
+            artifact.AttemptId = MysqlCommandHelper.ReadString(reader["attempt_id"]);
             artifact.Persona = MysqlCommandHelper.ReadString(reader["persona"]);
             artifact.CaptainId = MysqlCommandHelper.ReadString(reader["captain_id"]);
             artifact.CaptainName = MysqlCommandHelper.ReadString(reader["captain_name"]);

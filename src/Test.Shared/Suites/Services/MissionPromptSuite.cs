@@ -209,7 +209,8 @@ namespace Test.Shared.Suites.Services
 
                         await service.GenerateClaudeMdAsync(tempDir, mission, vessel, captain);
 
-                        AssertTrue(File.Exists(Path.Combine(tempDir, "CODEX.md")), "Codex missions should write CODEX.md");
+                        AssertTrue(File.Exists(Path.Combine(tempDir, "AGENTS.override.md")), "Codex missions write AGENTS.override.md, which Codex loads natively");
+                        AssertFalse(File.Exists(Path.Combine(tempDir, "CODEX.md")), "Codex missions no longer write CODEX.md, which Codex never loads");
                         AssertFalse(File.Exists(Path.Combine(tempDir, "CLAUDE.md")), "Codex missions should not write CLAUDE.md by default");
                     }
                     finally
@@ -266,6 +267,89 @@ namespace Test.Shared.Suites.Services
                     finally
                     {
                         try { Directory.Delete(root, true); } catch { }
+                    }
+                }
+            }));
+
+            cases.Add(CaseAsync("rs8_10_instruction_file_per_runtime", "RS-8.10: each runtime gets the file it loads natively; Codex and pi an AGENTS.override.md, OpenCode AGENTS.md, and runtimes without one ARMADA.md, never CLAUDE.md", TestTags.Positive, () =>
+            {
+                AssertEqual("CLAUDE.md", MissionPromptBuilder.GetInstructionsFileName("ClaudeCode"));
+                AssertEqual("AGENTS.override.md", MissionPromptBuilder.GetInstructionsFileName("Codex"));
+                AssertEqual("AGENTS.override.md", MissionPromptBuilder.GetInstructionsFileName("Pi"));
+                AssertEqual("AGENTS.md", MissionPromptBuilder.GetInstructionsFileName("OpenCode"));
+                AssertEqual("CURSOR.md", MissionPromptBuilder.GetInstructionsFileName("Cursor"));
+                AssertEqual("GEMINI.md", MissionPromptBuilder.GetInstructionsFileName("Gemini"));
+                AssertEqual("MUX.md", MissionPromptBuilder.GetInstructionsFileName("Mux"));
+                AssertEqual(MissionPromptBuilder.NeutralInstructionsFileName, MissionPromptBuilder.GetInstructionsFileName("ApiEndpoint"));
+                AssertEqual(MissionPromptBuilder.NeutralInstructionsFileName, MissionPromptBuilder.GetInstructionsFileName("Custom"));
+                AssertEqual(MissionPromptBuilder.NeutralInstructionsFileName, MissionPromptBuilder.GetInstructionsFileName("SomethingNew"));
+                AssertEqual("ARMADA.md", MissionPromptBuilder.NeutralInstructionsFileName);
+                AssertEqual("CLAUDE.md", MissionPromptBuilder.GetInstructionsFileName(null), "a generation without a captain keeps CLAUDE.md");
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(CaseAsync("rs8_10_codex_override_carries_repository_agents_md", "RS-8.10: a Codex mission writes AGENTS.override.md with the repository's AGENTS.md carried after the instructions; AGENTS.md is untouched", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    MissionService service = CreateMissionService(CreateLogging(), testDb.Driver, CreateSettings(), new StubGitService());
+                    string tempDir = Path.Combine(Path.GetTempPath(), "armada_codex_override_" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(tempDir);
+                    try
+                    {
+                        File.WriteAllText(Path.Combine(tempDir, "AGENTS.md"), "# Repo rules\nAlways run the tests.\n");
+                        Captain captain = new Captain("CodexCaptain") { Runtime = AgentRuntimeEnum.Codex };
+                        Mission mission = new Mission { Title = "Implement the codex feature", Description = "Do the work." };
+                        await service.GenerateClaudeMdAsync(tempDir, mission, new Vessel("CodexVessel", "https://github.com/test/repo"), captain);
+
+                        string content = File.ReadAllText(Path.Combine(tempDir, "AGENTS.override.md"));
+                        int missionAt = content.IndexOf("Implement the codex feature", StringComparison.Ordinal);
+                        int repoAt = content.IndexOf("Always run the tests.", StringComparison.Ordinal);
+                        AssertTrue(missionAt >= 0, "mission instructions present");
+                        AssertTrue(repoAt > missionAt, "the override hides AGENTS.md from Codex, so the repository rules are carried into it");
+                        AssertEqual("# Repo rules\nAlways run the tests.\n", File.ReadAllText(Path.Combine(tempDir, "AGENTS.md")), "AGENTS.md is untouched");
+
+                        await service.GenerateClaudeMdAsync(tempDir, mission, new Vessel("CodexVessel", "https://github.com/test/repo"), captain);
+                        string again = File.ReadAllText(Path.Combine(tempDir, "AGENTS.override.md"));
+                        AssertEqual(Regex.Matches(content, "Implement the codex feature").Count, Regex.Matches(again, "Implement the codex feature").Count,
+                            "a regeneration does not read the earlier generated override back as repository instructions");
+                    }
+                    finally
+                    {
+                        try { Directory.Delete(tempDir, true); } catch { }
+                    }
+                }
+            }));
+
+            cases.Add(CaseAsync("rs8_10_opencode_and_api_endpoint_instruction_files", "RS-8.10: an OpenCode mission writes AGENTS.md (carrying CLAUDE.md when there is no AGENTS.md) and an API endpoint mission writes ARMADA.md", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    MissionService service = CreateMissionService(CreateLogging(), testDb.Driver, CreateSettings(), new StubGitService());
+                    string openCodeDir = Path.Combine(Path.GetTempPath(), "armada_opencode_file_" + Guid.NewGuid().ToString("N"));
+                    string apiDir = Path.Combine(Path.GetTempPath(), "armada_api_file_" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(openCodeDir);
+                    Directory.CreateDirectory(apiDir);
+                    try
+                    {
+                        File.WriteAllText(Path.Combine(openCodeDir, "CLAUDE.md"), "# Claude rules\nUse explicit types.\n");
+                        Mission mission = new Mission { Title = "Implement the feature", Description = "Do the work." };
+                        Vessel vessel = new Vessel("FileVessel", "https://github.com/test/repo");
+
+                        await service.GenerateClaudeMdAsync(openCodeDir, mission, vessel, new Captain("OpenCodeCaptain") { Runtime = AgentRuntimeEnum.OpenCode });
+                        string agents = File.ReadAllText(Path.Combine(openCodeDir, "AGENTS.md"));
+                        AssertContains("Implement the feature", agents);
+                        AssertContains("Use explicit types.", agents);
+                        AssertEqual("# Claude rules\nUse explicit types.\n", File.ReadAllText(Path.Combine(openCodeDir, "CLAUDE.md")), "CLAUDE.md is untouched");
+
+                        await service.GenerateClaudeMdAsync(apiDir, mission, vessel, new Captain("ApiCaptain") { Runtime = AgentRuntimeEnum.ApiEndpoint });
+                        AssertTrue(File.Exists(Path.Combine(apiDir, "ARMADA.md")), "API endpoint missions write ARMADA.md");
+                        AssertFalse(File.Exists(Path.Combine(apiDir, "CLAUDE.md")), "API endpoint missions no longer write CLAUDE.md");
+                    }
+                    finally
+                    {
+                        try { Directory.Delete(openCodeDir, true); } catch { }
+                        try { Directory.Delete(apiDir, true); } catch { }
                     }
                 }
             }));
@@ -622,8 +706,10 @@ namespace Test.Shared.Suites.Services
                         await service.GenerateClaudeMdAsync(tempDir, mission, vessel);
 
                         string content = await File.ReadAllTextAsync(Path.Combine(tempDir, "CLAUDE.md"));
-                        AssertContains("[ARMADA:RESULT] COMPLETE", content);
-                        AssertContains("[ARMADA:VERDICT] PASS", content);
+                        AssertContains("\n[ARMADA:VERDICT] PASS\n", content);
+                        AssertContains("\n[ARMADA:VERDICT] SPEC_CONFLICT\n", content);
+                        AssertFalse(content.Contains("[ARMADA:RESULT]", StringComparison.Ordinal), "a Judge is only told about verdict lines");
+                        AssertEqual(1, StageOutputContract.CountContracts(content), "one output contract");
                         AssertContains("standalone", content.ToLowerInvariant());
                     }
                     finally
@@ -664,7 +750,7 @@ namespace Test.Shared.Suites.Services
 
                         await service.GenerateClaudeMdAsync(tempDir, mission, vessel, captain);
 
-                        string content = await File.ReadAllTextAsync(Path.Combine(tempDir, "CODEX.md"));
+                        string content = await File.ReadAllTextAsync(Path.Combine(tempDir, "AGENTS.override.md"));
                         AssertEqual(1, Regex.Matches(content, "^## Project Context$", RegexOptions.Multiline).Count);
                         AssertEqual(1, Regex.Matches(content, "^## Code Style$", RegexOptions.Multiline).Count);
                         AssertEqual(1, Regex.Matches(content, "^## Model Context$", RegexOptions.Multiline).Count);
@@ -759,7 +845,7 @@ namespace Test.Shared.Suites.Services
                         string content = await File.ReadAllTextAsync(Path.Combine(tempDir, "CLAUDE.md"));
                         AssertContains("## Captain Instructions", content, "Custom captain instructions should still be included");
                         AssertContains("brief explanation", content, "Original captain instruction text should be preserved");
-                        AssertContains("## Required Output Contract", content, "Generated instructions should append a structured output contract");
+                        AssertEqual(1, StageOutputContract.CountContracts(content), "Generated instructions should state one structured output contract");
                         AssertContains("## Correctness", content, "Judge output contract should require the Correctness lens");
                         AssertContains("## Blast Radius", content, "Judge output contract should require the Blast Radius lens");
                         AssertContains("## Affected Case", content, "Judge output contract should require a concrete affected case to block");
@@ -793,10 +879,11 @@ namespace Test.Shared.Suites.Services
                             Runtime = Armada.Core.Enums.AgentRuntimeEnum.ApiEndpoint,
                             SystemInstructions = captainMode == "whitespace" ? "   " : String.Empty
                         };
-                        string contract = MissionPromptBuilder.BuildTemplateParams(mission, vessel, captain)["CaptainInstructions"];
+                        string contract = StageOutputContract.For(persona);
                         AssertTrue(!String.IsNullOrWhiteSpace(contract), "the role has a required contract independently of custom instructions");
+                        AssertEqual(String.Empty, MissionPromptBuilder.BuildTemplateParams(mission, vessel, captain)["CaptainInstructions"], "captain instructions do not repeat the contract");
                         await service.GenerateClaudeMdAsync(tempDir, mission, vessel, captain);
-                        string instructions = await File.ReadAllTextAsync(Path.Combine(tempDir, "CLAUDE.md"));
+                        string instructions = await File.ReadAllTextAsync(Path.Combine(tempDir, MissionPromptBuilder.GetInstructionsFileName(captain?.Runtime.ToString())));
                         AssertContains(contract, instructions, "the generated artifact must deliver the complete role contract even without custom captain instructions");
                     }
                     finally { try { Directory.Delete(tempDir, true); } catch { } }
@@ -1033,7 +1120,7 @@ namespace Test.Shared.Suites.Services
                     AssertContains("## Coverage Added", prompt);
                     AssertContains("[ARMADA:RESULT] COMPLETE", prompt);
                     AssertContains("Write tests", prompt);
-                    AssertContains("CODEX.md", prompt);
+                    AssertContains("AGENTS.override.md", prompt);
                     AssertFalse(prompt.Contains("CLAUDE.md"), "Non-Claude runtimes should not be pointed at CLAUDE.md");
                     AssertFalse(prompt.Contains("Be concise and careful."), "Launch prompt should defer captain instructions to the runtime instruction file");
                     AssertFalse(prompt.Contains("Service-oriented C# backend."), "Launch prompt should defer project context to the runtime instruction file");
@@ -1076,7 +1163,7 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
-            cases.Add(CaseAsync("architect_launch_prompt_explicitly_requires_armada_mission_markers", "Architect launch prompt explicitly requires ARMADA mission markers", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("architect_launch_prompt_requires_the_versioned_plan", "Architect launch prompt requires the versioned plan from the output contract", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
@@ -1098,9 +1185,9 @@ namespace Test.Shared.Suites.Services
                     string prompt = await MissionPromptBuilder.BuildLaunchPromptAsync(
                         mission, vessel, captain, dock, templateService).ConfigureAwait(false);
 
-                    AssertContains("[ARMADA:MISSION]", prompt);
+                    AssertFalse(prompt.Contains("[ARMADA:MISSION]", StringComparison.Ordinal), "only the versioned plan contract is offered");
                     AssertContains("Do not ask for more input.", prompt);
-                    AssertContains("respond only with real mission definitions", prompt);
+                    AssertContains("respond only with the plan its Output Contract section describes", prompt);
                     AssertContains("armada-plan", prompt);
                 }
             }));
@@ -1215,7 +1302,7 @@ namespace Test.Shared.Suites.Services
                         }
                     }
 
-                    Dictionary<string, string> standalone = MissionPromptBuilder.BuildTemplateParams(new Mission("Solo", "Solo"), new Vessel("V", "https://github.com/test/repo"), null, null, null);
+                    Dictionary<string, string> standalone = MissionPromptBuilder.BuildTemplateParams(new Mission("Solo", "Solo"), new Vessel("V", "https://github.com/test/repo"), null, null);
                     AssertEqual(MissionPromptBuilder.NoPreviousStageDiffText, standalone["Diff"]);
                     AssertEqual(MissionPromptBuilder.NoPreviousStageOutputText, standalone["PreviousStageOutput"]);
                 }
@@ -1228,7 +1315,7 @@ namespace Test.Shared.Suites.Services
                     PromptTemplateService templates = new PromptTemplateService(testDb.Driver, CreateLogging());
                     HashSet<string> supplied = new HashSet<string>(MissionPromptBuilder.TemplateParameterNames, StringComparer.Ordinal);
 
-                    Dictionary<string, string> built = MissionPromptBuilder.BuildTemplateParams(new Mission("T", "D"), new Vessel("V", "https://github.com/test/repo"), new Captain("c"), null, null);
+                    Dictionary<string, string> built = MissionPromptBuilder.BuildTemplateParams(new Mission("T", "D"), new Vessel("V", "https://github.com/test/repo"), new Captain("c"), null);
                     HashSet<string> builtKeys = new HashSet<string>(built.Keys, StringComparer.Ordinal) { "PersonaPrompt", "ExistingClaudeMd" };
                     AssertTrue(builtKeys.SetEquals(supplied), "TemplateParameterNames must match what the builder fills: builder=" + String.Join(",", builtKeys) + " list=" + String.Join(",", supplied));
 

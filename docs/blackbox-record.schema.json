@@ -3366,6 +3366,7 @@
             "ModelUnavailable",
             "TaskFailure",
             "Transient",
+            "Unclassified",
             null
           ]
         },

@@ -117,8 +117,10 @@ namespace Test.Shared.Suites.Services
 
         private static async Task InvokeUnconfirmedStopAsync(AdmiralService admiral, Captain captain, Mission? mission)
         {
-            MethodInfo method = typeof(AdmiralService).GetMethod("RecordUnconfirmedStopAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
-            await ((Task)method.Invoke(admiral, new object?[] { captain, mission, Armada.Core.Enums.CaptainStopPurposeEnum.Recovery, null, CancellationToken.None })!).ConfigureAwait(false);
+            FieldInfo field = typeof(AdmiralService).GetField("_LinkMonitor", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            object monitor = field.GetValue(admiral)!;
+            MethodInfo method = monitor.GetType().GetMethod("RecordUnconfirmedStopAsync", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!;
+            await ((Task)method.Invoke(monitor, new object?[] { captain, mission, Armada.Core.Enums.CaptainStopPurposeEnum.Recovery, null, CancellationToken.None })!).ConfigureAwait(false);
         }
 
         private static LoggingModule CreateLogging()

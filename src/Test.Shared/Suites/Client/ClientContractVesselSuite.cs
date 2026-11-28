@@ -40,26 +40,26 @@ namespace Test.Shared.Suites.Client
             {
                 VesselSetup setup = await LiveServerSetup.CreateVesselAsync(c, "cleanup");
                 string id = setup.Vessel.Id;
-                VesselCleanupInventory? inventory = await c.GetVesselCleanupInventoryAsync(id);
+                VesselCleanupInventory? inventory = await c.Vessels.GetCleanupInventoryAsync(id);
                 AssertEqual(id, inventory?.VesselId, "inventory vessel");
                 AssertEqual(inventory!.ResourceCount, inventory.SafeCount + inventory.InUseCount + inventory.UnknownCount, "every resource is classified");
-                EnumerationResult<VesselCleanupResource>? resources = await c.ListVesselCleanupResourcesAsync(id, new EnumerationQuery { PageSize = 1000 });
+                EnumerationResult<VesselCleanupResource>? resources = await c.Vessels.ListCleanupResourcesAsync(id, new EnumerationQuery { PageSize = 1000 });
                 AssertEqual((long)inventory.ResourceCount, resources?.TotalRecords, "resource page total matches the summary");
 
                 ArmadaApiException? tooMany = null;
-                try { await c.RunVesselCleanupAsync(id, Enumerable.Range(0, 1001).Select(i => "dock:dck_x" + i).ToList()); }
+                try { await c.Vessels.RunCleanupAsync(id, Enumerable.Range(0, 1001).Select(i => "dock:dck_x" + i).ToList()); }
                 catch (ArmadaApiException ex) { tooMany = ex; }
                 AssertNotNull(tooMany, "more than 1000 keys is rejected");
                 AssertEqual(400, tooMany!.StatusCode, "over the key limit is a 400");
 
-                VesselCleanupResult? result = await c.RunVesselCleanupAsync(id, new List<string> { "dock:dck_does_not_exist" });
+                VesselCleanupResult? result = await c.Vessels.RunCleanupAsync(id, new List<string> { "dock:dck_does_not_exist" });
                 AssertNotNull(result, "cleanup result");
                 AssertEqual(1, result.Skipped, "a missing key is skipped, not deleted");
                 AssertEqual(0, result.Deleted, "nothing deleted");
                 AssertEqual(id, result.Inventory.VesselId, "refreshed inventory");
 
                 ArmadaApiException? empty = null;
-                try { await c.RunVesselCleanupAsync(id, new List<string>()); }
+                try { await c.Vessels.RunCleanupAsync(id, new List<string>()); }
                 catch (ArmadaApiException ex) { empty = ex; }
                 AssertNotNull(empty, "empty selection is rejected");
                 AssertEqual(400, empty.StatusCode, "empty selection is a 400");
@@ -69,7 +69,7 @@ namespace Test.Shared.Suites.Client
             {
                 VesselSetup setup = await LiveServerSetup.CreateVesselAsync(c, "tree");
                 string id = setup.Vessel.Id;
-                Voyage? voyage = await c.CreateVoyageAsync(new VoyageCreateRequest
+                Voyage? voyage = await c.Voyages.CreateAsync(new VoyageCreateRequest
                 {
                     Title = "tree " + ClientContract.Suffix(), VesselId = id,
                     Missions = new List<DispatchRequest>
@@ -79,20 +79,20 @@ namespace Test.Shared.Suites.Client
                     }
                 });
                 AssertNotNull(voyage, "voyage created");
-                VoyageTree? tree = await c.GetVoyageTreeAsync(voyage!.Id);
+                VoyageTree? tree = await c.Concurrency.GetVoyageTreeAsync(voyage!.Id);
                 AssertEqual(2, tree?.TotalMissions, "tree mission count");
                 AssertFalse(tree!.Truncated, "a small tree is whole");
                 MissionTreeNode parent = tree.Roots.Single(n => n.Mission.Title == "parent");
                 string childId = parent.Children.Single().Mission.Id;
-                EnumerationResult<MissionWaitInterval>? waits = await c.GetMissionWaitsAsync(childId, 1, 10);
+                EnumerationResult<MissionWaitInterval>? waits = await c.Concurrency.GetMissionWaitsAsync(childId, 1, 10);
                 AssertNotNull(waits, "waits page");
                 AssertEqual(10, waits!.PageSize, "page size honored");
-                EnumerationResult<MissionWaitInterval>? newest = await c.EnumerateMissionWaitsAsync(childId, new EnumerationQuery { PageSize = 5, Order = EnumerationOrderEnum.CreatedDescending });
+                EnumerationResult<MissionWaitInterval>? newest = await c.Concurrency.EnumerateMissionWaitsAsync(childId, new EnumerationQuery { PageSize = 5, Order = EnumerationOrderEnum.CreatedDescending });
                 AssertEqual(5, newest?.PageSize, "enumerate page size honored");
                 AssertEqual(waits.TotalRecords, newest!.TotalRecords, "both forms count the same waits");
-                VesselConcurrency? concurrency = await c.GetVesselConcurrencyAsync(id);
+                VesselConcurrency? concurrency = await c.Concurrency.GetVesselAsync(id);
                 AssertEqual(id, concurrency?.VesselId, "vessel concurrency");
-                ConcurrencyMetrics? metrics = await c.GetConcurrencyMetricsAsync(DateTime.UtcNow.AddHours(-1), DateTime.UtcNow, id);
+                ConcurrencyMetrics? metrics = await c.Concurrency.GetMetricsAsync(DateTime.UtcNow.AddHours(-1), DateTime.UtcNow, id);
                 AssertEqual(id, metrics?.VesselId, "metrics vessel filter");
                 AssertEqual(300, metrics!.BucketSeconds, "a 1 hour window uses 5 minute buckets");
             }));
@@ -101,17 +101,17 @@ namespace Test.Shared.Suites.Client
             {
                 VesselSetup setup = await LiveServerSetup.CreateVesselAsync(c, "vessel");
                 string id = setup.Vessel.Id;
-                AssertEqual(setup.Vessel.Name, (await c.GetVesselAsync(id))?.Name, "get vessel");
-                AssertTrue((await c.ListVesselsAsync(new ArmadaPageQuery(1, 100)))!.Objects.Any(v => v.Id == id), "list vessels");
-                Vessel edit = (await c.GetVesselAsync(id))!;
+                AssertEqual(setup.Vessel.Name, (await c.Vessels.GetAsync(id))?.Name, "get vessel");
+                AssertTrue((await c.Vessels.ListAsync(new ArmadaPageQuery(1, 100)))!.Objects.Any(v => v.Id == id), "list vessels");
+                Vessel edit = (await c.Vessels.GetAsync(id))!;
                 edit.ProjectContext = "Contract context";
-                AssertEqual("Contract context", (await c.UpdateVesselAsync(id, edit))?.ProjectContext, "update vessel");
+                AssertEqual("Contract context", (await c.Vessels.UpdateAsync(id, edit))?.ProjectContext, "update vessel");
                 Vessel contextPatch = new Vessel();
                 contextPatch.StyleGuide = "Contract style";
-                Vessel? patched = await c.UpdateVesselContextAsync(id, contextPatch);
+                Vessel? patched = await c.Vessels.UpdateContextAsync(id, contextPatch);
                 AssertEqual("Contract style", patched?.StyleGuide, "update vessel context");
                 AssertEqual("Contract context", patched?.ProjectContext, "the context patch keeps the project context");
-                AssertEqual(id, (await c.GetVesselGitStatusAsync(id))?.VesselId, "git status");
+                AssertEqual(id, (await c.Vessels.GetGitStatusAsync(id))?.VesselId, "git status");
 
                 string branch = "contract/branch-" + ClientContract.Suffix();
                 string work = setup.Vessel.WorkingDirectory!;
@@ -120,20 +120,20 @@ namespace Test.Shared.Suites.Client
                 LiveServerSetup.Git(work, out _, "add", "-A");
                 LiveServerSetup.Git(work, out _, "-c", "user.name=Contract", "-c", "user.email=contract@armada.test", "commit", "-m", "Branch change");
                 LiveServerSetup.Git(work, out _, "checkout", "main");
-                AssertTrue((await c.GetVesselBranchesAsync(id))!.Branches.Any(b => b.Name == branch), "branches list the new branch");
-                AssertTrue(await c.GetVesselBranchCountAsync(id) >= 2, "branch count includes the new branch");
-                AssertEqual(branch, (await c.GetVesselLandingPreviewAsync(id, branch))?.SourceBranch, "landing preview");
-                AssertTrue((await c.PushVesselBranchAsync(id, branch))?.Pushed == true, "push");
+                AssertTrue((await c.Vessels.GetBranchesAsync(id))!.Branches.Any(b => b.Name == branch), "branches list the new branch");
+                AssertTrue(await c.Vessels.GetBranchCountAsync(id) >= 2, "branch count includes the new branch");
+                AssertEqual(branch, (await c.Vessels.GetLandingPreviewAsync(id, branch))?.SourceBranch, "landing preview");
+                AssertTrue((await c.Vessels.PushBranchAsync(id, branch))?.Pushed == true, "push");
                 // The target must not be the branch checked out in the working directory (the server merges in a
                 // temporary worktree of it), so merge into a separate release branch.
                 string target = "contract/target-" + ClientContract.Suffix();
                 LiveServerSetup.Git(work, out _, "branch", target, "main");
-                AssertTrue((await c.MergeVesselBranchAsync(id, branch, target, true))?.Merged == true, "merge");
+                AssertTrue((await c.Vessels.MergeBranchAsync(id, branch, target, true))?.Merged == true, "merge");
                 AssertEqual(0, LiveServerSetup.Git(null, out string catFile, "--git-dir", setup.BarePath, "cat-file", "-e", target + ":branch.txt"), "merged and pushed to the origin (branch.txt exists on the target): " + catFile);
 
                 Captain captain = await LiveServerSetup.CreateCaptainAsync(c, "contract-context");
                 _Behavior.OnPrompt = prompt => "## Project context\nA test repository with one README.";
-                Vessel? built = await c.BuildVesselContextAsync(id, new BuildVesselContextRequest { CaptainId = captain.Id });
+                Vessel? built = await c.Vessels.BuildContextAsync(id, new BuildVesselContextRequest { CaptainId = captain.Id });
                 AssertEqual(id, built?.Id, "build context");
             }));
 
@@ -149,44 +149,44 @@ namespace Test.Shared.Suites.Client
                 action.RequiredTools = new() { "git" };
                 action.ScanSourceActionKey = "sdk-source";
                 action.Inputs = new() { new() { Name = "version", Type = "semver", Required = true } };
-                FleetAction created = (await c.CreateFleetActionAsync(action))!;
-                FleetAction? fetchedAction = await c.GetFleetActionAsync(created.Id);
+                FleetAction created = (await c.FleetActions.CreateAsync(action))!;
+                FleetAction? fetchedAction = await c.FleetActions.GetAsync(created.Id);
                 AssertEqual(action.Name, fetchedAction?.Name, "get action");
                 AssertEqual("git", fetchedAction!.RequiredTools.Single(), "SDK required tools");
                 AssertEqual("version", fetchedAction.Inputs.Single().Name, "SDK input definitions");
                 AssertEqual("git status --short", fetchedAction.CommandWindows, "SDK Windows command");
                 AssertEqual("sdk-source", fetchedAction.ScanSourceActionKey, "SDK scan source");
                 action.Description = "updated";
-                AssertEqual("updated", (await c.UpdateFleetActionAsync(created.Id, action))?.Description, "update action");
+                AssertEqual("updated", (await c.FleetActions.UpdateAsync(created.Id, action))?.Description, "update action");
 
-                await ClientContract.ExpectErrorAsync(() => c.RunFleetActionAsync(created.Id, new FleetActionRunRequest { VesselIds = new() { setup.Vessel.Id } }), "required version is rejected before dispatch", 400);
-                FleetActionRunStartResult run = (await c.RunFleetActionAsync(created.Id, new FleetActionRunRequest { VesselIds = new List<string> { setup.Vessel.Id }, InputValues = new() { ["version"] = "1.2.3" } }))!;
-                AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => (await c.GetFleetActionRunAsync(run.RunId))?.Run.Status == FleetActionRunStatusEnum.Completed, LiveTimeoutMs), "run completed");
-                AssertEqual("1.2.3", (await c.GetFleetActionRunAsync(run.RunId))!.Run.InputValues["version"], "SDK runtime input snapshot");
-                FleetActionRunTargetSummary target = (await c.EnumerateFleetActionRunTargetsAsync(run.RunId))!.Objects.Single();
+                await ClientContract.ExpectErrorAsync(() => c.FleetActions.RunAsync(created.Id, new FleetActionRunRequest { VesselIds = new() { setup.Vessel.Id } }), "required version is rejected before dispatch", 400);
+                FleetActionRunStartResult run = (await c.FleetActions.RunAsync(created.Id, new FleetActionRunRequest { VesselIds = new List<string> { setup.Vessel.Id }, InputValues = new() { ["version"] = "1.2.3" } }))!;
+                AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => (await c.FleetActions.GetRunAsync(run.RunId))?.Run.Status == FleetActionRunStatusEnum.Completed, LiveTimeoutMs), "run completed");
+                AssertEqual("1.2.3", (await c.FleetActions.GetRunAsync(run.RunId))!.Run.InputValues["version"], "SDK runtime input snapshot");
+                FleetActionRunTargetSummary target = (await c.FleetActions.EnumerateRunTargetsAsync(run.RunId))!.Objects.Single();
                 AssertEqual(setup.Vessel.Id, target.VesselId, "target vessel");
-                AssertEqual(0, (await c.GetFleetActionRunTargetAsync(run.RunId, target.Id))?.ExitCode ?? -1, "target exit code");
-                await ClientContract.ExpectErrorAsync(() => c.CancelFleetActionRunAsync(run.RunId), "a finished run cannot be cancelled", 400, 409);
+                AssertEqual(0, (await c.FleetActions.GetRunTargetAsync(run.RunId, target.Id))?.ExitCode ?? -1, "target exit code");
+                await ClientContract.ExpectErrorAsync(() => c.FleetActions.CancelRunAsync(run.RunId), "a finished run cannot be cancelled", 400, 409);
 
                 FleetActionRunRequest adHoc = new FleetActionRunRequest();
                 adHoc.VesselIds = new List<string> { setup.Vessel.Id };
                 adHoc.Definition = new FleetActionUpsertRequest { Name = "Contract ad hoc", Kind = FleetActionKindEnum.Command, CommandText = "git log -1 --format=%s" };
-                FleetActionRunStartResult adHocRun = (await c.RunAdHocFleetActionAsync(adHoc))!;
+                FleetActionRunStartResult adHocRun = (await c.FleetActions.RunAdHocAsync(adHoc))!;
                 AssertNull(adHocRun.ActionId, "ad hoc run has no saved action");
-                AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => (await c.GetFleetActionRunAsync(adHocRun.RunId))?.Run.Status == FleetActionRunStatusEnum.Completed, LiveTimeoutMs), "ad hoc run completed");
-                await c.DeleteFleetActionAsync(created.Id);
+                AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => (await c.FleetActions.GetRunAsync(adHocRun.RunId))?.Run.Status == FleetActionRunStatusEnum.Completed, LiveTimeoutMs), "ad hoc run completed");
+                await c.FleetActions.DeleteAsync(created.Id);
             }));
 
             cases.Add(Case("vessel_health", "Vessel health evaluate, detail, set and delete an override", async (c, fx) =>
             {
                 VesselSetup setup = await LiveServerSetup.CreateVesselAsync(c, "health");
-                VesselHealthEvaluationStart? start = await c.EvaluateVesselHealthAsync(new VesselHealthEvaluateRequest { VesselIds = new List<string> { setup.Vessel.Id } });
-                AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => (await c.GetJobAsync(start!.JobId))?.Status == JobStatusEnum.Succeeded, LiveTimeoutMs), "evaluation job completed");
-                VesselHealthDetail? detail = await c.GetVesselHealthAsync(setup.Vessel.Id);
+                VesselHealthEvaluationStart? start = await c.VesselHealth.EvaluateAsync(new VesselHealthEvaluateRequest { VesselIds = new List<string> { setup.Vessel.Id } });
+                AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => (await c.Jobs.GetAsync(start!.JobId))?.Status == JobStatusEnum.Succeeded, LiveTimeoutMs), "evaluation job completed");
+                VesselHealthDetail? detail = await c.VesselHealth.GetAsync(setup.Vessel.Id);
                 AssertEqual(setup.Vessel.Id, detail?.Health.VesselId, "health detail");
-                VesselHealthDetail? overridden = await c.SetVesselHealthOverrideAsync(setup.Vessel.Id, VesselHealthCriterionEnum.WorkingTree, VesselHealthStatusEnum.Pass, "contract");
+                VesselHealthDetail? overridden = await c.VesselHealth.SetOverrideAsync(setup.Vessel.Id, VesselHealthCriterionEnum.WorkingTree, VesselHealthStatusEnum.Pass, "contract");
                 AssertTrue(overridden!.Overrides.Any(o => o.Criterion == VesselHealthCriterionEnum.WorkingTree), "override set");
-                VesselHealthDetail? cleared = await c.DeleteVesselHealthOverrideAsync(setup.Vessel.Id, VesselHealthCriterionEnum.WorkingTree);
+                VesselHealthDetail? cleared = await c.VesselHealth.DeleteOverrideAsync(setup.Vessel.Id, VesselHealthCriterionEnum.WorkingTree);
                 AssertFalse(cleared!.Overrides.Any(o => o.Criterion == VesselHealthCriterionEnum.WorkingTree), "override removed");
             }));
 
@@ -205,16 +205,16 @@ namespace Test.Shared.Suites.Client
 
                 VesselDiscoveryRequest discover = new VesselDiscoveryRequest();
                 discover.Roots = new List<string> { root };
-                VesselImportDiscoverResponse found = (await c.DiscoverVesselImportAsync(discover))!;
+                VesselImportDiscoverResponse found = (await c.VesselImport.DiscoverAsync(discover))!;
                 AssertEqual(2, found.Candidates.Count, "two repositories found");
                 VesselImportRequest import = new VesselImportRequest();
                 import.BatchId = found.BatchId;
                 import.Paths = found.Candidates.Select(i => i.Path).ToList();
-                VesselImportResponse imported = (await c.ImportVesselsAsync(import))!;
+                VesselImportResponse imported = (await c.VesselImport.ImportAsync(import))!;
                 List<string> vesselIds = new List<string>();
                 AssertTrue(await LiveServerSetup.WaitUntilAsync(async () =>
                 {
-                    VesselImportBatchDetail? detail = await c.GetVesselImportBatchAsync(imported.BatchId);
+                    VesselImportBatchDetail? detail = await c.VesselImport.GetBatchAsync(imported.BatchId);
                     vesselIds = detail?.Items.Where(i => !String.IsNullOrEmpty(i.VesselId)).Select(i => i.VesselId!).ToList() ?? new List<string>();
                     return vesselIds.Count == 2;
                 }, LiveTimeoutMs), "both vessels created");
@@ -224,50 +224,50 @@ namespace Test.Shared.Suites.Client
                 {
                     return "{\"fleets\":[{\"name\":\"Contract Imported\",\"description\":\"From the stub captain\",\"vesselIds\":[\"" + String.Join("\",\"", vesselIds) + "\"]}]}";
                 };
-                await c.CategorizeVesselImportAsync(imported.BatchId, new VesselImportCategorizationRequest { Enabled = true, CaptainId = captain.Id });
+                await c.VesselImport.CategorizeAsync(imported.BatchId, new VesselImportCategorizationRequest { Enabled = true, CaptainId = captain.Id });
                 List<VesselImportFleetRecommendation> recommendations = new List<VesselImportFleetRecommendation>();
                 AssertTrue(await LiveServerSetup.WaitUntilAsync(async () =>
                 {
-                    recommendations = (await c.GetVesselImportBatchAsync(imported.BatchId))?.FleetRecommendations ?? new List<VesselImportFleetRecommendation>();
+                    recommendations = (await c.VesselImport.GetBatchAsync(imported.BatchId))?.FleetRecommendations ?? new List<VesselImportFleetRecommendation>();
                     return recommendations.Count > 0;
                 }, LiveTimeoutMs), "captain recommended a fleet: " + String.Join("; ", _Behavior.Errors));
 
                 FleetRecommendationApplyRequest apply = new FleetRecommendationApplyRequest();
                 string appliedFleetName = "Contract Imported " + ClientContract.Suffix();
                 apply.Fleets.Add(new FleetRecommendationApplyFleet { Name = appliedFleetName, VesselIds = vesselIds });
-                FleetRecommendationApplyResult? applied = await c.ApplyFleetRecommendationsAsync(imported.BatchId, apply);
+                FleetRecommendationApplyResult? applied = await c.VesselImport.ApplyFleetRecommendationsAsync(imported.BatchId, apply);
                 AssertNotNull(applied, "applied");
-                Vessel? moved = await c.GetVesselAsync(vesselIds[0]);
-                AssertEqual(appliedFleetName, (await c.GetFleetAsync(moved!.FleetId!))?.Fleet?.Name, "vessel moved to the new fleet");
+                Vessel? moved = await c.Vessels.GetAsync(vesselIds[0]);
+                AssertEqual(appliedFleetName, (await c.Fleets.GetAsync(moved!.FleetId!))?.Fleet?.Name, "vessel moved to the new fleet");
             }));
 
             cases.Add(Case("workspace", "Workspace status, tree, file read and save, directory, rename, delete, search, changes, exec, diff", async (c, fx) =>
             {
                 VesselSetup setup = await LiveServerSetup.CreateVesselAsync(c, "workspace");
                 string id = setup.Vessel.Id;
-                AssertTrue((await c.GetWorkspaceStatusAsync(id))?.HasWorkingDirectory == true, "status");
-                AssertTrue((await c.ListWorkspaceDirectoryAsync(id)).Any(e => e.Name == "README.md"), "tree");
-                WorkspaceTreeResult? treePage = await c.GetWorkspaceTreeAsync(id, null, new EnumerationQuery { PageNumber = 1, PageSize = 1 });
+                AssertTrue((await c.Workspace.GetStatusAsync(id))?.HasWorkingDirectory == true, "status");
+                AssertTrue((await c.Workspace.ListDirectoryAsync(id)).Any(e => e.Name == "README.md"), "tree");
+                WorkspaceTreeResult? treePage = await c.Workspace.GetTreeAsync(id, null, new EnumerationQuery { PageNumber = 1, PageSize = 1 });
                 AssertEqual(1, treePage!.Entries.Count, "one entry per page of one");
                 AssertTrue(treePage.TotalRecords >= 1 && treePage.TotalPages == treePage.TotalRecords, "tree totals describe the whole directory");
-                AssertEqual(0, (await c.ListWorkspaceActiveMissionsAsync(id))!.TotalRecords, "no active missions");
-                AssertEqual(0, (await c.ListAllWorkspaceActiveMissionsAsync(id)).Count, "no active missions across pages");
-                EnumerationResult<VesselDependency>? dependencies = await c.ListVesselDependenciesAsync(id, new EnumerationQuery { PageSize = 5 });
+                AssertEqual(0, (await c.Workspace.ListActiveMissionsAsync(id))!.TotalRecords, "no active missions");
+                AssertEqual(0, (await c.Workspace.ListAllActiveMissionsAsync(id)).Count, "no active missions across pages");
+                EnumerationResult<VesselDependency>? dependencies = await c.VesselHealth.ListDependenciesAsync(id, new EnumerationQuery { PageSize = 5 });
                 AssertEqual(5, dependencies!.PageSize, "dependency page size");
-                AssertEqual((await c.GetVesselHealthAsync(id))!.DependencyCount, dependencies.TotalRecords, "dependency total matches the health count");
-                WorkspaceFileResponse readme = (await c.GetWorkspaceFileAsync(id, "README.md"))!;
+                AssertEqual((await c.VesselHealth.GetAsync(id))!.DependencyCount, dependencies.TotalRecords, "dependency total matches the health count");
+                WorkspaceFileResponse readme = (await c.Workspace.GetFileAsync(id, "README.md"))!;
                 AssertEqual("hello\n", readme.Content, "file content");
-                AssertTrue((await c.SaveWorkspaceFileAsync(id, new WorkspaceSaveRequest { Path = "README.md", Content = "hello contract\n", ExpectedHash = readme.ContentHash }))?.SizeBytes > 0, "save");
-                await c.CreateWorkspaceDirectoryAsync(id, new WorkspaceCreateDirectoryRequest { Path = "contract-dir" });
-                await c.SaveWorkspaceFileAsync(id, new WorkspaceSaveRequest { Path = "contract-dir/a.txt", Content = "needle\n" });
-                AssertEqual("contract-dir/b.txt", (await c.RenameWorkspaceEntryAsync(id, new WorkspaceRenameRequest { Path = "contract-dir/a.txt", NewPath = "contract-dir/b.txt" }))?.NewPath, "rename");
-                AssertTrue((await c.SearchWorkspaceAsync(id, "needle"))!.TotalMatches >= 1, "search");
-                AssertTrue((await c.GetWorkspaceChangesAsync(id))!.IsDirty, "changes");
-                WorkspaceChangesResult allChanges = (await c.ListAllWorkspaceChangesAsync(id))!;
+                AssertTrue((await c.Workspace.SaveFileAsync(id, new WorkspaceSaveRequest { Path = "README.md", Content = "hello contract\n", ExpectedHash = readme.ContentHash }))?.SizeBytes > 0, "save");
+                await c.Workspace.CreateDirectoryAsync(id, new WorkspaceCreateDirectoryRequest { Path = "contract-dir" });
+                await c.Workspace.SaveFileAsync(id, new WorkspaceSaveRequest { Path = "contract-dir/a.txt", Content = "needle\n" });
+                AssertEqual("contract-dir/b.txt", (await c.Workspace.RenameEntryAsync(id, new WorkspaceRenameRequest { Path = "contract-dir/a.txt", NewPath = "contract-dir/b.txt" }))?.NewPath, "rename");
+                AssertTrue((await c.Workspace.SearchAsync(id, "needle"))!.TotalMatches >= 1, "search");
+                AssertTrue((await c.Workspace.GetChangesAsync(id))!.IsDirty, "changes");
+                WorkspaceChangesResult allChanges = (await c.Workspace.ListAllChangesAsync(id))!;
                 AssertEqual((int)allChanges.TotalRecords, allChanges.Changes.Count, "every changed file across pages");
-                AssertContains("hello contract", (await c.GetWorkspaceDiffAsync(id, "README.md"))?.Diff ?? "", "diff");
-                AssertNotNull(await c.DeleteWorkspaceEntryAsync(id, "contract-dir"), "delete entry");
-                WorkspaceExecResult? exec = await c.ExecWorkspaceCommandAsync(id, "git status --short", 30);
+                AssertContains("hello contract", (await c.Workspace.GetDiffAsync(id, "README.md"))?.Diff ?? "", "diff");
+                AssertNotNull(await c.Workspace.DeleteEntryAsync(id, "contract-dir"), "delete entry");
+                WorkspaceExecResult? exec = await c.Workspace.ExecCommandAsync(id, "git status --short", 30);
                 AssertEqual(0, exec?.ExitCode ?? -1, "exec: " + exec?.Stderr);
             }));
 

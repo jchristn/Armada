@@ -58,6 +58,7 @@ Key design decisions:
 | `Stages` | List\<PipelineStage\> | Ordered list of stages |
 | `IsBuiltIn` | bool | True for system-shipped pipelines (cannot be deleted) |
 | `Active` | bool | Whether the pipeline is active |
+| `JudgeStrength` | `JudgeStrengthPolicyEnum?` | Judge strength rule for its voyages: `Off`, `Wait` or `ProceedAndFlag`. Null reads as Off (pipelines stored before 1.5.0); a pipeline created through the API without a value gets `Wait`. See [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md#judge-strength-rule) |
 
 **Source:** `src/Armada.Core/Models/Pipeline.cs`
 
@@ -91,6 +92,7 @@ Key design decisions:
 | `PriorityAvailability` | enum | FallThrough (default) or WaitForFirstPriority |
 | `PriorityExhaustion` | enum | Wait (default) or UseEligibleCaptain |
 | `DefaultCaptainId` | string? | Optional preferred captain for missions of this persona (see [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md)) |
+| `EscalationLadder` | ordered matchers | Captain classes a stage escalates through when its captain cannot finish, lowest rung first, with the same fields as `CaptainPriorities`. Empty means escalate only to a strictly higher tier. See [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md#escalation-ladder) |
 
 **Source:** `src/Armada.Core/Models/Persona.cs`
 
@@ -119,7 +121,7 @@ Key design decisions:
 | Name | Template | Description |
 |------|----------|-------------|
 | Worker | `persona.worker` | Standard mission executor -- writes code, makes changes, commits |
-| Architect | `persona.architect` | Plans work, decomposes goals into missions using `[ARMADA:MISSION]` markers |
+| Architect | `persona.architect` | Plans work, decomposes goals into missions in one `armada-plan` JSON block (contract version 4) |
 | Product Manager | `persona.product_manager` | Shapes the product picture, clarifies user outcomes, turns work into durable requirements |
 | Usability Engineer | `persona.usability_engineer` | Improves usability, edge-case experience, and consistency with the surrounding product |
 | Test Engineer | `persona.test_engineer` | Writes tests for changes, follows existing test patterns |
@@ -155,8 +157,9 @@ The complete lifecycle of a pipeline dispatch:
 User calls dispatch(title, vesselId, missions, pipeline: "Reviewed")
     |
     v
-AdmiralService.DispatchVoyageAsync(title, desc, vesselId, missions, pipelineId)
-    |
+VoyageCreationService.CreateAsync(caller, request)
+    |  REST, MCP, WebSocket, planning, fleet actions and battery runs all call it
+    |  Checks: objective, pipeline by id or name, caller can see the vessel
     v
 ResolvePipelineAsync(pipelineId, vessel)
     |  Checks: explicit param -> vessel default -> fleet default -> null
@@ -183,10 +186,16 @@ Is pipeline null or single-stage Worker?
                 Update Voyage status (InProgress if any mission assigned)
                     |
                     v
+                Link the objective, if named
+                    |
+                    v
                 Return Voyage to caller
 ```
 
-**Source:** `src/Armada.Core/Services/AdmiralService.cs`, method `DispatchVoyageAsync` (the pipelineId overload)
+A standard dispatch is the same loop with one stage: the mission keeps its own title, and a mission's `Persona`
+replaces the stage persona.
+
+**Source:** `src/Armada.Core/Services/VoyageCreationService.cs`, method `CreateAsync`
 
 ---
 
@@ -279,7 +288,7 @@ if (!String.IsNullOrEmpty(mission.DependsOnMissionId))
 
 A dependency waiting in `Review` (a review gate) is neither `Complete` nor `WorkProduced`, so the next stage waits until the review is approved. This runs on every assignment attempt (including health check retries), so dependent missions are automatically picked up once their dependency completes.
 
-**Source:** `src/Armada.Core/Services/MissionService.cs`, method `TryAssignAsync`
+**Source:** `src/Armada.Core/Services/MissionLauncher.cs`, method `TryAssignAsync`; the gates run in `MissionAdmissionPipeline.cs`
 
 ### Captain Selection
 
@@ -301,9 +310,15 @@ A dependency waiting in `Review` (a review gate) is neither `Complete` nor `Work
 7. Otherwise return the first eligible captain
 ```
 
+Since 1.5.0 a captain whose served context cannot hold the prompt is never eligible, a Judge follows the voyage's
+Judge strength rule, and captains of one tier are ranked by their persona results once a model has enough of them.
+See [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md#capability-aware-routing-150). When a mission stays Pending, the first gate
+that refused it is recorded as one typed blocker; the gates and their order are in
+[CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md#admission-order-and-typed-blockers).
+
 The preferred captain comes from the dispatch payload, the voyage's per-persona override, or the persona's `DefaultCaptainId`. See [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md) and [SCHEDULING.md](SCHEDULING.md#why-a-mission-is-waiting).
 
-**Source:** `src/Armada.Core/Services/MissionService.cs`, method `FindAvailableCaptainAsync`
+**Source:** `src/Armada.Core/Services/MissionCaptainRouter.cs` (eligibility, tier, context fit, Judge strength and ranking)
 
 ---
 
@@ -334,20 +349,27 @@ Approving a stage whose handoff then fails (for example an Architect whose outpu
 
 ### Internal status transitions
 
-The mission state machine (`MissionStateMachine`, documented with `transition_mission_status`) is the contract for operators and agents. Armada itself also moves missions between statuses as part of dispatch, completion and recovery; these internal transitions are listed here so they are not mistaken for violations of that table:
+The mission state machine (`MissionStateMachine.IsValidTransition`, documented with `transition_mission_status`) is the contract for operators and agents. Armada itself also moves missions between statuses as part of dispatch, completion and recovery. Those internal edges are a second table, `MissionStateMachine.IsValidInternalTransition`, which includes every operator edge. Every status change, internal or operator, goes through `MissionTransitions`: it refuses an edge that is not in the table, writes only while the mission still has the status the caller read (a compare-and-set, so a late writer never overwrites a newer state), emits `mission.status_changed`, and settles the voyage when the mission reaches a terminal status. The internal edges are:
 
 | From | To | Done by |
 |---|---|---|
 | Assigned | Pending | Assignment rollback when provisioning or launch fails (`RollbackAssignmentAsync`) |
-| InProgress, Assigned | Pending | Restart recovery after an interrupted process (`HandleInterruptedProcessExitAsync`), orphan recovery, and escalation to another captain (`TryEscalateToPlannerAsync`) |
-| WorkProduced | Pending | An output repair turn, a no-op re-dispatch, or a review denied with RetryStage |
-| WorkProduced | Failed | A completion gate refused the work: Judge or verifier rejection, scope violation, invalid output, stage check, no-op budget, or a captain that reported BLOCKED with no work (`Blocked`) |
-| WorkProduced | Review | A review-gated stage waiting for a person |
+| Assigned, InProgress, Testing, Review, Verifying | Pending | Restart recovery after an interrupted process (`HandleInterruptedProcessExitAsync`), orphan recovery, and escalation to another captain (`TryEscalateToPlannerAsync`); Review also for a review denied with RetryStage |
+| InProgress, Testing | Verifying | A clean process exit, while the stage's checks run |
+| WorkProduced | Pending | An output repair turn or a no-op re-dispatch |
+| Pending, Blocked, Assigned | Failed | Maximum runtime, stall recovery exhausted, or a launch that failed |
+| WorkProduced, PullRequestOpen | Failed | A completion gate refused the work: Judge or verifier rejection, scope violation, Definition-of-Done, invalid output, stage check, no-op budget, or a captain that reported BLOCKED with no work (`Blocked`) |
+| Complete | Failed | A stage approved in review whose handoff to the next stage then failed (for example an unparseable Architect plan) |
+| WorkProduced, PullRequestOpen | Review | A review-gated stage, or a change held by the auto-land rules, waiting for a person |
+| Assigned, Testing, Review, PullRequestOpen, Failed | WorkProduced | Completion from any running status, an approved review, a manual land, and a verifier restarted after its rework |
+| Review | LandingFailed | A landing retry for a review mission with no review gate |
+| Testing, Review, Failed | Cancelled | A cancellation of the mission or its voyage |
 | Pending | Blocked, Cancelled | A dependency failed (`BlockDependentsOfFailedStages` picks which), or the voyage was cancelled |
 | LandingFailed | Complete | The landing reconciler proved the work is on `origin/<default branch>` (commit ancestry or the `Armada-Mission-Id` trailer; see MERGING.md) |
+| Failed | Complete | A rescue mission landed and resolved the incident |
 | Failed, LandingFailed, Cancelled, Blocked | Pending | A restart of the mission, or of the failed stage a Blocked or cancelled stage waits on |
 
-One rule is enforced at the database for every plain update: a Cancelled mission is never moved to anything but Pending (a restart). A completion still running when its mission was cancelled therefore cannot revive it; its late write is refused and it sees the mission as Cancelled.
+A non-terminal status may also be rewritten to itself to update the mission's other fields; that emits no event. A completed mission is never cancelled, and a Cancelled mission moves only to Pending (a restart): a completion still running when its mission was cancelled cannot revive it, because its write is refused and it sees the mission as Cancelled.
 
 ### When a verifier finds a product defect
 
@@ -419,13 +441,49 @@ Branch: armada/captain-1/msn_abc123
 ```
 ```
 
-**Source:** `src/Armada.Core/Services/MissionService.cs`, method `TryHandoffToNextStageAsync`
+**Source:** `src/Armada.Core/Services/MissionHandoffService.cs`, method `TryHandoffToNextStageAsync`
 
 ---
 
 ## 9. Architect Special Handling
 
 The Architect persona is special: instead of passing context to the next stage, its output can define multiple Worker missions.
+
+### Stage output contracts
+
+Every stage's output contract comes from one place, `StageOutputContract` (Armada.Core): the Worker's completion line,
+the sections the Test Engineer, Linter, Usability Engineer and Product Manager report, the Judge's sections and
+accepted verdict lines (generated from `JudgeVerdictEnum`, including `SPEC_CONFLICT`), and the Architect's contract
+version 4 plan with a complete JSON example and a field table generated from the plan models. The mission instructions
+state it once, under `## Output Contract`, at the end of the file (since RS-6.11; RS-6.1 placed it after the persona
+prompt); persona templates (Current, Lean and Compact),
+captain instructions and the runtime signals list no longer repeat it, and markers are shown on their own lines rather
+than in backticks. The launch prompt's one-line role summary and the format repair turn use the same source.
+
+Built-in templates an operator has not edited are upgraded in place at startup. A template the operator edited is kept
+as written, and the generated contract is still appended after it, so an edited template that kept an old contract
+sentence states it twice; remove that sentence from the template to state it once.
+
+### How the instructions file is composed
+
+Every launch kind (a first run, a rework round, an output repair rerun and a rescue) builds its instructions file the
+same way (`InstructionsComposer`, RS-6.11). The persona template is chosen first and its declared slots decide where the
+prior stage's handoff goes: a template that contains `{PreviousStageOutput}` (Judge, Test Engineer, Linter) carries the
+evidence, and the description's prior-stage section gets a note instead of a second copy; a template without the slot
+(for example an operator-edited one) gets the evidence in the description, or, when the description has no prior-stage
+section either, in a `## Prior Stage Output` section after the mission. The persona prompt is rendered once. Rework
+sections, repair notes and rescue briefs no longer restate the completion line; they point at the Output Contract
+section, which closes the file. Rework sections persisted before 1.5.0 lose their old `### Output contract` block at
+launch.
+
+When the captain's served context is known (an inference endpoint with a context length), the whole file is held to a
+quarter of it, less the tool schemas the launch sends (for API endpoint captains, the built-in coding tools plus the
+persona's scoped Armada tools). Over budget, sections are replaced by a one-line note in this order: papercuts,
+model-context updates, skills, validation notes, git anchors, the repository's own instructions file, model context,
+style guide, project context, then playbooks. The persona prompt, the mission description with its acceptance criteria
+and the handoff (which has its own budget), the mission mode, the rules, the progress signals and the output contract
+are never trimmed; if they alone exceed the budget the Admiral logs a warning. With an unknown context nothing is
+trimmed.
 
 ### Validated slice contracts
 
@@ -476,7 +534,7 @@ Customized templates can still emit an unversioned fenced `armada-plan` JSON blo
 - **It does not run when a slice failed.** A mission in another slice that ended Failed or LandingFailed cancels the integration and its stages (`DependencyFailed`, naming that mission), or marks them Blocked when `BlockDependentsOfFailedStages` is on. Restarting the failed mission brings the integration back; restarting the integration itself works once the slice is resolved.
 - **It leaves out a slice an operator cancelled.** That slice's commits are not merged, and the integration Worker is told the slice is out of scope. A stage cancelled because something it depended on failed is not a decision to drop it.
 
-When there is no plan block, Armada falls back to the legacy `[ARMADA:MISSION]` markers (optionally closed with `[/ARMADA:MISSION]`, with a `Depends on:` line for sequencing), and then to numbered summary lines:
+When there is no plan block, Armada falls back to the legacy `[ARMADA:MISSION]` markers (optionally closed with `[/ARMADA:MISSION]`, with a `Depends on:` line for sequencing). Numbered summary lines are never turned into missions. The marker format is deprecated (D-027 in [DEPRECATION.md](../DEPRECATION.md)) and removed in 2.0: each use logs a warning, and setting `AcceptLegacyMissionMarkers` to `false` turns it off, so marker output gets the output repair turn like a missing plan:
 
 ```
 [ARMADA:MISSION] Add CacheService with TTL support
@@ -492,7 +550,7 @@ Files: src/Middleware/CacheMiddleware.cs, src/Startup.cs
 
 `ParseArchitectOutput` first looks for an `armada-plan` block in the architect mission's `AgentOutput`. Without one, it searches `AgentOutput`, then `DiffSnapshot`, then `Description` for `[ARMADA:MISSION]` markers (then numbered summary lines). Marker blocks split on the marker; the first line is the title and the remaining lines are the description.
 
-**Source:** `src/Armada.Core/Services/MissionService.cs`, method `ParseArchitectOutput`
+**Source:** `src/Armada.Core/Services/ArchitectFanOutService.cs`, method `ParseArchitectOutput`
 
 ### Mission Fan-Out
 
@@ -524,7 +582,7 @@ Result for an Architect that produces 2 mission definitions in a FullPipeline:
 
 If the Architect produces no valid mission definitions, the Architect mission is marked `Failed` (failure kind `InvalidOutput`, reason "Architect produced no [ARMADA:MISSION] markers in output" or "...no valid [ARMADA:MISSION] definitions...") rather than handing its raw output to the Worker.
 
-**Source:** `src/Armada.Core/Services/MissionService.cs`, within `TryHandoffToNextStageAsync`
+**Source:** `src/Armada.Core/Services/ArchitectFanOutService.cs`, called from `MissionHandoffService.TryHandoffToNextStageAsync`
 
 ---
 
@@ -543,7 +601,7 @@ See [SCHEDULING.md](SCHEDULING.md#capacity) for how the hierarchy interacts with
 
 ## 10. Prompt Template Resolution
 
-Each persona references a prompt template by name. When `GenerateClaudeMdAsync` builds the mission instructions file (`CLAUDE.md`, `CODEX.md`, `CURSOR.md`, `GEMINI.md`, or `MUX.md`, depending on the captain's runtime):
+Each persona references a prompt template by name. When `GenerateClaudeMdAsync` builds the mission instructions file (the file each runtime loads natively: `CLAUDE.md` for Claude Code, `AGENTS.override.md` for Codex and pi, `AGENTS.md` for OpenCode, `CURSOR.md`, `GEMINI.md`, `MUX.md`, and `ARMADA.md` for the API endpoint runtime, a Custom command and any runtime without a context file of its own; a generated file that hides the repository's `AGENTS.md` or `CLAUDE.md` carries it):
 
 ```
 1. Build template parameter dictionary from mission/vessel/captain context
@@ -569,7 +627,7 @@ Mission prompts use the template named by the persona's `PromptTemplateName`, so
 
 All built-in templates (27 in 1.0.0) are seeded into the database on startup via `PromptTemplateService.SeedDefaultsAsync()`. Users can edit them via dashboard, MCP, or REST without touching code.
 
-**Source:** `src/Armada.Core/Services/MissionService.cs`, `src/Armada.Core/Services/PromptTemplateService.cs`
+**Source:** `src/Armada.Core/Services/MissionInstructionWriter.cs`, `src/Armada.Core/Services/PromptTemplateService.cs`
 
 ---
 
@@ -817,7 +875,13 @@ Assign captains to specific roles:
 | `src/Armada.Core/Models/Persona.cs` | Persona model |
 | `src/Armada.Core/Models/PromptTemplate.cs` | Template model |
 | `src/Armada.Core/Services/AdmiralService.cs` | Dispatch + pipeline resolution |
-| `src/Armada.Core/Services/MissionService.cs` | Assignment, handoff, architect parsing, captain routing |
+| `src/Armada.Core/Services/MissionService.cs` | `IMissionService` facade; forwards to the services below |
+| `src/Armada.Core/Services/MissionLauncher.cs` | Claim, capacity, provisioning and launch |
+| `src/Armada.Core/Services/MissionAdmissionPipeline.cs` | Admission gates and the typed assignment blocker |
+| `src/Armada.Core/Services/MissionCaptainRouter.cs` | Captain routing: priorities, tier, context fit, Judge strength, ranking |
+| `src/Armada.Core/Services/MissionHandoffService.cs` | Stage handoff and dependent stages |
+| `src/Armada.Core/Services/ArchitectFanOutService.cs` | Architect plan parsing and fan-out |
+| `src/Armada.Core/Services/MissionEscalationService.cs` | Escalation choice along the persona's ladder |
 | `src/Armada.Core/Services/PromptTemplateService.cs` | Template resolution + 27 embedded defaults |
 | `src/Armada.Core/Services/MissionPromptBuilder.cs` | Persona template naming and prompt assembly |
 | `src/Armada.Core/Services/PersonaSeedService.cs` | Startup seeding of personas + pipelines |

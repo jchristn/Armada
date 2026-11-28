@@ -28,6 +28,16 @@ namespace Armada.Core.Database.Interfaces
         Task CreateChainAsync(IReadOnlyList<Mission> created, IReadOnlyList<MissionDependencyUpdate> repointed, CancellationToken token = default);
 
         /// <summary>
+        /// Write a batch of mission rows in one transaction: the created missions, then each guarded update, then the
+        /// playbook snapshots. When any guarded update finds the stored status changed, nothing is written.
+        /// </summary>
+        /// <param name="batch">The rows to write.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the whole batch was written; false when a guard failed and nothing was written.</returns>
+        /// <exception cref="ArgumentNullException">The batch is null.</exception>
+        Task<bool> WriteBatchAsync(MissionWriteBatch batch, CancellationToken token = default);
+
+        /// <summary>
         /// Read a mission by identifier.
         /// </summary>
         Task<Mission?> ReadAsync(string id, CancellationToken token = default);
@@ -130,6 +140,13 @@ namespace Armada.Core.Database.Interfaces
         Task<List<MissionAdmissionSnapshot>> EnumerateAdmissionSnapshotsAsync(string vesselId, CancellationToken token = default);
 
         /// <summary>
+        /// Read the missions running on a vessel (Assigned, InProgress, Verifying) for its admission locks. Only Id, Title,
+        /// Description, Status, BranchName, VoyageId and VesselId are populated; outputs, diffs and evidence are not read.
+        /// </summary>
+        /// <exception cref="ArgumentNullException">vesselId is null or empty.</exception>
+        Task<List<Mission>> EnumerateRunningOnVesselAsync(string vesselId, CancellationToken token = default);
+
+        /// <summary>
         /// Enumerate lightweight mission summaries by vessel identifier.
         /// </summary>
         Task<List<MissionSummary>> EnumerateSummariesByVesselAsync(string vesselId, CancellationToken token = default);
@@ -148,6 +165,16 @@ namespace Armada.Core.Database.Interfaces
         /// Enumerate missions by status.
         /// </summary>
         Task<List<Mission>> EnumerateByStatusAsync(MissionStatusEnum status, CancellationToken token = default);
+
+        /// <summary>
+        /// Enumerate missions in a status whose last update is at or after a cutoff, so a periodic sweep reads only
+        /// recent rows instead of the whole status (RS-10.2). Ordered by priority, then creation time.
+        /// </summary>
+        /// <param name="status">Mission status.</param>
+        /// <param name="updatedSince">Inclusive lower bound on <see cref="Mission.LastUpdateUtc"/> (UTC).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Matching missions.</returns>
+        Task<List<Mission>> EnumerateByStatusAsync(MissionStatusEnum status, DateTime updatedSince, CancellationToken token = default);
 
         /// <summary>
         /// Count missions grouped by status.

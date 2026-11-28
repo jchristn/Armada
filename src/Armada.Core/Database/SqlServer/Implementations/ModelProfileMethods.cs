@@ -8,6 +8,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
     using Microsoft.Data.SqlClient;
     using Armada.Core.Database;
     using Armada.Core.Database.Interfaces;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Settings;
     using SyslogLogging;
@@ -20,16 +21,22 @@ namespace Armada.Core.Database.SqlServer.Implementations
         #region Private-Members
 
         private static readonly string _InsertProfile = @"INSERT INTO model_profiles
-            (id, tenant_id, identity_key, runtime, provider, model, served_context_tokens, tools_available, mcp_available,
-             rendering_template, rendering_repeat_contract_at_end, rendering_max_files_per_mission, notes, created_utc, last_update_utc)
+            (id, tenant_id, identity_key, runtime, provider, model, served_context_tokens, served_context_source, tools_available, mcp_available,
+             rendering_template, rendering_repeat_contract_at_end, rendering_max_files_per_mission,
+             recovery_max_resumes, recovery_unclassified_resumes, recovery_transient_grace_minutes, recovery_judge_rework_rounds, recovery_output_repair_attempts, recovery_escalate_after_resumes,
+             timeout_stall_minutes, timeout_tool_wait_minutes, timeout_max_runtime_minutes, timeout_first_output_minutes, speed_tokens_per_second, speed_first_output_ms, speed_measured_utc, tier, suggested_tier, suggested_tier_reason, suggested_tier_samples, suggested_tier_utc, notes, created_utc, last_update_utc)
             VALUES
-            (@id, @tenant_id, @identity_key, @runtime, @provider, @model, @served_context_tokens, @tools_available, @mcp_available,
-             @rendering_template, @rendering_repeat_contract_at_end, @rendering_max_files_per_mission, @notes, @created_utc, @last_update_utc);";
+            (@id, @tenant_id, @identity_key, @runtime, @provider, @model, @served_context_tokens, @served_context_source, @tools_available, @mcp_available,
+             @rendering_template, @rendering_repeat_contract_at_end, @rendering_max_files_per_mission,
+             @recovery_max_resumes, @recovery_unclassified_resumes, @recovery_transient_grace_minutes, @recovery_judge_rework_rounds, @recovery_output_repair_attempts, @recovery_escalate_after_resumes,
+             @timeout_stall_minutes, @timeout_tool_wait_minutes, @timeout_max_runtime_minutes, @timeout_first_output_minutes, @speed_tokens_per_second, @speed_first_output_ms, @speed_measured_utc, @tier, @suggested_tier, @suggested_tier_reason, @suggested_tier_samples, @suggested_tier_utc, @notes, @created_utc, @last_update_utc);";
 
         private static readonly string _UpdateProfile = @"UPDATE model_profiles SET
             tools_available = @tools_available, mcp_available = @mcp_available, rendering_template = @rendering_template,
             rendering_repeat_contract_at_end = @rendering_repeat_contract_at_end,
-            rendering_max_files_per_mission = @rendering_max_files_per_mission, notes = @notes, last_update_utc = @last_update_utc
+            rendering_max_files_per_mission = @rendering_max_files_per_mission,
+            recovery_max_resumes = @recovery_max_resumes, recovery_unclassified_resumes = @recovery_unclassified_resumes, recovery_transient_grace_minutes = @recovery_transient_grace_minutes, recovery_judge_rework_rounds = @recovery_judge_rework_rounds, recovery_output_repair_attempts = @recovery_output_repair_attempts, recovery_escalate_after_resumes = @recovery_escalate_after_resumes,
+            timeout_stall_minutes = @timeout_stall_minutes, timeout_tool_wait_minutes = @timeout_tool_wait_minutes, timeout_max_runtime_minutes = @timeout_max_runtime_minutes, timeout_first_output_minutes = @timeout_first_output_minutes, speed_tokens_per_second = @speed_tokens_per_second, speed_first_output_ms = @speed_first_output_ms, speed_measured_utc = @speed_measured_utc, tier = @tier, suggested_tier = @suggested_tier, suggested_tier_reason = @suggested_tier_reason, suggested_tier_samples = @suggested_tier_samples, suggested_tier_utc = @suggested_tier_utc, notes = @notes, last_update_utc = @last_update_utc
             WHERE id = @id;";
 
         private static readonly string _InsertRevision = @"INSERT INTO model_profile_revisions
@@ -80,6 +87,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     SqlServerCommandHelper.Add(cmd, "@provider", profile.Identity.Provider);
                     SqlServerCommandHelper.Add(cmd, "@model", profile.Identity.Model);
                     SqlServerCommandHelper.Add(cmd, "@served_context_tokens", profile.Identity.ServedContextTokens);
+                    SqlServerCommandHelper.Add(cmd, "@served_context_source", profile.Identity.ServedContextSource.HasValue ? profile.Identity.ServedContextSource.Value.ToString() : null);
                     SqlServerCommandHelper.AddDate(cmd, "@created_utc", profile.CreatedUtc);
                     BindMutable(cmd, profile);
                 }, token).ConfigureAwait(false);
@@ -95,6 +103,27 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 "SELECT * FROM model_profiles WHERE id = @id;",
                 cmd => SqlServerCommandHelper.Add(cmd, "@id", id), FromReader, token).ConfigureAwait(false);
             return rows.FirstOrDefault();
+        }
+
+        /// <inheritdoc />
+        public async Task<Dictionary<string, ModelProfile>> ReadManyAsync(IEnumerable<string?> ids, CancellationToken token = default)
+        {
+            if (ids == null) throw new ArgumentNullException(nameof(ids));
+            List<string> distinct = ids.Where(id => !String.IsNullOrEmpty(id)).Select(id => id!).Distinct(StringComparer.Ordinal).ToList();
+            Dictionary<string, ModelProfile> result = new Dictionary<string, ModelProfile>(StringComparer.Ordinal);
+            for (int offset = 0; offset < distinct.Count; offset += 500)
+            {
+                List<string> chunk = distinct.Skip(offset).Take(500).ToList();
+                string names = String.Join(", ", chunk.Select((string id, int i) => "@id" + i));
+                List<ModelProfile> rows = await SqlServerCommandHelper.QueryAsync(_ConnectionString,
+                    "SELECT * FROM model_profiles WHERE id IN (" + names + ");",
+                    cmd =>
+                    {
+                        for (int i = 0; i < chunk.Count; i++) SqlServerCommandHelper.Add(cmd, "@id" + i, chunk[i]);
+                    }, FromReader, token).ConfigureAwait(false);
+                foreach (ModelProfile row in rows) result[row.Id] = row;
+            }
+            return result;
         }
 
         /// <inheritdoc />
@@ -117,6 +146,26 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 await SqlServerCommandHelper.ExecuteAsync(conn, tx, _UpdateProfile, cmd => BindMutable(cmd, profile), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
             return profile;
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> UpdateProbedCapabilitiesAsync(string profileId, bool? toolsAvailable, bool? mcpAvailable, DateTime probedUtc, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(profileId)) throw new ArgumentNullException(nameof(profileId));
+            int changed = 0;
+            await SqlServerCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqlConnection conn, SqlTransaction tx) =>
+            {
+                changed = await SqlServerCommandHelper.ExecuteAsync(conn, tx,
+                    "UPDATE model_profiles SET probed_tools_available = @probed_tools_available, probed_mcp_available = @probed_mcp_available, capabilities_probed_utc = @capabilities_probed_utc WHERE id = @id;",
+                    cmd =>
+                    {
+                        SqlServerCommandHelper.Add(cmd, "@id", profileId);
+                        SqlServerCommandHelper.Add(cmd, "@probed_tools_available", toolsAvailable);
+                        SqlServerCommandHelper.Add(cmd, "@probed_mcp_available", mcpAvailable);
+                        SqlServerCommandHelper.AddDate(cmd, "@capabilities_probed_utc", probedUtc);
+                    }, token).ConfigureAwait(false);
+            }, token).ConfigureAwait(false);
+            return changed == 1;
         }
 
         /// <inheritdoc />
@@ -292,8 +341,36 @@ namespace Armada.Core.Database.SqlServer.Implementations
             SqlServerCommandHelper.Add(cmd, "@rendering_template", profile.Rendering.Template);
             SqlServerCommandHelper.Add(cmd, "@rendering_repeat_contract_at_end", profile.Rendering.RepeatContractAtEnd);
             SqlServerCommandHelper.Add(cmd, "@rendering_max_files_per_mission", profile.Rendering.MaxFilesPerMission);
+            SqlServerCommandHelper.Add(cmd, "@recovery_max_resumes", profile.Recovery.MaxResumes);
+            SqlServerCommandHelper.Add(cmd, "@recovery_unclassified_resumes", profile.Recovery.UnclassifiedResumes);
+            SqlServerCommandHelper.Add(cmd, "@recovery_transient_grace_minutes", profile.Recovery.TransientGraceMinutes);
+            SqlServerCommandHelper.Add(cmd, "@recovery_judge_rework_rounds", profile.Recovery.JudgeReworkRounds);
+            SqlServerCommandHelper.Add(cmd, "@recovery_output_repair_attempts", profile.Recovery.OutputRepairAttempts);
+            SqlServerCommandHelper.Add(cmd, "@recovery_escalate_after_resumes", profile.Recovery.EscalateAfterResumes);
+            SqlServerCommandHelper.Add(cmd, "@timeout_stall_minutes", profile.Timeouts.StallThresholdMinutes);
+            SqlServerCommandHelper.Add(cmd, "@timeout_tool_wait_minutes", profile.Timeouts.ToolWaitHardLimitMinutes);
+            SqlServerCommandHelper.Add(cmd, "@timeout_max_runtime_minutes", profile.Timeouts.MaxRuntimeMinutes);
+            SqlServerCommandHelper.Add(cmd, "@timeout_first_output_minutes", profile.Timeouts.FirstOutputMinutes);
+            SqlServerCommandHelper.Add(cmd, "@speed_tokens_per_second", profile.Speed.TokensPerSecond);
+            SqlServerCommandHelper.Add(cmd, "@speed_first_output_ms", profile.Speed.FirstOutputMs);
+            SqlServerCommandHelper.AddDate(cmd, "@speed_measured_utc", profile.Speed.MeasuredUtc);
+            SqlServerCommandHelper.Add(cmd, "@tier", profile.Tiering.Tier.HasValue ? profile.Tiering.Tier.Value.ToString() : null);
+            SqlServerCommandHelper.Add(cmd, "@suggested_tier", profile.Tiering.SuggestedTier.HasValue ? profile.Tiering.SuggestedTier.Value.ToString() : null);
+            SqlServerCommandHelper.Add(cmd, "@suggested_tier_reason", profile.Tiering.SuggestedReason);
+            SqlServerCommandHelper.Add(cmd, "@suggested_tier_samples", profile.Tiering.SuggestedSamples);
+            SqlServerCommandHelper.AddDate(cmd, "@suggested_tier_utc", profile.Tiering.SuggestedUtc);
             SqlServerCommandHelper.Add(cmd, "@notes", profile.Notes);
             SqlServerCommandHelper.AddDate(cmd, "@last_update_utc", profile.LastUpdateUtc);
+        }
+
+        private static CaptainTierEnum? ReadTier(string? value)
+        {
+            return Enum.TryParse(value, true, out CaptainTierEnum tier) && Enum.IsDefined(tier) ? tier : null;
+        }
+
+        private static int? ReadRecovery(int? value, int min, int max)
+        {
+            return value.HasValue && value.Value >= min && value.Value <= max ? value : null;
         }
 
         private static ModelProfile FromReader(SqlDataReader reader)
@@ -305,12 +382,34 @@ namespace Armada.Core.Database.SqlServer.Implementations
             profile.Identity.Provider = SqlServerCommandHelper.ReadString(reader["provider"]);
             profile.Identity.Model = SqlServerCommandHelper.ReadString(reader["model"]);
             profile.Identity.ServedContextTokens = SqlServerCommandHelper.ReadNullableInt(reader["served_context_tokens"]);
+            profile.Identity.ServedContextSource = Enum.TryParse(SqlServerCommandHelper.ReadString(reader["served_context_source"]), true, out ContextLengthSourceEnum contextSource) ? contextSource : null;
             profile.Capabilities.ToolsAvailable = SqlServerCommandHelper.ReadNullableBool(reader["tools_available"]);
             profile.Capabilities.McpAvailable = SqlServerCommandHelper.ReadNullableBool(reader["mcp_available"]);
+            profile.Capabilities.ProbedToolsAvailable = SqlServerCommandHelper.ReadNullableBool(reader["probed_tools_available"]);
+            profile.Capabilities.ProbedMcpAvailable = SqlServerCommandHelper.ReadNullableBool(reader["probed_mcp_available"]);
+            profile.Capabilities.ProbedUtc = SqlServerCommandHelper.ReadNullableDate(reader["capabilities_probed_utc"]);
             profile.Rendering.Template = SqlServerCommandHelper.ReadString(reader["rendering_template"]);
             profile.Rendering.RepeatContractAtEnd = SqlServerCommandHelper.ReadNullableBool(reader["rendering_repeat_contract_at_end"]);
             int? maxFiles = SqlServerCommandHelper.ReadNullableInt(reader["rendering_max_files_per_mission"]);
             profile.Rendering.MaxFilesPerMission = maxFiles.HasValue && maxFiles.Value >= 1 ? maxFiles : null;
+            profile.Recovery.MaxResumes = ReadRecovery(SqlServerCommandHelper.ReadNullableInt(reader["recovery_max_resumes"]), 0, 10);
+            profile.Recovery.UnclassifiedResumes = ReadRecovery(SqlServerCommandHelper.ReadNullableInt(reader["recovery_unclassified_resumes"]), 0, 3);
+            profile.Recovery.TransientGraceMinutes = ReadRecovery(SqlServerCommandHelper.ReadNullableInt(reader["recovery_transient_grace_minutes"]), 0, 120);
+            profile.Recovery.JudgeReworkRounds = ReadRecovery(SqlServerCommandHelper.ReadNullableInt(reader["recovery_judge_rework_rounds"]), 1, 5);
+            profile.Recovery.OutputRepairAttempts = ReadRecovery(SqlServerCommandHelper.ReadNullableInt(reader["recovery_output_repair_attempts"]), 0, 3);
+            profile.Recovery.EscalateAfterResumes = ReadRecovery(SqlServerCommandHelper.ReadNullableInt(reader["recovery_escalate_after_resumes"]), 0, 10);
+            profile.Timeouts.StallThresholdMinutes = ReadRecovery(SqlServerCommandHelper.ReadNullableInt(reader["timeout_stall_minutes"]), 1, 240);
+            profile.Timeouts.ToolWaitHardLimitMinutes = ReadRecovery(SqlServerCommandHelper.ReadNullableInt(reader["timeout_tool_wait_minutes"]), 1, 1440);
+            profile.Timeouts.MaxRuntimeMinutes = ReadRecovery(SqlServerCommandHelper.ReadNullableInt(reader["timeout_max_runtime_minutes"]), 1, 2880);
+            profile.Timeouts.FirstOutputMinutes = ReadRecovery(SqlServerCommandHelper.ReadNullableInt(reader["timeout_first_output_minutes"]), 1, 240);
+            profile.Speed.TokensPerSecond = SqlServerCommandHelper.ReadNullableDouble(reader["speed_tokens_per_second"]);
+            profile.Speed.FirstOutputMs = SqlServerCommandHelper.ReadNullableLong(reader["speed_first_output_ms"]);
+            profile.Speed.MeasuredUtc = SqlServerCommandHelper.ReadNullableDate(reader["speed_measured_utc"]);
+            profile.Tiering.Tier = ReadTier(SqlServerCommandHelper.ReadString(reader["tier"]));
+            profile.Tiering.SuggestedTier = ReadTier(SqlServerCommandHelper.ReadString(reader["suggested_tier"]));
+            profile.Tiering.SuggestedReason = SqlServerCommandHelper.ReadString(reader["suggested_tier_reason"]);
+            profile.Tiering.SuggestedSamples = SqlServerCommandHelper.ReadNullableInt(reader["suggested_tier_samples"]);
+            profile.Tiering.SuggestedUtc = SqlServerCommandHelper.ReadNullableDate(reader["suggested_tier_utc"]);
             profile.Notes = SqlServerCommandHelper.ReadString(reader["notes"]);
             profile.CreatedUtc = SqlServerCommandHelper.ReadDate(reader["created_utc"]);
             profile.LastUpdateUtc = SqlServerCommandHelper.ReadDate(reader["last_update_utc"]);

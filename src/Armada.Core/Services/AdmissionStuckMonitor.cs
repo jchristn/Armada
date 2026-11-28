@@ -5,74 +5,81 @@ namespace Armada.Core.Services
     using Armada.Core.Enums;
     using Armada.Core.Models;
 
-    /// <summary>Bounded, observational detection of Pending work that stays ready across dispatch attempts.</summary>
+    /// <summary>
+    /// Flags Pending work whose gates were all open on three consecutive heartbeat dispatch passes yet never got a claim.
+    /// It only reads the typed results dispatch recorded (RS-4.6) and never evaluates admission itself.
+    /// </summary>
     internal sealed class AdmissionStuckMonitor
     {
-        internal const int BatchSize = 64;
         internal const int RequiredObservations = 3;
-        internal sealed record Window(long Sequence, List<Mission> Selected, HashSet<string> Pending,
-            Dictionary<string, DateTime> Ready);
+        internal const string EventType = "mission.admission_stuck";
         private readonly DatabaseDriver _Database;
         private readonly SemaphoreSlim _Gate = new SemaphoreSlim(1, 1);
-        private long _Sequence;
-        private long _Completed;
-        private readonly Dictionary<string, (DateTime Version, int Count)> _Consecutive = new(StringComparer.Ordinal);
-        private readonly Dictionary<string, DateTime> _Reported = new(StringComparer.Ordinal);
-        internal AdmissionStuckMonitor(DatabaseDriver database) { _Database = database; }
+        private readonly Dictionary<string, Observation> _Consecutive = new Dictionary<string, Observation>(StringComparer.Ordinal);
+        private readonly Dictionary<string, DateTime> _Reported = new Dictionary<string, DateTime>(StringComparer.Ordinal);
 
-        internal async Task<Window> CaptureAsync(Func<bool> memoryAllows,
-            Func<Mission, CancellationToken, Task<bool>> ready, CancellationToken token, List<Mission>? pendingSnapshot = null)
+        internal AdmissionStuckMonitor(DatabaseDriver database)
         {
-            long sequence = Interlocked.Increment(ref _Sequence);
-            List<Mission> pending = (pendingSnapshot ?? await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending, token).ConfigureAwait(false))
-                .OrderBy(m => m.Priority).ThenBy(m => m.CreatedUtc).ThenBy(m => m.Id, StringComparer.Ordinal).ToList();
-            int offset = pending.Count == 0 ? 0 : (int)((sequence - 1) / RequiredObservations * BatchSize % pending.Count);
-            List<Mission> selected = pending.Skip(offset).Take(BatchSize).ToList();
-            Window window = new(sequence, selected, pending.Select(m => m.Id).ToHashSet(StringComparer.Ordinal), new(StringComparer.Ordinal));
-            if (memoryAllows())
-                foreach (Mission mission in selected)
-                    if (await ready(mission, token).ConfigureAwait(false)) window.Ready[mission.Id] = mission.LastUpdateUtc;
-            return window;
+            _Database = database ?? throw new ArgumentNullException(nameof(database));
         }
 
-        internal async Task CompleteAsync(Window? window, bool dispatchCompleted, Func<bool> memoryAllows,
-            Func<Mission, CancellationToken, Task<bool>> ready, CancellationToken token)
+        /// <summary>Observe the results of one completed heartbeat dispatch pass.</summary>
+        /// <param name="attempted">Results of the missions the pass attempted and left Pending.</param>
+        /// <param name="passCompleted">False when the pass did not run (no capacity, memory pressure, an error).</param>
+        /// <param name="token">Cancellation token.</param>
+        internal async Task ObserveAsync(IReadOnlyList<MissionAdmissionResult> attempted, bool passCompleted, CancellationToken token = default)
         {
             await _Gate.WaitAsync(token).ConfigureAwait(false);
             try
             {
-                if (window == null || !dispatchCompleted) { _Consecutive.Clear(); return; }
-                if (window.Sequence <= _Completed) return;
-                if (window.Sequence != _Completed + 1) _Consecutive.Clear();
-                _Completed = window.Sequence;
-                foreach (string id in _Reported.Keys.Where(id => !window.Pending.Contains(id)).ToList()) _Reported.Remove(id);
-                HashSet<string> observed = new(StringComparer.Ordinal);
-                bool memory = memoryAllows();
-                foreach (Mission sampled in window.Selected)
+                if (!passCompleted) { _Consecutive.Clear(); return; }
+                HashSet<string> open = new HashSet<string>(StringComparer.Ordinal);
+                foreach (MissionAdmissionResult result in attempted)
                 {
-                    Mission? current = memory && window.Ready.ContainsKey(sampled.Id)
-                        ? await _Database.Missions.ReadAsync(sampled.Id, token).ConfigureAwait(false) : null;
-                    bool eligible = current != null && current.Status == MissionStatusEnum.Pending
-                        && current.LastUpdateUtc == window.Ready[sampled.Id] && await ready(current, token).ConfigureAwait(false);
-                    if (!eligible) { _Consecutive.Remove(sampled.Id); _Reported.Remove(sampled.Id); continue; }
-                    observed.Add(current!.Id);
-                    int count = _Consecutive.TryGetValue(current.Id, out var previous) && previous.Version == current.LastUpdateUtc
+                    string id = result.Mission.Id;
+                    DateTime version = result.Mission.LastUpdateUtc;
+                    if (result.Blocker.Reason != MissionAssignmentBlockerReasonEnum.AwaitingDispatch) { _Reported.Remove(id); continue; }
+                    open.Add(id);
+                    int count = _Consecutive.TryGetValue(id, out Observation? previous) && previous.Version == version
                         ? Math.Min(previous.Count + 1, RequiredObservations) : 1;
-                    _Consecutive[current.Id] = (current.LastUpdateUtc, count);
-                    if (count < RequiredObservations || _Reported.TryGetValue(current.Id, out DateTime reported) && reported == current.LastUpdateUtc) continue;
-                    await _Database.Events.CreateAsync(new ArmadaEvent("mission.admission_stuck",
-                        "Mission remained Pending before and after three dispatch opportunities with capacity and preflight checks open. Inspect scheduler claims and assignment errors.")
+                    _Consecutive[id] = new Observation(version, count);
+                    if (count < RequiredObservations || _Reported.TryGetValue(id, out DateTime reported) && reported == version) continue;
+                    // Only a flagged mission costs a read: confirm it is still the same Pending row before reporting it.
+                    Mission? current = await _Database.Missions.ReadAsync(id, token).ConfigureAwait(false);
+                    if (current == null || current.Status != MissionStatusEnum.Pending || current.LastUpdateUtc != version)
+                    { _Consecutive.Remove(id); continue; }
+                    await _Database.Events.CreateAsync(new ArmadaEvent(EventType,
+                        "Mission remained Pending through three dispatch passes with every admission gate open. Inspect scheduler claims and assignment errors.")
                     {
                         TenantId = current.TenantId, UserId = current.UserId, EntityType = "mission", EntityId = current.Id,
                         MissionId = current.Id, VesselId = current.VesselId, VoyageId = current.VoyageId,
-                        Payload = JsonSerializer.Serialize(new { ReadyObservations = count, MissionVersionUtc = current.LastUpdateUtc })
+                        Payload = JsonSerializer.Serialize(new StuckPayload
+                        {
+                            ReadyObservations = count, MissionVersionUtc = version, BlockedSinceUtc = result.FirstObservedUtc, LastResult = result.Blocker.Summary
+                        })
                     }, token).ConfigureAwait(false);
                     ArmadaMetrics.AdmissionStuck.Add(1);
-                    _Reported[current.Id] = current.LastUpdateUtc;
+                    _Reported[id] = version;
                 }
-                foreach (string id in _Consecutive.Keys.Where(id => !observed.Contains(id)).ToList()) _Consecutive.Remove(id);
+                foreach (string id in _Consecutive.Keys.Where(id => !open.Contains(id)).ToList()) _Consecutive.Remove(id);
+                foreach (string id in _Reported.Keys.Where(id => !open.Contains(id)).ToList()) _Reported.Remove(id);
             }
             finally { _Gate.Release(); }
+        }
+
+        private sealed class Observation
+        {
+            internal Observation(DateTime version, int count) { Version = version; Count = count; }
+            internal DateTime Version { get; }
+            internal int Count { get; }
+        }
+
+        private sealed class StuckPayload
+        {
+            public int ReadyObservations { get; set; }
+            public DateTime MissionVersionUtc { get; set; }
+            public DateTime BlockedSinceUtc { get; set; }
+            public string LastResult { get; set; } = "";
         }
     }
 }

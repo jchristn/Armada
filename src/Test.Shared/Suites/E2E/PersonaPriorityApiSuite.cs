@@ -28,7 +28,8 @@ namespace Test.Shared.Suites.E2E
                     {
                         name, promptTemplateName = "persona.worker",
                         captainPriorities = new object[] { new { runtime = "Mux", endpoint = "test", model = "gpt-oss:120b", minimumTier = "Economy" }, new { runtime = "ApiEndpoint", endpoint = "mep_specific" } },
-                        priorityAvailability = "FallThrough", priorityExhaustion = "Wait"
+                        priorityAvailability = "FallThrough", priorityExhaustion = "Wait",
+                        escalationLadder = new object[] { new { model = "qwen3.8" }, new { model = "gpt-6.1" }, new { model = "claude-opus-5-5" } }
                     }))
                     using (HttpResponseMessage response = await fixture.AuthClient.PostAsync("/api/v1/personas", content, token).ConfigureAwait(false))
                     {
@@ -37,12 +38,20 @@ namespace Test.Shared.Suites.E2E
                         AssertEqual(2, persona.CaptainPriorities.Count);
                         AssertEqual(AgentRuntimeEnum.Mux, persona.CaptainPriorities[0].Runtime);
                         AssertEqual("mep_specific", persona.CaptainPriorities[1].Endpoint);
+                        AssertEqual(3, persona.EscalationLadder.Count);
+                        AssertEqual("gpt-6.1", persona.EscalationLadder[1].Model);
                     }
                     await PutAsync(fixture.AuthClient, name, new { description = "unrelated edit" }, HttpStatusCode.OK, token).ConfigureAwait(false);
                     Persona preserved = await ReadAsync(fixture.AuthClient, name, token).ConfigureAwait(false);
                     AssertEqual(2, preserved.CaptainPriorities.Count);
                     AssertEqual("test", preserved.CaptainPriorities[0].Endpoint);
                     AssertEqual("mep_specific", preserved.CaptainPriorities[1].Endpoint);
+                    AssertEqual(3, preserved.EscalationLadder.Count, "an omitted ladder is kept");
+                    await PutAsync(fixture.AuthClient, name, new { escalationLadder = new object[] { new { } } }, HttpStatusCode.BadRequest, token).ConfigureAwait(false);
+                    await PutAsync(fixture.AuthClient, name, new { escalationLadder = new object[] { new { model = "gpt-6.1" } } }, HttpStatusCode.OK, token).ConfigureAwait(false);
+                    AssertEqual(1, (await ReadAsync(fixture.AuthClient, name, token).ConfigureAwait(false)).EscalationLadder.Count, "a ladder replaces the old one");
+                    await PutAsync(fixture.AuthClient, name, new { escalationLadder = Array.Empty<object>() }, HttpStatusCode.OK, token).ConfigureAwait(false);
+                    AssertEqual(0, (await ReadAsync(fixture.AuthClient, name, token).ConfigureAwait(false)).EscalationLadder.Count, "an empty ladder clears it");
                     await PutAsync(fixture.AuthClient, name, new { captainPriorities = new object[] { new { } } }, HttpStatusCode.BadRequest, token).ConfigureAwait(false);
                     await PutAsync(fixture.AuthClient, name, new { captainPriorities = new object[] { new { runtime = "Codex", endpoint = "test" } } }, HttpStatusCode.BadRequest, token).ConfigureAwait(false);
                     await PutAsync(fixture.AuthClient, name, new { priorityAvailability = 999 }, HttpStatusCode.BadRequest, token).ConfigureAwait(false);

@@ -7,7 +7,6 @@ namespace Armada.Runtimes
     using System.Linq;
     using System.Runtime.CompilerServices;
     using System.Text.Json;
-    using System.Text.RegularExpressions;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Models;
@@ -127,6 +126,25 @@ namespace Armada.Runtimes
         public Func<string, string, CancellationToken, Task<Armada.Core.Models.CliPermissionPromptOutcome>>? PermissionPrompt { get; set; } = null;
 
         /// <summary>
+        /// RS-7.8: reads the context window the model server runs (endpoint snapshot, model, cancellation) before the first
+        /// turn when the endpoint configures none, updating the snapshot's discovered fields. It runs on the host that
+        /// serves the run: the Admiral stores what it finds, a Harbor reports it. Null skips discovery; a window already
+        /// discovered still applies.
+        /// </summary>
+        public Func<ModelEndpoint, string?, CancellationToken, Task>? ContextDiscovery { get; set; } = null;
+
+        /// <summary>
+        /// Open-model behavior switches (RS-7.3 corrective retries, RS-7.6 reasoning hygiene, RS-7.16 model warm-up).
+        /// All are on by default; a host turns one off to keep 1.4.0 behavior.
+        /// </summary>
+        /// <exception cref="ArgumentNullException">Thrown when the value is null.</exception>
+        public ApiRuntimeBehaviors Behaviors
+        {
+            get { return _Behaviors; }
+            set { _Behaviors = value ?? throw new ArgumentNullException(nameof(Behaviors)); }
+        }
+
+        /// <summary>
         /// Name of the built-in shell tool gated by <see cref="ShellPolicy"/>.
         /// </summary>
         public const string ShellToolName = "run_process";
@@ -135,12 +153,18 @@ namespace Armada.Runtimes
 
         #region Private-Members
 
+        private static readonly TimeSpan _RetryAfterObservationAge = TimeSpan.FromSeconds(30);
+        private ApiRuntimeBehaviors _Behaviors = new ApiRuntimeBehaviors();
+
         // Synthetic process ids start well above any real OS process id so a stray Process.GetProcessById does
         // not collide with an unrelated live process.
         // In-process ids start at a different point on each Admiral run (seconds since the epoch, bounded), so an id a
         // record from the previous run still holds is not handed out again after a restart (L6).
         private static int _PidCounter = 2_000_000_000 + (int)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() % 100_000_000);
         private int _InferenceRetries = 2;
+
+        // RS-5.4: the longest Retry-After the runtime waits out inside one run; longer waits return to the Admiral.
+        private const int MaxInRunRetryAfterSeconds = 30;
         // Outer bound on one streamed call; the idle and first-response watchdog is what normally ends a stalled stream.
         private const int StreamingTotalTimeoutMs = 3600000;
         private static readonly ConcurrentDictionary<int, CancellationTokenSource> _Running = new ConcurrentDictionary<int, CancellationTokenSource>();
@@ -153,16 +177,11 @@ namespace Armada.Runtimes
         private readonly Func<string, ModelEndpoint?>? _EndpointResolver;
         private readonly LoggingModule _Logging;
         private readonly int _MaxIterations;
-        private readonly Func<ModelEndpoint, LoggingModule, CompletionClientBase> _ClientFactory;
+        private readonly Func<ModelEndpoint, LoggingModule, ProviderClientBase> _ClientFactory;
         private readonly Func<string, string?, LoggingModule, McpToolClient> _McpClientFactory;
         private readonly string _Header = "[ApiAgentRuntime] ";
         private StreamWriter? _LogWriter;
         private readonly object _LogLock = new object();
-        // A complete think block is <think> or <think ...> through </think>. The name must end at the tag
-        // boundary, so a longer name and an unmatched tag stay in the text.
-        private static readonly Regex _CompleteThinkBlock = new Regex(
-            @"<think(?:\s[^>]*)?>.*?</think\s*>",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         #endregion
 
@@ -182,7 +201,7 @@ namespace Armada.Runtimes
             ModelEndpoint endpoint,
             LoggingModule logging,
             int maxIterations = 1000,
-            Func<ModelEndpoint, LoggingModule, CompletionClientBase>? clientFactory = null,
+            Func<ModelEndpoint, LoggingModule, ProviderClientBase>? clientFactory = null,
             Func<string, string?, LoggingModule, McpToolClient>? mcpClientFactory = null)
         {
             _McpClientFactory = mcpClientFactory ?? ((url, sessionToken, log) => new McpToolClient(url, sessionToken, null, log));
@@ -206,7 +225,7 @@ namespace Armada.Runtimes
             Func<string, ModelEndpoint?> endpointResolver,
             LoggingModule logging,
             int maxIterations = 1000,
-            Func<ModelEndpoint, LoggingModule, CompletionClientBase>? clientFactory = null,
+            Func<ModelEndpoint, LoggingModule, ProviderClientBase>? clientFactory = null,
             Func<string, string?, LoggingModule, McpToolClient>? mcpClientFactory = null)
         {
             _McpClientFactory = mcpClientFactory ?? ((url, sessionToken, log) => new McpToolClient(url, sessionToken, null, log));
@@ -261,6 +280,8 @@ namespace Armada.Runtimes
             snapshot.ApiKey = endpoint.ApiKey;
             snapshot.Headers = endpoint.Headers.Select(h => new ModelEndpointHeader(h.Name, h.Value)).ToList();
             endpoint = snapshot;
+            // Automatic streaming resolves here for in-process runs; a Harbor launch arrives already resolved (RS-7.7).
+            endpoint.InferenceOptions.StreamingMode = endpoint.InferenceOptions.ResolveStreaming(endpoint.Provider, true) ? Armada.Core.Enums.InferenceStreamingModeEnum.On : Armada.Core.Enums.InferenceStreamingModeEnum.Off;
 
             // Optional MCP tool access: when the caller supplies an MCP endpoint (and, typically, a
             // short-lived per-user session token) the in-process loop also exposes that server's tools to
@@ -274,6 +295,25 @@ namespace Armada.Runtimes
                 environment.TryGetValue("ARMADA_MCP_TOKEN", out mcpToken);
             }
 
+            // The Admiral states whether this launch must end with the completion line; the prompt is never searched for it.
+            bool requiresCompletionLine = environment != null
+                && environment.TryGetValue(CompletionLine.RequiredEnvironmentVariable, out string? requiredFlag)
+                && String.Equals(requiredFlag, "1", StringComparison.Ordinal);
+
+            // The Admiral names the Armada MCP tools this persona is shown up front; the rest stay callable through discovery.
+            HashSet<string>? toolScope = null;
+            if (environment != null && environment.TryGetValue(PersonaToolScope.EnvironmentVariable, out string? scopeValue))
+                toolScope = PersonaToolScope.Parse(scopeValue);
+
+            // RS-6.3: the Admiral names the submit tool this stage calls; the runtime offers it natively.
+            string? submitToolName = null;
+            string? submitPersona = null;
+            if (environment != null)
+            {
+                environment.TryGetValue(StageSubmissionTools.ToolEnvironmentVariable, out submitToolName);
+                environment.TryGetValue(StageSubmissionTools.PersonaEnvironmentVariable, out submitPersona);
+            }
+
             int processId = Interlocked.Increment(ref _PidCounter);
             CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(token);
             _Running[processId] = cts;
@@ -282,7 +322,8 @@ namespace Armada.Runtimes
             OnProcessStarted?.Invoke(processId);
 
             // Run the loop in the background so StartAsync returns the pid promptly, mirroring a process launch.
-            Task loop = Task.Run(() => RunLoopAsync(processId, endpoint, workingDirectory, prompt, model, captain?.ReasoningEffort, finalMessageFilePath, mcpUrl, mcpToken, cts));
+            NativeSubmitTool? submitTool = NativeSubmitTool.FromEnvironment(submitToolName, submitPersona, processId);
+            Task loop = Task.Run(() => RunLoopAsync(processId, endpoint, workingDirectory, prompt, model, captain?.ReasoningEffort, finalMessageFilePath, mcpUrl, mcpToken, requiresCompletionLine, toolScope, submitTool, cts));
             _Loops[processId] = loop;
             _ = loop.ContinueWith(_ => _Loops.TryRemove(processId, out Task? _), TaskScheduler.Default);
 
@@ -316,7 +357,7 @@ namespace Armada.Runtimes
 
         #region Private-Methods
 
-        private async Task<T> WithInferenceRetryAsync<T>(Func<Task<T>> call, Func<T, bool> succeeded, Func<T, int?> status, Func<T, string?> error, int processId, StrongBox<long> lastCallMs, CancellationToken token)
+        private async Task<T> WithInferenceRetryAsync<T>(Func<Task<T>> call, Func<T, bool> succeeded, Func<T, int?> status, Func<T, string?> error, int processId, StrongBox<long> lastCallMs, CancellationToken token, Func<int?>? retryAfterSeconds = null, Func<T, bool>? correctInstead = null)
         {
             for (int attempt = 0; ; attempt++)
             {
@@ -343,20 +384,27 @@ namespace Armada.Runtimes
                 }
 
                 if (succeeded(result) || attempt >= _InferenceRetries || !IsRetryableInferenceStatus(status(result))) return result;
-                await DelayBeforeInferenceRetryAsync(attempt, processId, (status(result).HasValue ? "HTTP " + status(result) + " " : String.Empty) + (error(result) ?? "no detail"), token).ConfigureAwait(false);
+                // RS-7.3: a malformed tool call or a degenerate generation would fail the same way again; the turn loop
+                // retries it with a corrective turn instead of an identical resend.
+                if (correctInstead != null && correctInstead(result)) return result;
+                // RS-5.4: honor the server's Retry-After. A wait longer than the in-run cap goes back to the Admiral, which
+                // resumes the captain after it instead of holding an HTTP retry loop open.
+                int? waitSeconds = retryAfterSeconds?.Invoke();
+                if (waitSeconds.HasValue && waitSeconds.Value > MaxInRunRetryAfterSeconds) return result;
+                await DelayBeforeInferenceRetryAsync(attempt, processId, (status(result).HasValue ? "HTTP " + status(result) + " " : String.Empty) + (error(result) ?? "no detail"), token, waitSeconds).ConfigureAwait(false);
             }
         }
 
-        private static async Task<ToolChatResponse> StreamToolChatAsync(CompletionClientBase client, ToolChatRequest request, int firstResponseMs, int idleMs, CancellationToken token)
+        private static async Task<ChatResponse> StreamToolChatAsync(ProviderClientBase client, ChatRequest request, int firstResponseMs, int idleMs, CancellationToken token)
         {
             using CancellationTokenSource watchdog = CancellationTokenSource.CreateLinkedTokenSource(token);
             watchdog.CancelAfter(firstResponseMs);
             bool received = false;
             try
             {
-                ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request, watchdog.Token).ConfigureAwait(false);
-                if (!stream.Success) return new ToolChatResponse { Success = false, StatusCode = stream.StatusCode, Error = stream.Error, Model = stream.Model };
-                await foreach (ToolChatStreamingChunk chunk in stream.Chunks.WithCancellation(watchdog.Token).ConfigureAwait(false))
+                ChatStreamingResponse stream = await client.ChatStreamingAsync(request, watchdog.Token).ConfigureAwait(false);
+                if (!stream.Success) return new ChatResponse { Success = false, StatusCode = stream.StatusCode, Error = stream.Error, Model = stream.Model };
+                await foreach (ChatStreamingChunk chunk in stream.Chunks.WithCancellation(watchdog.Token).ConfigureAwait(false))
                 {
                     received = true;
                     watchdog.CancelAfter(idleMs);
@@ -364,9 +412,9 @@ namespace Armada.Runtimes
 
                 // Partial output is never acted on: tools run only after the provider signalled a complete response.
                 if (stream.State != StreamingState.Completed)
-                    return new ToolChatResponse { Success = false, Model = stream.Model, Error = "The response stream ended before the model finished (" + stream.State + "): " + (stream.StreamError ?? "no detail") };
+                    return new ChatResponse { Success = false, Model = stream.Model, Error = "The response stream ended before the model finished (" + stream.State + "): " + (stream.StreamError ?? "no detail") };
 
-                return new ToolChatResponse
+                return new ChatResponse
                 {
                     Success = true,
                     StatusCode = stream.StatusCode,
@@ -387,7 +435,7 @@ namespace Armada.Runtimes
             }
         }
 
-        private static async Task<ChatResponse> StreamChatAsync(CompletionClientBase client, string prompt, CompletionOptions options, int firstResponseMs, int idleMs, CancellationToken token)
+        private static async Task<ChatResponse> StreamChatAsync(ProviderClientBase client, string prompt, CompletionOptions options, int firstResponseMs, int idleMs, CancellationToken token)
         {
             using CancellationTokenSource watchdog = CancellationTokenSource.CreateLinkedTokenSource(token);
             watchdog.CancelAfter(firstResponseMs);
@@ -427,9 +475,9 @@ namespace Armada.Runtimes
             }
         }
 
-        private RuntimeProviderError InferenceFailure(int? status, string? error, string fallbackReason, long lastCallMs, bool streaming)
+        private RuntimeProviderError InferenceFailure(int? status, string? error, string fallbackReason, long lastCallMs, bool streaming, int? retryAfterSeconds = null)
         {
-            RuntimeProviderError? failure = status.HasValue ? RuntimeProviderErrorParser.FromHttpStatus(status.Value, error) : null;
+            RuntimeProviderError? failure = status.HasValue ? RuntimeProviderErrorParser.FromHttpStatus(status.Value, error, retryAfterSeconds) : null;
             if (failure == null) return new RuntimeProviderError { ErrorType = "inference_error", Reason = fallbackReason };
 
             // A gateway error that arrives only after a long wait is a proxy or load balancer giving up before the model
@@ -453,6 +501,65 @@ namespace Armada.Runtimes
                 : "The model did not start responding within " + firstResponseMs + " ms (first-response deadline: model load and prompt evaluation).";
         }
 
+        private int? LastRetryAfterSeconds(ProviderClientBase client)
+        {
+            List<CallDetail> calls = client.CallDetails;
+            if (calls.Count > 0)
+            {
+                CallDetail last = calls[calls.Count - 1];
+                if (last.ResponseHeaders != null)
+                {
+                    foreach (KeyValuePair<string, string> header in last.ResponseHeaders)
+                    {
+                        if (!String.Equals(header.Key, "Retry-After", StringComparison.OrdinalIgnoreCase)) continue;
+                        return ParseRetryAfterSeconds(header.Value, DateTime.UtcNow);
+                    }
+                }
+            }
+
+            // A streamed call that fails before its stream opens records no call detail headers (PolyPrompt 5.0.1), so
+            // the Retry-After comes from the rate-limit headers the HTTP handler saw: a 429 or 503 observed just now.
+            UsageHeaderObservation? observed = UsageHeaders.LatestObservation;
+            if (observed == null || (observed.StatusCode != 429 && observed.StatusCode != 503)) return null;
+            if (DateTime.UtcNow - observed.ObservedUtc > _RetryAfterObservationAge) return null;
+            return observed.Headers.TryGetValue("Retry-After", out string? value) ? ParseRetryAfterSeconds(value, DateTime.UtcNow) : null;
+        }
+
+        /// <summary>
+        /// Parse an HTTP Retry-After value: delta seconds or an HTTP date.
+        /// </summary>
+        /// <param name="value">Header value.</param>
+        /// <param name="nowUtc">Current time, for an HTTP date.</param>
+        /// <returns>Whole seconds to wait (at least 1), or null when the value is missing or unreadable.</returns>
+        public static int? ParseRetryAfterSeconds(string? value, DateTime nowUtc)
+        {
+            if (String.IsNullOrWhiteSpace(value)) return null;
+            string text = value.Trim();
+            if (Int32.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int seconds))
+                return Math.Max(1, seconds);
+            if (DateTimeOffset.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out DateTimeOffset date))
+            {
+                double delta = (date.UtcDateTime - nowUtc).TotalSeconds;
+                return delta <= 0 ? 1 : (int)Math.Min(Int32.MaxValue, Math.Ceiling(delta));
+            }
+            return null;
+        }
+
+        private async Task WarmModelAsync(int processId, ModelEndpoint endpoint, string? model, CancellationToken token)
+        {
+            // RS-7.16: load an Ollama model before the first turn so a cold load is not charged to the first-response
+            // deadline. A failed load is only a diagnostic; the first turn reports a real problem.
+            if (!_Behaviors.ModelWarmup || !OllamaModelWarmup.Applies(endpoint)) return;
+            int timeoutSeconds = Math.Min(OllamaModelWarmup.MaxTimeoutSeconds, Math.Max(OllamaModelWarmup.DefaultTimeoutSeconds,
+                (endpoint.InferenceOptions.FirstResponseTimeoutMs ?? 0) / 1000));
+            OllamaWarmupResult warmed = await OllamaModelWarmup.WarmAsync(endpoint, model, null, timeoutSeconds, token).ConfigureAwait(false);
+            if (!warmed.Attempted) return;
+            EmitDiagnostic(processId, warmed.Succeeded ? ApiRuntimeDiagnosticKindEnum.Inference : ApiRuntimeDiagnosticKindEnum.Warning,
+                warmed.Succeeded
+                    ? "[warmup] model loaded with keep_alive in " + warmed.ElapsedMs + " ms"
+                    : "[warmup] model load failed (" + (warmed.Reason ?? "no detail") + "); continuing with the first turn");
+        }
+
         private static bool IsRetryableInferenceStatus(int? status)
         {
             if (!status.HasValue) return true;
@@ -460,10 +567,11 @@ namespace Armada.Runtimes
             return code == 408 || code == 429 || code == 500 || code == 502 || code == 503 || code == 504 || code == 529;
         }
 
-        private async Task DelayBeforeInferenceRetryAsync(int attempt, int processId, string reason, CancellationToken token)
+        private async Task DelayBeforeInferenceRetryAsync(int attempt, int processId, string reason, CancellationToken token, int? retryAfterSeconds = null)
         {
             double baseMs = Math.Max(0, InferenceRetryBaseDelay.TotalMilliseconds) * Math.Pow(2, attempt);
             double jittered = baseMs * (0.75 + Random.Shared.NextDouble() * 0.5);
+            if (retryAfterSeconds.HasValue && retryAfterSeconds.Value * 1000.0 > jittered) jittered = retryAfterSeconds.Value * 1000.0;
             EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Error, "[retry] inference call failed (" + reason + "); retry " + (attempt + 1) + " of " + _InferenceRetries + " in " + (jittered / 1000).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "s");
             if (jittered > 0) await Task.Delay(TimeSpan.FromMilliseconds(jittered), token).ConfigureAwait(false);
         }
@@ -478,6 +586,9 @@ namespace Armada.Runtimes
             string? finalMessageFilePath,
             string? mcpUrl,
             string? mcpToken,
+            bool requiresCompletionLine,
+            HashSet<string>? toolScope,
+            NativeSubmitTool? submitTool,
             CancellationTokenSource cts)
         {
             int exitCode = 0;
@@ -487,8 +598,14 @@ namespace Armada.Runtimes
 
             try
             {
-                using CompletionClientBase client = _ClientFactory(endpoint, _Logging);
-                if (!String.IsNullOrWhiteSpace(model)) client.Model = model;
+                if (ContextDiscovery != null && !endpoint.InferenceOptions.ContextLength.HasValue) await ContextDiscovery(endpoint, model, token).ConfigureAwait(false);
+                if (ModelContextDiscovery.ApplyWindow(endpoint))
+                    EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Inference, "[context] window " + endpoint.InferenceOptions.ContextLength + " tokens, discovered from " + endpoint.DiscoveredContextSource);
+                await WarmModelAsync(processId, endpoint, model, token).ConfigureAwait(false);
+                using ProviderClientBase client = _ClientFactory(endpoint, _Logging);
+                if (!String.IsNullOrWhiteSpace(model) && client.Defaults.Completion != null) client.Defaults.Completion.Model = model;
+                // Only the last call's response headers are read (Retry-After); retaining more holds request bodies in memory.
+                client.MaxCallDetails = 2;
 
                 InferenceOptions settings = endpoint.InferenceOptions;
                 // Without streaming the client timeout bounds the whole call, so the first-response deadline (cold model
@@ -518,21 +635,22 @@ namespace Armada.Runtimes
                 async Task RunPlainChatAsync()
                 {
                     completionOptions.SystemPrompt = BuildSystemPrompt(workingDirectory);
-                    ChatResponse reply = await WithInferenceRetryAsync(() => settings.Streaming ? StreamChatAsync(client, prompt, completionOptions, firstResponseMs, idleMs, token) : client.ChatAsync(prompt, completionOptions, token), r => r.Success, r => r.StatusCode, r => r.Error, processId, lastCallMs, token).ConfigureAwait(false);
+                    ChatResponse reply = await WithInferenceRetryAsync(() => settings.Streaming ? StreamChatAsync(client, prompt, completionOptions, firstResponseMs, idleMs, token) : client.ChatAsync(prompt, completionOptions, token), r => r.Success, r => r.StatusCode, r => r.Error, processId, lastCallMs, token, () => LastRetryAfterSeconds(client)).ConfigureAwait(false);
                     EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Inference, "[inference] " + JsonSerializer.Serialize(new { iteration = 1, streamed = settings.Streaming, reply.Success, reply.FinishReason, reply.Usage, textLength = reply.Text?.Length ?? 0, toolCalls = 0 }));
                     if (!reply.Success)
                     {
                         exitCode = 1;
                         EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Error, reply.Error ?? "Inference request failed.");
-                        RaiseProviderError(processId, InferenceFailure(reply.StatusCode, reply.Error, "Inference request failed: " + (reply.Error ?? "the endpoint returned failure without detail"), lastCallMs.Value, settings.Streaming));
+                        RaiseProviderError(processId, InferenceFailure(reply.StatusCode, reply.Error, "Inference request failed: " + (reply.Error ?? "the endpoint returned failure without detail"), lastCallMs.Value, settings.Streaming, LastRetryAfterSeconds(client)));
                         WriteFinalMessage(finalMessageFilePath, String.Empty);
                         return;
                     }
-                    finalText = RemoveCompleteThinkBlocks(reply.Text);
-                    if (!IsCompleteResponse(finalText, reply.FinishReason, prompt.Contains("[ARMADA:RESULT] COMPLETE", StringComparison.Ordinal)))
+                    ApiTerminalDecision plain = new ApiTerminalPolicy(requiresCompletionLine, settings.MaxTokens, null, _Behaviors.ReasoningHygiene).DecidePlain(reply);
+                    finalText = plain.FinalText;
+                    if (plain.Action == ApiTerminalActionEnum.Fail)
                     {
                         exitCode = 1;
-                        RaiseProviderError(processId, new RuntimeProviderError { ErrorType = IsTokenLimit(reply.FinishReason) ? "output_token_limit_reached" : "incomplete_completion", Reason = IsTokenLimit(reply.FinishReason) ? "The inference response hit its output-token limit (finish reason: " + reply.FinishReason + "). The mission did not finish." : "Plain inference did not produce a valid mission completion." });
+                        RaiseProviderError(processId, plain.Failure);
                     }
                     if (finalText.Length > 0) Emit(processId, finalText);
                     WriteFinalMessage(finalMessageFilePath, finalText);
@@ -544,7 +662,7 @@ namespace Armada.Runtimes
                 }
 
                 TaskPlan taskPlan = new TaskPlan();
-                BuiltInToolRegistry registry = new BuiltInToolRegistry(taskPlan);
+                BuiltInToolRegistry registry = new BuiltInToolRegistry(taskPlan, ToolLimits.ForContextWindow(settings.ContextLength, settings.ToolOutputWindowPercent));
                 List<PolyToolDefinition> tools = BuildToolDefinitions(registry)
                     .Where(t => (!settings.ReadOnlyTools || registry.GetMutationKind(t.Name) == ToolMutationKind.ReadOnly)
                         && (settings.AllowedTools == null || settings.AllowedTools.Contains(t.Name, StringComparer.Ordinal))).ToList();
@@ -554,6 +672,10 @@ namespace Armada.Runtimes
                 // routing map records which tool names must be dispatched to the MCP client rather than the
                 // local registry.
                 Dictionary<string, McpToolClient> mcpRouting = new Dictionary<string, McpToolClient>(StringComparer.Ordinal);
+                // RS-7.4: names that exist but the endpoint's policy turns off; any other unpermitted name is unknown.
+                HashSet<string> policyDisabled = new HashSet<string>(StringComparer.Ordinal);
+                foreach (PolyToolDefinition builtIn in BuildToolDefinitions(registry))
+                    if (!tools.Any(t => String.Equals(t.Name, builtIn.Name, StringComparison.Ordinal))) policyDisabled.Add(builtIn.Name);
                 DeferredMcpToolCatalog? deferredCatalog = null;
                 if (settings.McpToolsEnabled && !settings.ReadOnlyTools && !String.IsNullOrWhiteSpace(mcpUrl))
                 {
@@ -569,7 +691,11 @@ namespace Armada.Runtimes
                         List<PolyToolDefinition> remoteDefinitions = new List<PolyToolDefinition>();
                         foreach (McpRemoteTool remote in remoteTools)
                         {
-                            if (settings.AllowedTools != null && !settings.AllowedTools.Contains(remote.Name, StringComparer.Ordinal)) continue;
+                            if (settings.AllowedTools != null && !settings.AllowedTools.Contains(remote.Name, StringComparer.Ordinal))
+                            {
+                                policyDisabled.Add(remote.Name);
+                                continue;
+                            }
                             if (builtInNames.Contains(remote.Name) || mcpRouting.ContainsKey(remote.Name)) continue;
                             Dictionary<string, object> parameters = SchemaJsonToDictionary(remote.InputSchemaJson);
                             remoteDefinitions.Add(PolyToolDefinition.Function(remote.Name, remote.Description, parameters));
@@ -578,10 +704,21 @@ namespace Armada.Runtimes
 
                         // Explicit allowlists and small catalogs keep eager exposure. Large default catalogs
                         // remain callable under the same policy, with schemas discovered only when needed.
+                        // A mission persona's declared scope is shown up front and the rest is discovered.
                         // A real remote tool with the discovery name keeps its original meaning.
-                        if (settings.AllowedTools == null && remoteDefinitions.Count > DeferredMcpToolCatalog.EagerCatalogLimit
-                            && !mcpRouting.ContainsKey(DeferredMcpToolCatalog.DiscoveryName)
-                            && !builtInNames.Contains(DeferredMcpToolCatalog.DiscoveryName))
+                        bool discoveryNameFree = !mcpRouting.ContainsKey(DeferredMcpToolCatalog.DiscoveryName)
+                            && !builtInNames.Contains(DeferredMcpToolCatalog.DiscoveryName);
+                        List<PolyToolDefinition> scoped = toolScope == null ? new List<PolyToolDefinition>()
+                            : remoteDefinitions.Where(t => toolScope.Contains(t.Name)).ToList();
+                        List<PolyToolDefinition> unscoped = toolScope == null ? new List<PolyToolDefinition>()
+                            : remoteDefinitions.Where(t => !toolScope.Contains(t.Name)).ToList();
+                        if (settings.AllowedTools == null && toolScope != null && unscoped.Count > 0 && discoveryNameFree)
+                        {
+                            tools.AddRange(scoped);
+                            deferredCatalog = new DeferredMcpToolCatalog(unscoped, tools);
+                            tools.Add(DeferredMcpToolCatalog.Definition());
+                        }
+                        else if (settings.AllowedTools == null && remoteDefinitions.Count > DeferredMcpToolCatalog.EagerCatalogLimit && discoveryNameFree)
                         {
                             deferredCatalog = new DeferredMcpToolCatalog(remoteDefinitions, tools);
                             tools.Add(DeferredMcpToolCatalog.Definition());
@@ -606,6 +743,19 @@ namespace Armada.Runtimes
                     return;
                 }
 
+                // The native submit tool replaces an MCP tool of the same name; a valid call is forwarded to that MCP tool.
+                McpToolClient? submitForward = null;
+                if (submitTool != null)
+                {
+                    if (mcpRouting.TryGetValue(submitTool.Name, out McpToolClient? routed)) submitForward = routed;
+                    mcpRouting.Remove(submitTool.Name);
+                    tools.RemoveAll(t => String.Equals(t.Name, submitTool.Name, StringComparison.Ordinal));
+                    tools.Add(submitTool.Definition());
+                }
+
+                EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Inference, "[tools] " + tools.Count + " tool schema(s) sent, about "
+                    + ApiContextCompactor.EstimateToolTokens(tools) + " input tokens per turn" + (toolScope == null ? String.Empty : "; persona scope applied"));
+
                 List<ChatMessage> messages = new List<ChatMessage>();
                 messages.Add(ChatMessage.System(BuildSystemPrompt(workingDirectory)
                     + (deferredCatalog == null ? String.Empty : " Additional Armada MCP tools are available through "
@@ -616,128 +766,37 @@ namespace Armada.Runtimes
                 // Deferral is a context optimization, not an authorization change. A permitted tool named
                 // directly in mission instructions can still be called without a discovery round trip.
                 permittedTools.UnionWith(mcpRouting.Keys);
-                int maxIterations = Math.Min(_MaxIterations, settings.MaxIterations);
-                int incompleteResponses = 0;
-                RuntimeProviderError? tokenLimitFailure = null;
-                bool requiresCompletion = prompt.Contains("[ARMADA:RESULT] COMPLETE", StringComparison.Ordinal);
-                long lastPromptTokens = 0;
-                for (int iteration = 0; iteration < maxIterations; iteration++)
+
+                ApiTurnLoopCallbacks callbacks = new ApiTurnLoopCallbacks
                 {
-                    token.ThrowIfCancellationRequested();
-
-                    // Keep the conversation inside the window before it is sent: the provider's count can lag or undercount
-                    // (Ollama does not count cached prompt tokens), so the local estimate also decides.
-                    long pressure = Math.Max(lastPromptTokens, ApiContextCompactor.EstimateTokens(messages));
-                    if (ApiContextCompactor.ShouldCompact(pressure, settings.ContextLength))
-                    {
-                        long removed = ApiContextCompactor.Compact(messages);
-                        if (removed > 0)
-                        {
-                            lastPromptTokens = 0;
-                            EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Inference, "[context] about " + pressure + " of " + settings.ContextLength
-                                + " tokens in use; replaced earlier tool output (about " + (removed / 4) + " tokens) with short notes to stay inside the window");
-                        }
-                    }
-
-                    ToolChatRequest request = new ToolChatRequest();
-                    request.Messages = messages;
-                    request.Tools = tools;
-                    request.Options = completionOptions;
-
-                    ToolChatResponse response = await WithInferenceRetryAsync(() => settings.Streaming ? StreamToolChatAsync(client, request, firstResponseMs, idleMs, token) : client.ToolChatAsync(request, token), r => r.Success, r => r.StatusCode, r => r.Error, processId, lastCallMs, token).ConfigureAwait(false);
-
-                    EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Inference, "[inference] " + JsonSerializer.Serialize(new { iteration = iteration + 1, maxIterations, streamed = settings.Streaming, response.Success, response.ResponseId, response.FinishReason, response.Usage, reasoningLength = response.Reasoning?.Length ?? 0, textLength = response.Text?.Length ?? 0, toolCalls = response.ToolCalls?.Count ?? 0 }));
-
-                    if (!response.Success)
-                    {
-                        string reason = String.IsNullOrEmpty(response.Error) ? "the inference endpoint reported failure without detail" : response.Error!;
-                        EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Error, "[error] inference call failed: " + reason);
-                        RaiseProviderError(processId, InferenceFailure(response.StatusCode, response.Error, "Inference request failed: " + reason, lastCallMs.Value, settings.Streaming));
-                        exitCode = 1;
-                        break;
-                    }
-
-                    // A prompt that fills the configured window means the server has started (or is about to start) dropping
-                    // the oldest turns, which hold the mission brief. Stop with a typed error rather than act on a partial view.
-                    RuntimeProviderError? contextFailure = ContextLimitFailure(settings, response.Usage);
-                    if (response.Usage?.PromptTokens != null) lastPromptTokens = response.Usage.PromptTokens.Value;
-                    // Still below the window, nothing has been dropped yet: make room and carry on rather than stop.
-                    if (contextFailure != null && response.Usage!.PromptTokens!.Value < settings.ContextLength!.Value)
-                    {
-                        long removed = ApiContextCompactor.Compact(messages);
-                        if (removed > 0)
-                        {
-                            EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Inference, "[context] prompt reached " + response.Usage.PromptTokens + " of " + settings.ContextLength
-                                + " tokens; replaced earlier tool output (about " + (removed / 4) + " tokens) with short notes and continued");
-                            lastPromptTokens = 0;
-                            contextFailure = null;
-                        }
-                    }
-                    if (contextFailure != null)
-                    {
-                        EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Error, "[error] " + contextFailure.Reason);
-                        RaiseProviderError(processId, contextFailure);
-                        exitCode = 1;
-                        break;
-                    }
-
-                    string visibleText = RemoveCompleteThinkBlocks(response.Text);
-                    if (!String.IsNullOrEmpty(visibleText))
-                    {
-                        finalText = visibleText;
-                        Emit(processId, visibleText);
-                    }
-
-                    messages.Add(response.ToAssistantMessage());
-
-                    if (response.ToolCalls == null || response.ToolCalls.Count == 0)
-                    {
-                        if (IsTokenLimit(response.FinishReason)) tokenLimitFailure = new RuntimeProviderError
-                        {
-                            ErrorType = "output_token_limit_reached",
-                            Reason = "The inference response hit the output-token limit (finish reason: " + response.FinishReason
-                                + "; configured Max Output Tokens: " + (settings.MaxTokens?.ToString() ?? "provider default")
-                                + "; completion tokens: " + response.Usage?.CompletionTokens + "). The mission did not finish."
-                        };
-                        // Only this terminal response can finish the run; earlier narration is not a result.
-                        finalText = RemoveCompleteThinkBlocks(response.Text);
-                        bool complete = IsCompleteResponse(finalText, response.FinishReason, requiresCompletion);
-                        if (complete) break;
-                        incompleteResponses++;
-                        if (incompleteResponses <= 2 && iteration + 1 < maxIterations)
-                        {
-                            EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Warning, "[warning] incomplete terminal response; asking the captain to continue (" + incompleteResponses + "/2).");
-                            messages.Add(ChatMessage.User("Your last response did not complete the task. Continue implementing and validating the mission using tools. Do not repeat an introductory plan. When finished, provide a substantive summary" + (requiresCompletion ? " and the required standalone [ARMADA:RESULT] COMPLETE line." : ".")));
-                            continue;
-                        }
-                        exitCode = 1;
-                        RaiseProviderError(processId, tokenLimitFailure ?? new RuntimeProviderError { ErrorType = "incomplete_completion",
-                            Reason = "The endpoint stopped without a nonempty final response and the required mission completion marker after bounded continuation attempts." });
-                        EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Error, "[error] incomplete completion; the mission is not finished.");
-                        break;
-                    }
-
-                    finalText = String.Empty;
-                    foreach (ToolCall call in response.ToolCalls)
-                    {
-                        token.ThrowIfCancellationRequested();
-                        string resultContent;
-                        if (!permittedTools.Contains(call.Name))
-                        {
-                            resultContent = JsonSerializer.Serialize(new { error = "tool_not_allowed", message = "This tool is disabled by the endpoint's inference policy." });
-                            EmitToolEvent(processId, new ApiRuntimeToolEvent { Phase = ApiRuntimeToolPhaseEnum.Completed, Id = call.Id, Name = call.Name, Ok = false, PermissionDenied = true, Result = resultContent });
-                        }
-                        else resultContent = await ExecuteToolAsync(processId, registry, mcpRouting, call, workingDirectory, deferredCatalog, token).ConfigureAwait(false);
-                        messages.Add(ChatMessage.ToolResult(call.Id, call.Name, resultContent));
-                    }
-
-                    if (iteration == maxIterations - 1)
-                    {
-                        exitCode = 1;
-                        RaiseProviderError(processId, new RuntimeProviderError { ErrorType = "max_iterations_reached", Reason = "API endpoint captain stopped at the configured " + maxIterations + " model-turn limit." });
-                        EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Warning, "[warning] reached the maximum of " + maxIterations + " model turns; stopping.");
-                    }
-                }
+                    InferAsync = (request, ct) => WithInferenceRetryAsync(() => settings.Streaming ? StreamToolChatAsync(client, request, firstResponseMs, idleMs, ct) : client.ChatAsync(request, ct), r => r.Success, r => r.StatusCode, r => r.Error, processId, lastCallMs, ct, () => LastRetryAfterSeconds(client),
+                        r => _Behaviors.MalformedCallRetries > 0 && MalformedCallCorrection.Applies(r)),
+                    InferenceFailure = (response, reason) => InferenceFailure(response.StatusCode, response.Error, reason, lastCallMs.Value, settings.Streaming, LastRetryAfterSeconds(client)),
+                    ExecuteToolAsync = (call, ct) => submitTool != null && String.Equals(call.Name, submitTool.Name, StringComparison.Ordinal)
+                        ? ExecuteSubmitToolAsync(processId, submitTool, submitForward, call, ct)
+                        : ExecuteToolAsync(processId, registry, mcpRouting, call, workingDirectory, deferredCatalog, ct),
+                    Emit = text => Emit(processId, text),
+                    Diagnostic = (kind, text) => EmitDiagnostic(processId, kind, text),
+                    ToolEvent = toolEvent => EmitToolEvent(processId, toolEvent),
+                    ProviderError = error => RaiseProviderError(processId, error)
+                };
+                ApiTurnLoop loop = new ApiTurnLoop(
+                    callbacks,
+                    new ApiContextPolicy(settings.ContextLength),
+                    new ApiTerminalPolicy(requiresCompletionLine, settings.MaxTokens, submitTool, _Behaviors.ReasoningHygiene),
+                    submitTool,
+                    completionOptions,
+                    Math.Min(_MaxIterations, settings.MaxIterations),
+                    settings.Streaming,
+                    _Behaviors);
+                loop.RepeatedToolCallLimit = settings.RepeatedToolCallLimit ?? ApiTurnLoop.DefaultRepeatedToolCallLimit;
+                policyDisabled.ExceptWith(permittedTools);
+                loop.DisabledTools = policyDisabled;
+                ApiTurnLoopResult outcome = await loop.RunAsync(messages, tools, permittedTools, token).ConfigureAwait(false);
+                if (outcome.TextToolCallRecoveries > 0)
+                    EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Inference, "[recovery] model " + JsonSerializer.Serialize(new { model = String.IsNullOrWhiteSpace(model) ? endpoint.Model : model, textToolCalls = outcome.TextToolCallRecoveries }));
+                exitCode = outcome.ExitCode;
+                finalText = outcome.FinalText;
 
                 WriteFinalMessage(finalMessageFilePath, finalText);
             }
@@ -775,6 +834,22 @@ namespace Armada.Runtimes
                 try { cts.Dispose(); } catch { }
                 OnProcessExited?.Invoke(processId, exitCode);
             }
+        }
+
+        private async Task<string> ExecuteSubmitToolAsync(int processId, NativeSubmitTool submitTool, McpToolClient? forward, ToolCall call, CancellationToken token)
+        {
+            string argsJson = String.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson;
+            EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.ToolCall, "[tool] " + call.Name + " " + Truncate(argsJson, 500));
+            EmitToolEvent(processId, new ApiRuntimeToolEvent { Phase = ApiRuntimeToolPhaseEnum.Started, Id = call.Id, Name = call.Name, Arguments = Truncate(argsJson, 4000) });
+            long startTicks = Environment.TickCount64;
+            bool before = submitTool.Submitted;
+            int rejectedBefore = submitTool.RejectedCalls;
+            string result = await submitTool.HandleAsync(argsJson, forward, text => Emit(processId, text), token).ConfigureAwait(false);
+            bool ok = submitTool.RejectedCalls == rejectedBefore && (submitTool.Submitted || before);
+            long elapsed = Environment.TickCount64 - startTicks;
+            EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.ToolResult, "[tool:result] " + call.Name + " " + (ok ? "ok" : "failed") + " " + Truncate(result, 500));
+            EmitToolEvent(processId, new ApiRuntimeToolEvent { Phase = ApiRuntimeToolPhaseEnum.Completed, Id = call.Id, Name = call.Name, Ok = ok, ElapsedMs = elapsed, Result = Truncate(result, 16000) });
+            return result;
         }
 
         private async Task<string> ExecuteToolAsync(
@@ -1008,45 +1083,6 @@ namespace Armada.Runtimes
                 try { _LogWriter?.Dispose(); } catch { }
                 _LogWriter = null;
             }
-        }
-
-        private static RuntimeProviderError? ContextLimitFailure(InferenceOptions settings, TokenUsage? usage)
-        {
-            if (!settings.ContextLength.HasValue || usage?.PromptTokens == null) return null;
-            int window = settings.ContextLength.Value;
-            long prompt = usage.PromptTokens.Value;
-            if (prompt * 100 < (long)window * 95) return null;
-            return new RuntimeProviderError
-            {
-                ErrorType = "context_limit_exceeded",
-                Reason = "The conversation reached the configured context window (prompt tokens: " + prompt + " of " + window
-                    + "). Further turns would run on truncated history, so the run stopped."
-            };
-        }
-
-        private static bool IsTokenLimit(string? reason) => String.Equals(reason, "length", StringComparison.OrdinalIgnoreCase) || String.Equals(reason, "max_tokens", StringComparison.OrdinalIgnoreCase) || String.Equals(reason, "max_output_tokens", StringComparison.OrdinalIgnoreCase);
-
-        /// <summary>
-        /// Remove every complete think block from assistant text before that text is emitted or stored.
-        /// A block opens with a think tag whose name ends at the tag boundary and closes with the matching end tag.
-        /// A longer name, an unmatched tag, and text with no complete block stay as they were.
-        /// </summary>
-        /// <param name="text">Assistant text from the inference client.</param>
-        /// <returns>The text with complete think blocks removed.</returns>
-        private static string RemoveCompleteThinkBlocks(string? text)
-        {
-            if (String.IsNullOrEmpty(text)) return String.Empty;
-            return _CompleteThinkBlock.Replace(text, String.Empty);
-        }
-
-        private static bool IsCompleteResponse(string text, string? finishReason, bool requiresCompletion)
-        {
-            if (String.IsNullOrWhiteSpace(text) || IsTokenLimit(finishReason)) return false;
-            if (!requiresCompletion) return true;
-            string[] lines = text.Replace("\r", "").Split('\n');
-            // A verifier that found a blocking product defect ends with the blocked outcome instead; that is also a finished reply.
-            bool IsEnding(string line) => line.Trim() == "[ARMADA:RESULT] COMPLETE" || line.Trim() == VerifierContract.BlockedMarker;
-            return lines.Any(IsEnding) && lines.Any(line => !String.IsNullOrWhiteSpace(line) && !IsEnding(line));
         }
 
         private void WriteFinalMessage(string? finalMessageFilePath, string finalText)

@@ -103,7 +103,7 @@ namespace Armada.Tui.Screens.Delivery
                     Active = active.Value,
                     Scope = ScopeRules.ResolveCreateScope(context.Session, EntityForm.EnumValue(scope, ScopeEnum.TenantWide))
                 };
-                created = await context.Client.CreateRunbookAsync(payload, ct).ConfigureAwait(false);
+                created = await context.Client.Runbooks.CreateAsync(payload, ct).ConfigureAwait(false);
                 return null;
             }, () =>
             {
@@ -122,7 +122,7 @@ namespace Armada.Tui.Screens.Delivery
         public static void Duplicate(TuiContext context, Runbook runbook, Action<Runbook> onCreated)
         {
             RunbookUpsertRequest payload = DuplicatePayload(runbook);
-            EntityUi.Run<Runbook?>(context, ct => context.Client.CreateRunbookAsync(payload, ct), created =>
+            EntityUi.Run<Runbook?>(context, ct => context.Client.Runbooks.CreateAsync(payload, ct), created =>
             {
                 if (created == null) return;
                 EntityUi.Toast(context, NotificationSeverityEnum.Success, EntityUi.T(context, "Runbook \"{{title}}\" duplicated.", "title", created.Title));
@@ -289,7 +289,7 @@ namespace Armada.Tui.Screens.Delivery
                     IncidentId = prefill?.IncidentId,
                     Notes = EntityUi.Blank(notes.Value)
                 };
-                started = await context.Client.StartRunbookExecutionAsync(runbook.Id, payload, ct).ConfigureAwait(false);
+                started = await context.Client.Runbooks.StartExecutionAsync(runbook.Id, payload, ct).ConfigureAwait(false);
                 return null;
             }, () =>
             {

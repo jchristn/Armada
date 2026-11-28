@@ -44,7 +44,7 @@ namespace Armada.Core.Services
                 "and do NOT run commands that change the working tree or push commits. " + focus + "\n\n" +
                 "Deliver your findings as a written report in your final response using clear Markdown headings. " +
                 "No commit is expected -- an empty diff is a successful outcome for this mission. " +
-                "End with a standalone line `[ARMADA:RESULT] COMPLETE` followed by a brief plain-text summary.\n";
+                "End as the Output Contract section says.\n";
         }
 
         #endregion

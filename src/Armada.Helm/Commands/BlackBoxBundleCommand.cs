@@ -27,7 +27,7 @@ namespace Armada.Helm.Commands
                 if (settings.Max.HasValue) request.Max = settings.Max.Value;
                 request.Format = BlackBoxCli.ParseEnum<BlackBoxBundleFormatEnum>("--format", settings.Format) ?? (settings.Json ? BlackBoxBundleFormatEnum.Json : BlackBoxBundleFormatEnum.Markdown);
                 request.RedactHosts = settings.RedactHosts;
-                BlackBoxBundleResult? bundle = await client.GetBlackBoxBundleAsync(request, cancellationToken).ConfigureAwait(false);
+                BlackBoxBundleResult? bundle = await client.BlackBox.GetBundleAsync(request, cancellationToken).ConfigureAwait(false);
                 if (bundle == null) return 1;
                 if (toStdout)
                 {

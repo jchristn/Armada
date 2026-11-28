@@ -7,7 +7,7 @@ import { useNotifications } from '../context/NotificationContext';
 import {
   getMission, listMissionSummaries, createMission, updateMission, deleteMission, purgeMission,
   restartMission, retryMissionLanding, transitionMission, getMissionDiff, getMissionLog,
-  listVessels, listCaptains, listVoyages, apiErrorMessage,
+  listVessels, listCaptains, listVoyages, listPersonas, apiErrorMessage,
 } from '../api/client';
 import { listAll } from '../api/paging';
 import { reconcileServerPage, useListRequestGuard } from '../lib/serverPage';
@@ -40,6 +40,8 @@ type SortField = 'title' | 'status' | 'priority' | 'createdUtc';
 
 const MISSION_STATUSES = MISSION_LIST_STATUSES;
 
+const MISSION_PERSONA_TIP = 'Persona (role) the mission runs as, which decides its instructions and which captains can take it. Default runs it as a Worker.';
+
 export default function Missions() {
   const navigate = useNavigate();
   const { t } = useLocale();
@@ -67,7 +69,8 @@ export default function Missions() {
   // Modal
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState<{ title: string; description: string; vesselId: string; priority: number; mode: MissionMode }>({ title: '', description: '', vesselId: '', priority: 100, mode: 'Implementation' });
+  const [formData, setFormData] = useState<{ title: string; description: string; vesselId: string; priority: number; mode: MissionMode; persona: string }>({ title: '', description: '', vesselId: '', priority: 100, mode: 'Implementation', persona: '' });
+  const [personaNames, setPersonaNames] = useState<string[]>([]);
 
   // JSON viewer
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
@@ -140,6 +143,7 @@ export default function Missions() {
 
   useEffect(() => {
     listAll(listVessels).then(r => setVessels(r.objects || [])).catch(() => {}).finally(() => setLookupsLoaded(l => ({ ...l, vessels: true })));
+    listAll(listPersonas).then(r => setPersonaNames([...new Set((r.objects || []).map(p => p.name))].sort())).catch(() => {});
     listAll(listCaptains).then(r => setCaptains(r.objects || [])).catch(() => {}).finally(() => setLookupsLoaded(l => ({ ...l, captains: true })));
     listAll(listVoyages).then(r => setVoyages(r.objects || [])).catch(() => {}).finally(() => setLookupsLoaded(l => ({ ...l, voyages: true })));
   }, []);
@@ -191,7 +195,7 @@ export default function Missions() {
   // Create
   function openCreate() {
     setDuplicateSource(null);
-    setFormData({ title: '', description: '', vesselId: '', priority: 100, mode: 'Implementation' });
+    setFormData({ title: '', description: '', vesselId: '', priority: 100, mode: 'Implementation', persona: '' });
     setShowForm(true);
   }
 
@@ -199,7 +203,7 @@ export default function Missions() {
     try {
       const mission = await getMission(summary.id);
       setDuplicateSource(mission);
-      setFormData({ title: duplicateDisplayName(mission.title), description: mission.description || '', vesselId: mission.vesselId || '', priority: mission.priority, mode: mission.mode || 'Implementation' });
+      setFormData({ title: duplicateDisplayName(mission.title), description: mission.description || '', vesselId: mission.vesselId || '', priority: mission.priority, mode: mission.mode || 'Implementation', persona: mission.persona || '' });
       setShowForm(true);
     } catch (error) { setError(apiErrorMessage(error, t('Duplicate failed.'))); }
   }
@@ -211,7 +215,7 @@ export default function Missions() {
     if (saving) return;
     setSaving(true);
     try {
-      const created = await createMission({ ...(duplicateSource ? buildMissionDuplicatePayload(duplicateSource) : {}), ...formData });
+      const created = await createMission({ ...(duplicateSource ? buildMissionDuplicatePayload(duplicateSource) : {}), ...formData, persona: formData.persona || null });
       setShowForm(false);
       setCreatedWarnings(dispatchWarningsFrom(created));
       pushToast('success', t('Mission "{{title}}" created.', { title: formData.title }));
@@ -456,6 +460,12 @@ export default function Missions() {
               </select>
             </label>
             <DispatchPreview compact vesselId={formData.vesselId} title={formData.title} description={formData.description} enabled={!saving} />
+            <label title={t(MISSION_PERSONA_TIP)}>{t('Persona')}
+              <select value={formData.persona} onChange={e => setFormData({ ...formData, persona: e.target.value })} title={t(MISSION_PERSONA_TIP)}>
+                <option value="">{t('Default (Worker)')}</option>
+                {personaNames.map(name => <option key={name} value={name}>{name}</option>)}
+              </select>
+            </label>
             <label title={t('Implementation changes code and lands a diff (an empty diff fails). Audit and Research are read-only and produce a written report instead.')}>{t('Mode')}
               <select value={formData.mode} onChange={e => setFormData({ ...formData, mode: e.target.value as MissionMode })} title={t('Implementation changes code and lands a diff (an empty diff fails). Audit and Research are read-only and produce a written report instead.')}>
                 <option value="Implementation">{t('Implementation')}</option>

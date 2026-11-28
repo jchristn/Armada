@@ -28,7 +28,7 @@ namespace Armada.Helm.Commands
                 query.PageNumber = settings.Page ?? 1;
                 query.PageSize = settings.PageSize ?? 25;
                 query.Order = settings.NewestFirst ? EnumerationOrderEnum.CreatedDescending : EnumerationOrderEnum.CreatedAscending;
-                BlackBoxTimelinePage? page = await client.GetBlackBoxTimelineAsync(settings.Id, query, cancellationToken).ConfigureAwait(false);
+                BlackBoxTimelinePage? page = await client.BlackBoxInsights.GetTimelineAsync(settings.Id, query, cancellationToken).ConfigureAwait(false);
                 if (settings.Json)
                 {
                     WritePureJson(page);

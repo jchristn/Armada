@@ -41,17 +41,17 @@ namespace Test.Shared.Suites.Client
                 Captain captain = await LiveServerSetup.CreateCaptainAsync(c, "contract-ask");
                 await LiveServerSetup.CreateCaptainAsync(c, "contract-ask-worker");
                 _Behavior.OnTurn = turn => Task.FromResult("Contract reply.");
-                AskThread thread = (await c.CreateAskThreadAsync(new AskThreadCreateRequest { Title = "Contract ask", CaptainId = captain.Id }))!;
+                AskThread thread = (await c.Ask.CreateThreadAsync(new AskThreadCreateRequest { Title = "Contract ask", CaptainId = captain.Id }))!;
 
-                AskSendMessageResult? sent = await c.SendAskMessageAsync(thread.Id, "Hello captain");
+                AskSendMessageResult? sent = await c.Ask.SendMessageAsync(thread.Id, "Hello captain");
                 AssertFalse(String.IsNullOrEmpty(sent?.MessageId), "message id");
-                AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => ((await c.EnumerateAskMessagesAsync(thread.Id))?.Messages ?? new List<AskMessage>()).Any(m => m.ContentText == "Contract reply."), LiveTimeoutMs), "captain replied");
-                AssertEqual(thread.Id, (await c.MarkAskThreadUnreadAsync(thread.Id))?.Id, "mark unread");
-                await c.MarkAskThreadReadAsync(thread.Id);
-                await c.SummarizeAskThreadAsync(thread.Id);
+                AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => ((await c.Ask.EnumerateMessagesAsync(thread.Id))?.Messages ?? new List<AskMessage>()).Any(m => m.ContentText == "Contract reply."), LiveTimeoutMs), "captain replied");
+                AssertEqual(thread.Id, (await c.Ask.MarkThreadUnreadAsync(thread.Id))?.Id, "mark unread");
+                await c.Ask.MarkThreadReadAsync(thread.Id);
+                await c.Ask.SummarizeThreadAsync(thread.Id);
                 try
                 {
-                    await c.CancelAskTurnAsync(thread.Id);
+                    await c.Ask.CancelTurnAsync(thread.Id);
                 }
                 catch (ArmadaApiException ex)
                 {
@@ -59,7 +59,7 @@ namespace Test.Shared.Suites.Client
                 }
 
                 ArmadaRawJson args = new ArmadaRawJson(JsonSerializer.Serialize(new StubDispatchArguments { Title = "Contract quick dispatch", VesselId = setup.Vessel.Id, Missions = new List<MissionDescription> { new MissionDescription("Contract quick dispatch", "Add a file.") } }));
-                AskActionProposal? quick = await c.RunAskQuickActionAsync(thread.Id, "dispatch", args);
+                AskActionProposal? quick = await c.Ask.RunQuickActionAsync(thread.Id, "dispatch", args);
                 AssertEqual(AskProposalStatusEnum.Executed, quick?.Status, "a user's quick action runs at once");
 
                 _Behavior.OnTurn = async turn =>
@@ -71,28 +71,28 @@ namespace Test.Shared.Suites.Client
                     return "Proposed.";
                 };
                 AskActionProposal toReject = await ProposeAsync(c, thread.Id);
-                AssertEqual(AskProposalStatusEnum.Rejected, (await c.RejectAskProposalAsync(thread.Id, toReject.Id))?.Status, "captain proposal rejected");
+                AssertEqual(AskProposalStatusEnum.Rejected, (await c.Ask.RejectProposalAsync(thread.Id, toReject.Id))?.Status, "captain proposal rejected");
                 AskActionProposal toApprove = await ProposeAsync(c, thread.Id);
-                AskActionProposal? executed = await c.ApproveAskProposalAsync(thread.Id, toApprove.Id);
+                AskActionProposal? executed = await c.Ask.ApproveProposalAsync(thread.Id, toApprove.Id);
                 AssertTrue(executed?.Status == AskProposalStatusEnum.Executed || executed?.Status == AskProposalStatusEnum.Approved, "captain proposal approved: " + executed?.Status);
                 AskTrackedWork? work = null;
                 AssertTrue(await LiveServerSetup.WaitUntilAsync(async () =>
                 {
-                    work = (await c.EnumerateAskWorkAsync(thread.Id))?.Objects.FirstOrDefault();
+                    work = (await c.Ask.EnumerateWorkAsync(thread.Id))?.Objects.FirstOrDefault();
                     return work != null;
                 }, LiveTimeoutMs), "dispatch tracked in the thread");
-                AskWorkSnapshot? snapshot = await c.GetAskWorkSnapshotAsync(thread.Id, work!.Id);
+                AskWorkSnapshot? snapshot = await c.Ask.GetWorkSnapshotAsync(thread.Id, work!.Id);
                 AssertEqual(work.Id, snapshot?.TrackedWorkId, "work snapshot");
-                AssertEqual((long)(snapshot?.MissionCount ?? -1), (await c.EnumerateAskWorkMissionsAsync(thread.Id, work.Id))?.TotalRecords, "mission rows paged with the snapshot's count");
-                await ClientContract.ExpectErrorAsync(() => c.EnumerateAskWorkTargetsAsync(thread.Id, work.Id), "a voyage has mission rows, not targets");
-                AskMessage? withCalls = ((await c.EnumerateAskMessagesAsync(thread.Id))?.Messages ?? new List<AskMessage>()).FirstOrDefault(m => m.ToolCallCount > 0);
-                if (withCalls != null) AssertEqual((long)withCalls.ToolCallCount, (await c.EnumerateAskToolCallsAsync(thread.Id, withCalls.Id))?.TotalRecords, "tool calls paged with the message's count");
-                else await ClientContract.ExpectErrorAsync(() => c.EnumerateAskToolCallsAsync(thread.Id, "amg_none"), "an unknown message has no tool calls");
-                AssertNotNull(await c.EnumerateAskTurnToolCallsAsync(thread.Id), "running turn tool calls page");
+                AssertEqual((long)(snapshot?.MissionCount ?? -1), (await c.Ask.EnumerateWorkMissionsAsync(thread.Id, work.Id))?.TotalRecords, "mission rows paged with the snapshot's count");
+                await ClientContract.ExpectErrorAsync(() => c.Ask.EnumerateWorkTargetsAsync(thread.Id, work.Id), "a voyage has mission rows, not targets");
+                AskMessage? withCalls = ((await c.Ask.EnumerateMessagesAsync(thread.Id))?.Messages ?? new List<AskMessage>()).FirstOrDefault(m => m.ToolCallCount > 0);
+                if (withCalls != null) AssertEqual((long)withCalls.ToolCallCount, (await c.Ask.EnumerateToolCallsAsync(thread.Id, withCalls.Id))?.TotalRecords, "tool calls paged with the message's count");
+                else await ClientContract.ExpectErrorAsync(() => c.Ask.EnumerateToolCallsAsync(thread.Id, "amg_none"), "an unknown message has no tool calls");
+                AssertNotNull(await c.Ask.EnumerateTurnToolCallsAsync(thread.Id), "running turn tool calls page");
 
                 CaptainChatRequest chat = new CaptainChatRequest();
                 chat.Message = "Status?";
-                CaptainChatResponse? reply = await c.ChatWithCaptainAsync(captain.Id, chat);
+                CaptainChatResponse? reply = await c.Ask.ChatWithCaptainAsync(captain.Id, chat);
                 AssertTrue(reply?.Success == true, "chat succeeded: " + reply?.Error);
                 AssertFalse(String.IsNullOrEmpty(reply!.Reply), "chat reply");
             }));
@@ -106,73 +106,73 @@ namespace Test.Shared.Suites.Client
                 create.Title = "Contract planning";
                 create.CaptainId = captain.Id;
                 create.VesselId = setup.Vessel.Id;
-                PlanningSessionDetail session = (await c.CreatePlanningSessionAsync(create))!;
+                PlanningSessionDetail session = (await c.PlanningSessions.CreateAsync(create))!;
                 string id = session.Session!.Id;
-                await c.SendPlanningSessionMessageAsync(id, new PlanningSessionMessageRequest { Content = "Plan a tiny change." });
+                await c.PlanningSessions.SendMessageAsync(id, new PlanningSessionMessageRequest { Content = "Plan a tiny change." });
                 PlanningSessionMessage? answer = null;
                 AssertTrue(await LiveServerSetup.WaitUntilAsync(async () =>
                 {
-                    PlanningSessionDetail? detail = await c.GetPlanningSessionAsync(id);
-                    EnumerationResult<PlanningSessionMessage>? newest = await c.ListPlanningSessionMessagesAsync(id, new EnumerationQuery { PageSize = 100 });
+                    PlanningSessionDetail? detail = await c.PlanningSessions.GetAsync(id);
+                    EnumerationResult<PlanningSessionMessage>? newest = await c.PlanningSessions.ListMessagesAsync(id, new EnumerationQuery { PageSize = 100 });
                     answer = newest?.Objects.FirstOrDefault(m => m.Role != "User" && m.Content.Contains("Plan:", StringComparison.Ordinal));
                     return answer != null && detail!.Session!.Status != PlanningSessionStatusEnum.Responding;
                 }, LiveTimeoutMs), "captain answered: " + String.Join("; ", _Behavior.Errors));
-                PlanningSessionSummaryResponse? summary = await c.SummarizePlanningSessionAsync(id, new PlanningSessionSummaryRequest { MessageId = answer!.Id });
+                PlanningSessionSummaryResponse? summary = await c.PlanningSessions.SummarizeAsync(id, new PlanningSessionSummaryRequest { MessageId = answer!.Id });
                 AssertEqual(id, summary?.SessionId, "summary");
-                Voyage? voyage = await c.DispatchPlanningSessionAsync(id, new PlanningSessionDispatchRequest { MessageId = answer.Id, Title = "Contract planned voyage" });
+                Voyage? voyage = await c.PlanningSessions.DispatchAsync(id, new PlanningSessionDispatchRequest { MessageId = answer.Id, Title = "Contract planned voyage" });
                 AssertStartsWith("vyg_", voyage?.Id, "dispatched voyage");
-                await c.StopPlanningTurnAsync(id);
-                await c.StopPlanningSessionAsync(id);
-                AssertTrue((await c.ListPlanningSessionsAsync(new EnumerationQuery { PageSize = 1000 }))!.Objects.Any(p => p.Id == id), "listed");
-                await c.DeletePlanningSessionAsync(id);
+                await c.PlanningSessions.StopTurnAsync(id);
+                await c.PlanningSessions.StopAsync(id);
+                AssertTrue((await c.PlanningSessions.ListAsync(new EnumerationQuery { PageSize = 1000 }))!.Objects.Any(p => p.Id == id), "listed");
+                await c.PlanningSessions.DeleteAsync(id);
             }));
 
             cases.Add(Case("objectives_and_refinement", "Objectives and backlog: CRUD, enumerate, reorder, GitHub import error; refinement sessions through apply", async (c, fx) =>
             {
                 VesselSetup setup = await LiveServerSetup.CreateVesselAsync(c, "objectives");
                 Captain captain = await LiveServerSetup.CreateCaptainAsync(c, "contract-refiner");
-                Objective first = (await c.CreateObjectiveAsync(new ObjectiveUpsertRequest { Title = "Contract objective one" }))!;
-                Objective second = (await c.CreateObjectiveAsync(new ObjectiveUpsertRequest { Title = "Contract objective two" }))!;
-                AssertEqual(first.Title, (await c.GetObjectiveAsync(first.Id))?.Title, "get objective");
-                AssertEqual("updated", (await c.UpdateObjectiveAsync(first.Id, new ObjectiveUpsertRequest { Description = "updated" }))?.Description, "update objective");
-                AssertTrue((await c.ListObjectivesAsync(new ObjectiveQuery { PageSize = 100 }))!.Objects.Any(o => o.Id == first.Id), "list objectives");
-                AssertTrue((await c.EnumerateObjectivesAsync(new ObjectiveQuery { PageSize = 100 }))!.Objects.Any(o => o.Id == second.Id), "enumerate objectives");
+                Objective first = (await c.Objectives.CreateAsync(new ObjectiveUpsertRequest { Title = "Contract objective one" }))!;
+                Objective second = (await c.Objectives.CreateAsync(new ObjectiveUpsertRequest { Title = "Contract objective two" }))!;
+                AssertEqual(first.Title, (await c.Objectives.GetAsync(first.Id))?.Title, "get objective");
+                AssertEqual("updated", (await c.Objectives.UpdateAsync(first.Id, new ObjectiveUpsertRequest { Description = "updated" }))?.Description, "update objective");
+                AssertTrue((await c.Objectives.ListAsync(new ObjectiveQuery { PageSize = 100 }))!.Objects.Any(o => o.Id == first.Id), "list objectives");
+                AssertTrue((await c.Objectives.EnumerateAsync(new ObjectiveQuery { PageSize = 100 }))!.Objects.Any(o => o.Id == second.Id), "enumerate objectives");
                 ObjectiveReorderRequest reorder = new ObjectiveReorderRequest();
                 reorder.Items = new List<ObjectiveReorderItem> { new ObjectiveReorderItem { ObjectiveId = second.Id, Rank = 1 }, new ObjectiveReorderItem { ObjectiveId = first.Id, Rank = 2 } };
-                AssertTrue((await c.ReorderObjectivesAsync(reorder))!.Items.Any(o => o.ObjectiveId == second.Id && o.Rank == 1), "reorder objectives");
-                AssertTrue((await c.ReorderBacklogAsync(reorder))!.Items.Any(o => o.ObjectiveId == first.Id && o.Rank == 2), "reorder backlog");
-                AssertEqual("backlog edit", (await c.UpdateBacklogItemAsync(second.Id, new ObjectiveUpsertRequest { Description = "backlog edit" }))?.Description, "update backlog item");
-                await ClientContract.ExpectErrorAsync(() => c.ImportObjectiveFromGitHubAsync(new GitHubObjectiveImportRequest { VesselId = setup.Vessel.Id, Number = 1 }), "a local vessel has no GitHub repository");
+                AssertTrue((await c.Objectives.ReorderAsync(reorder))!.Items.Any(o => o.ObjectiveId == second.Id && o.Rank == 1), "reorder objectives");
+                AssertTrue((await c.Objectives.ReorderBacklogAsync(reorder))!.Items.Any(o => o.ObjectiveId == first.Id && o.Rank == 2), "reorder backlog");
+                AssertEqual("backlog edit", (await c.Objectives.UpdateBacklogItemAsync(second.Id, new ObjectiveUpsertRequest { Description = "backlog edit" }))?.Description, "update backlog item");
+                await ClientContract.ExpectErrorAsync(() => c.Objectives.ImportFromGitHubAsync(new GitHubObjectiveImportRequest { VesselId = setup.Vessel.Id, Number = 1 }), "a local vessel has no GitHub repository");
 
                 _Behavior.OnPrompt = prompt => "Summary: ship a tiny change.\nAcceptance criteria:\n- A file exists.";
                 ObjectiveRefinementSessionCreateRequest refine = new ObjectiveRefinementSessionCreateRequest();
                 refine.CaptainId = captain.Id;
                 refine.VesselId = setup.Vessel.Id;
                 refine.Title = "Contract refinement";
-                ObjectiveRefinementSessionDetail backlogSession = (await c.CreateBacklogRefinementSessionAsync(first.Id, refine))!;
+                ObjectiveRefinementSessionDetail backlogSession = (await c.Objectives.CreateBacklogRefinementSessionAsync(first.Id, refine))!;
                 string sid = backlogSession.Session.Id;
-                await c.SendObjectiveRefinementMessageAsync(sid, new ObjectiveRefinementMessageRequest { Content = "Refine it." });
+                await c.Objectives.SendRefinementMessageAsync(sid, new ObjectiveRefinementMessageRequest { Content = "Refine it." });
                 ObjectiveRefinementMessage? answer = null;
                 AssertTrue(await LiveServerSetup.WaitUntilAsync(async () =>
                 {
-                    ObjectiveRefinementSessionDetail? detail = await c.GetObjectiveRefinementSessionAsync(sid);
-                    EnumerationResult<ObjectiveRefinementMessage>? newest = await c.ListObjectiveRefinementMessagesAsync(sid, new EnumerationQuery { PageSize = 100 });
+                    ObjectiveRefinementSessionDetail? detail = await c.Objectives.GetRefinementSessionAsync(sid);
+                    EnumerationResult<ObjectiveRefinementMessage>? newest = await c.Objectives.ListRefinementMessagesAsync(sid, new EnumerationQuery { PageSize = 100 });
                     answer = newest?.Objects.FirstOrDefault(m => m.Role != "User" && m.Content.Contains("Summary:", StringComparison.Ordinal));
                     return answer != null && detail!.Session.Status != ObjectiveRefinementSessionStatusEnum.Responding;
                 }, LiveTimeoutMs), "captain answered: " + String.Join("; ", _Behavior.Errors));
-                AssertEqual(sid, (await c.SummarizeObjectiveRefinementSessionAsync(sid, new ObjectiveRefinementSummaryRequest { MessageId = answer!.Id }))?.SessionId, "summarize");
-                AssertEqual(first.Id, (await c.ApplyObjectiveRefinementSummaryAsync(sid, new ObjectiveRefinementApplyRequest { MessageId = answer.Id }))?.Objective.Id, "apply");
-                AssertTrue((await c.ListBacklogRefinementSessionsAsync(first.Id))!.Objects.Any(r => r.Id == sid), "backlog sessions");
-                await c.StopObjectiveRefinementSessionAsync(sid);
-                await c.DeleteObjectiveRefinementSessionAsync(sid);
+                AssertEqual(sid, (await c.Objectives.SummarizeRefinementSessionAsync(sid, new ObjectiveRefinementSummaryRequest { MessageId = answer!.Id }))?.SessionId, "summarize");
+                AssertEqual(first.Id, (await c.Objectives.ApplyRefinementSummaryAsync(sid, new ObjectiveRefinementApplyRequest { MessageId = answer.Id }))?.Objective.Id, "apply");
+                AssertTrue((await c.Objectives.ListBacklogRefinementSessionsAsync(first.Id))!.Objects.Any(r => r.Id == sid), "backlog sessions");
+                await c.Objectives.StopRefinementSessionAsync(sid);
+                await c.Objectives.DeleteRefinementSessionAsync(sid);
 
-                ObjectiveRefinementSessionDetail objectiveSession = (await c.CreateObjectiveRefinementSessionAsync(second.Id, refine))!;
-                AssertTrue((await c.ListObjectiveRefinementSessionsAsync(second.Id))!.Objects.Any(r => r.Id == objectiveSession.Session.Id), "objective sessions");
-                await c.StopObjectiveRefinementSessionAsync(objectiveSession.Session.Id);
-                await c.DeleteObjectiveRefinementSessionAsync(objectiveSession.Session.Id);
+                ObjectiveRefinementSessionDetail objectiveSession = (await c.Objectives.CreateRefinementSessionAsync(second.Id, refine))!;
+                AssertTrue((await c.Objectives.ListRefinementSessionsAsync(second.Id))!.Objects.Any(r => r.Id == objectiveSession.Session.Id), "objective sessions");
+                await c.Objectives.StopRefinementSessionAsync(objectiveSession.Session.Id);
+                await c.Objectives.DeleteRefinementSessionAsync(objectiveSession.Session.Id);
 
-                await c.DeleteObjectiveAsync(first.Id);
-                await c.DeleteBacklogItemAsync(second.Id);
+                await c.Objectives.DeleteAsync(first.Id);
+                await c.Objectives.DeleteBacklogItemAsync(second.Id);
             }));
 
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "Armada.Client contract: Ask, planning, backlog (live server, stub captain)", cases: cases);
@@ -184,13 +184,13 @@ namespace Test.Shared.Suites.Client
 
         private static async Task<AskActionProposal> ProposeAsync(ArmadaClient c, string threadId)
         {
-            List<string> before = ((await c.EnumerateAskProposalsAsync(threadId, new EnumerationQuery { Status = "Pending", PageSize = 1000 }))?.Objects ?? new List<AskActionProposal>()).Select(p => p.Id).ToList();
+            List<string> before = ((await c.Ask.EnumerateProposalsAsync(threadId, new EnumerationQuery { Status = "Pending", PageSize = 1000 }))?.Objects ?? new List<AskActionProposal>()).Select(p => p.Id).ToList();
             // A turn may still be running (the follow-up after a decision); the server refuses a second one with 409.
             bool sent = await LiveServerSetup.WaitUntilAsync(async () =>
             {
                 try
                 {
-                    await c.SendAskMessageAsync(threadId, "Please PROPOSE-DISPATCH now");
+                    await c.Ask.SendMessageAsync(threadId, "Please PROPOSE-DISPATCH now");
                     return true;
                 }
                 catch (ArmadaApiException ex) when (ex.StatusCode == 409)
@@ -202,7 +202,7 @@ namespace Test.Shared.Suites.Client
             AskActionProposal? found = null;
             bool ok = await LiveServerSetup.WaitUntilAsync(async () =>
             {
-                found = ((await c.EnumerateAskProposalsAsync(threadId, new EnumerationQuery { Status = "Pending", PageSize = 1000 }))?.Objects ?? new List<AskActionProposal>()).FirstOrDefault(p => !before.Contains(p.Id));
+                found = ((await c.Ask.EnumerateProposalsAsync(threadId, new EnumerationQuery { Status = "Pending", PageSize = 1000 }))?.Objects ?? new List<AskActionProposal>()).FirstOrDefault(p => !before.Contains(p.Id));
                 return found != null;
             }, LiveTimeoutMs);
             if (!ok) throw new AssertionException("the captain did not propose");

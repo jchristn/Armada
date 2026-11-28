@@ -84,7 +84,7 @@ namespace Armada.Tui.Screens.Operations
             RowActions.Add(delete);
 
             _RunOnMount = OpsHandoff.Get(route, "run") == "new";
-            Call((c, t) => c.GetSettingsAsync(t), s =>
+            Call((c, t) => c.Server.GetSettingsAsync(t), s =>
             {
                 int? timeout = s?.FleetActions?.DefaultTimeoutSeconds;
                 if (timeout.HasValue && timeout.Value > 0) DefaultTimeout = timeout.Value;
@@ -129,7 +129,7 @@ namespace Armada.Tui.Screens.Operations
             q.PageNumber = query.PageNumber;
             q.PageSize = query.PageSize;
             q.Order = query.SortKey == "createdUtc" && !query.SortDescending ? "CreatedAscending" : "CreatedDescending";
-            EnumerationResult<FleetAction>? result = await Context.Client.EnumerateFleetActionsAsync(q, token).ConfigureAwait(false);
+            EnumerationResult<FleetAction>? result = await Context.Client.FleetActions.EnumerateAsync(q, token).ConfigureAwait(false);
             List<FleetAction> rows = result?.Objects ?? new List<FleetAction>();
             return new GridPage<FleetAction>(rows, result?.TotalRecords ?? rows.Count);
         }
@@ -195,7 +195,7 @@ namespace Armada.Tui.Screens.Operations
                 : Tr("Delete \"{{name}}\"? Past runs keep their snapshot of the definition. This cannot be undone.", LocalizationArgs.Of("name", a.Name));
             Confirm(title, message, () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting fleet action", t => Context.Client.DeleteFleetActionAsync(a.Id, t), () =>
+                DeleteProgress.RunVoid(Context, "Deleting fleet action", t => Context.Client.FleetActions.DeleteAsync(a.Id, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, a.IsBuiltIn
                         ? Tr("Built-in action \"{{name}}\" hidden.", LocalizationArgs.Of("name", a.Name))

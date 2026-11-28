@@ -22,7 +22,7 @@
 # produce work. Finally compose down -v removes the containers, volumes,
 # and network, and the images it built are removed by tag.
 #
-# The shipped compose.yaml runs the published v1.4.0 images. By default
+# The shipped compose.yaml runs the published v1.5.0 images. By default
 # this harness builds the current checkout into throwaway per-run tags
 # (armada-iv/<image>:<project>) through its generated override, so it
 # verifies the source being tested; --no-build runs the published images.
@@ -167,6 +167,8 @@ else
 fi
 
 export ARMADA_INITIAL_ADMIN_PASSWORD="$PASSWORD"
+# The stack also requires a Grafana admin password; the verification never signs in to Grafana.
+export ARMADA_GRAFANA_ADMIN_PASSWORD="${ARMADA_GRAFANA_ADMIN_PASSWORD:-$PASSWORD}"
 compose config --quiet || iv_die "compose configuration is invalid"
 
 if [ "$BUILD" -eq 1 ]; then

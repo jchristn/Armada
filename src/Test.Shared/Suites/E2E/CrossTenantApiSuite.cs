@@ -624,6 +624,38 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(_VoyageAId, detail.Voyage!.Id);
             }));
 
+            cases.Add(CaseAsync("voyage_dispatch_onto_tenant_a_vessel_from_tenant_b_returns_404", "Voyage_DispatchOntoTenantAVesselFromTenantB_Returns404", TestTags.Negative, async () =>
+            {
+                await E2EServerFixture.AcquireAsync(this);
+
+                string title = "xt-voyage-cross-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                HttpResponseMessage response = await _ClientB!.PostAsync("/api/v1/voyages",
+                    JsonHelper.ToJsonContent(new
+                    {
+                        Title = title,
+                        VesselId = _VesselAId,
+                        Missions = new[] { new { Title = "cross-tenant work", Description = "must not reach tenant A" } }
+                    })).ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.NotFound, response.StatusCode, "a vessel in another tenant is not found (RS-2.9)");
+
+                HttpResponseMessage list = await _ClientA!.GetAsync("/api/v1/voyages").ConfigureAwait(false);
+                EnumerationResult<Voyage> result = await JsonHelper.DeserializeAsync<EnumerationResult<Voyage>>(list).ConfigureAwait(false);
+                AssertFalse(result.Objects.Any(v => v.Title == title), "no voyage was created in tenant A");
+            }));
+
+            cases.Add(CaseAsync("mission_create_on_tenant_a_vessel_or_voyage_from_tenant_b_returns_404", "Mission_CreateOnTenantAVesselOrVoyageFromTenantB_Returns404", TestTags.Negative, async () =>
+            {
+                await E2EServerFixture.AcquireAsync(this);
+
+                HttpResponseMessage onVessel = await _ClientB!.PostAsync("/api/v1/missions",
+                    JsonHelper.ToJsonContent(new { Title = "xt-mission-cross", Description = "must not reach tenant A", VesselId = _VesselAId })).ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.NotFound, onVessel.StatusCode, "another tenant's vessel is not found (RS-2.9)");
+
+                HttpResponseMessage onVoyage = await _ClientB!.PostAsync("/api/v1/missions",
+                    JsonHelper.ToJsonContent(new { Title = "xt-mission-cross", Description = "must not reach tenant A", VoyageId = _VoyageAId })).ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.NotFound, onVoyage.StatusCode, "another tenant's voyage is not found (RS-2.9)");
+            }));
+
             cases.Add(CaseAsync("signal_create_in_tenant_a_returns_201", "Signal_CreateInTenantA_Returns201", TestTags.Positive, async () =>
             {
                 await E2EServerFixture.AcquireAsync(this);

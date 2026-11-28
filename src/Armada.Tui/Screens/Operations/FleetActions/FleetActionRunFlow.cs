@@ -304,8 +304,8 @@ namespace Armada.Tui.Screens.Operations
             {
                 ArmadaPageQuery q = new ArmadaPageQuery();
                 q.PageSize = 1000;
-                EnumerationResult<Vessel>? v = await c.ListVesselsAsync(q, t).ConfigureAwait(false);
-                EnumerationResult<Fleet>? f = await c.ListFleetsAsync(q, t).ConfigureAwait(false);
+                EnumerationResult<Vessel>? v = await c.Vessels.ListAsync(q, t).ConfigureAwait(false);
+                EnumerationResult<Fleet>? f = await c.Fleets.ListAsync(q, t).ConfigureAwait(false);
                 return new KeyValuePair<List<Vessel>, List<Fleet>>(v?.Objects ?? new List<Vessel>(), f?.Objects ?? new List<Fleet>());
             }, data => picker.SetData(data.Key, data.Value), null, ex =>
             {
@@ -327,7 +327,7 @@ namespace Armada.Tui.Screens.Operations
         {
             VesselIds = vesselIds.ToList();
             LoadActions();
-            _Screen.Call((c, t) => c.GetVesselAsync(VesselIds[0], t), v => { PreviewVessel = v; Changed(); }, null, ex => { PreviewVessel = null; Changed(); });
+            _Screen.Call((c, t) => c.Vessels.GetAsync(VesselIds[0], t), v => { PreviewVessel = v; Changed(); }, null, ex => { PreviewVessel = null; Changed(); });
             _Screen.Reference.Ensure("pipelines");
             ShowConfigure();
         }
@@ -391,7 +391,7 @@ namespace Armada.Tui.Screens.Operations
         private void LoadActions()
         {
             _ActionsLoading = true;
-            _Screen.Call((c, t) => c.EnumerateFleetActionsAsync(new FleetActionEnumerateQuery { PageNumber = 1, PageSize = 500 }, t), result =>
+            _Screen.Call((c, t) => c.FleetActions.EnumerateAsync(new FleetActionEnumerateQuery { PageNumber = 1, PageSize = 500 }, t), result =>
             {
                 List<FleetAction> all = result?.Objects ?? new List<FleetAction>();
                 Actions = all;
@@ -774,7 +774,7 @@ namespace Armada.Tui.Screens.Operations
                 }
 
                 string? actionId = saved ? action!.Id : null;
-                _Screen.Call((cl, t) => actionId != null ? cl.RunFleetActionAsync(actionId, request, t) : cl.RunAdHocFleetActionAsync(request, t), result =>
+                _Screen.Call((cl, t) => actionId != null ? cl.FleetActions.RunAsync(actionId, request, t) : cl.FleetActions.RunAdHocAsync(request, t), result =>
                 {
                     started = true;
                     _ServerError = null;

@@ -31,6 +31,9 @@ namespace Armada.Server.Mcp
         /// <summary>Ordered captain matching classes. Empty clears; null preserves on update.</summary>
         public List<PersonaCaptainPriority>? CaptainPriorities { get; set; }
 
+        /// <summary>Escalation ladder, lowest rung first (RS-5.6). Empty clears; null preserves on update.</summary>
+        public List<PersonaCaptainPriority>? EscalationLadder { get; set; }
+
         /// <summary>Optional unavailable-class policy. Defaults to FallThrough on create.</summary>
         public PersonaPriorityAvailabilityEnum? PriorityAvailability { get; set; }
 

@@ -49,7 +49,7 @@ namespace Test.Shared.Suites.E2E
                 StubCaptainRuntime.Install(fx.Server, _Behavior);
                 using (ArmadaClient admin = LiveServerSetup.Admin(fx))
                 {
-                    SettingsData settings = (await admin.GetSettingsAsync().ConfigureAwait(false))!;
+                    SettingsData settings = (await admin.Server.GetSettingsAsync().ConfigureAwait(false))!;
                     AssertNotNull(settings.Ask, "the settings API returns the ask group");
                     AssertTrue(settings.Ask!.ReportResultsOnCompletion, "reports are on by default");
 
@@ -59,18 +59,18 @@ namespace Test.Shared.Suites.E2E
                     string missionTitle = "Report change " + Guid.NewGuid().ToString("N").Substring(0, 6);
                     _Behavior.OnTurn = turn => TurnAsync(turn, setup.Vessel.Id, missionTitle);
 
-                    AskThread thread = (await admin.CreateAskThreadAsync(new AskThreadCreateRequest { Title = "Report e2e", CaptainId = captain.Id }).ConfigureAwait(false))!;
-                    await admin.SendAskMessageAsync(thread.Id, "Please run the change " + DispatchMarker).ConfigureAwait(false);
+                    AskThread thread = (await admin.Ask.CreateThreadAsync(new AskThreadCreateRequest { Title = "Report e2e", CaptainId = captain.Id }).ConfigureAwait(false))!;
+                    await admin.Ask.SendMessageAsync(thread.Id, "Please run the change " + DispatchMarker).ConfigureAwait(false);
 
                     AskActionProposal? proposal = null;
                     AssertTrue(await LiveServerSetup.WaitUntilAsync(async () =>
                     {
-                        AskMessagePage? page = await admin.EnumerateAskMessagesAsync(thread.Id).ConfigureAwait(false);
+                        AskMessagePage? page = await admin.Ask.EnumerateMessagesAsync(thread.Id).ConfigureAwait(false);
                         proposal = page?.Messages.Select(m => m.Proposal).FirstOrDefault(p => p != null && p.Status == AskProposalStatusEnum.Pending);
                         return proposal != null && await TurnIdleAsync(admin, thread.Id).ConfigureAwait(false);
                     }, LiveTimeoutMs).ConfigureAwait(false), "the captain proposed a dispatch: " + Errors());
 
-                    AskActionProposal? approved = await admin.ApproveAskProposalAsync(thread.Id, proposal!.Id).ConfigureAwait(false);
+                    AskActionProposal? approved = await admin.Ask.ApproveProposalAsync(thread.Id, proposal!.Id).ConfigureAwait(false);
                     AssertEqual(AskProposalStatusEnum.Executed, approved?.Status, "the dispatch ran");
 
                     // The mission lands; the voyage is marked Complete by the Admiral's next health check (the fixture's
@@ -78,7 +78,7 @@ namespace Test.Shared.Suites.E2E
                     Mission? landed = null;
                     AssertTrue(await LiveServerSetup.WaitUntilAsync(async () =>
                     {
-                        landed = (await admin.ListMissionsAsync(new ArmadaPageQuery(1, 100)).ConfigureAwait(false))?.Objects.FirstOrDefault(m => m.Title == missionTitle);
+                        landed = (await admin.Missions.ListAsync(new ArmadaPageQuery(1, 100)).ConfigureAwait(false))?.Objects.FirstOrDefault(m => m.Title == missionTitle);
                         return landed != null && landed.Status == MissionStatusEnum.Complete;
                     }, LiveTimeoutMs).ConfigureAwait(false), "the mission landed (status " + (landed?.Status.ToString() ?? "none") + " " + landed?.FailureReason + "): " + Errors());
                     await fx.Server.Admiral.HealthCheckAsync().ConfigureAwait(false);
@@ -86,7 +86,7 @@ namespace Test.Shared.Suites.E2E
                     AskMessage? report = null;
                     AssertTrue(await LiveServerSetup.WaitUntilAsync(async () =>
                     {
-                        AskMessagePage? page = await admin.EnumerateAskMessagesAsync(thread.Id, new AskMessageEnumerateQuery { PageSize = 200 }).ConfigureAwait(false);
+                        AskMessagePage? page = await admin.Ask.EnumerateMessagesAsync(thread.Id, new AskMessageEnumerateQuery { PageSize = 200 }).ConfigureAwait(false);
                         report = page?.Messages.FirstOrDefault(m => m.Kind == AskMessageKindEnum.WorkReport && m.ContentText.Length > 0);
                         return report != null;
                     }, LiveTimeoutMs).ConfigureAwait(false), "the thread got the captain's report: " + Errors() + "\n" + await DumpAsync(admin, thread.Id).ConfigureAwait(false));
@@ -96,7 +96,7 @@ namespace Test.Shared.Suites.E2E
                     AssertEqual(captain.Id, report.CaptainId, "written by the thread's captain");
                     AssertNotNull(report.TrackedWorkId, "linked to the tracked work");
 
-                    AskMessagePage messages = (await admin.EnumerateAskMessagesAsync(thread.Id, new AskMessageEnumerateQuery { PageSize = 200 }).ConfigureAwait(false))!;
+                    AskMessagePage messages = (await admin.Ask.EnumerateMessagesAsync(thread.Id, new AskMessageEnumerateQuery { PageSize = 200 }).ConfigureAwait(false))!;
                     AskMessage final = messages.Messages.Last(m => m.Kind == AskMessageKindEnum.WorkUpdate && m.Sequence < report.Sequence);
                     AssertContains("finished", final.ContentText, "the final milestone");
                     AssertContains("**Outcome**", final.ContentText, "carries the outcome");
@@ -106,11 +106,11 @@ namespace Test.Shared.Suites.E2E
 
                     // The ask group round-trips through the settings API and applies live.
                     settings.Ask.ReportResultsOnCompletion = false;
-                    SettingsData updated = (await admin.UpdateSettingsAsync(settings).ConfigureAwait(false))!;
+                    SettingsData updated = (await admin.Server.UpdateSettingsAsync(settings).ConfigureAwait(false))!;
                     AssertFalse(updated.Ask!.ReportResultsOnCompletion, "turned off");
                     AssertEqual(settings.Ask.TurnTimeoutMinutes, updated.Ask.TurnTimeoutMinutes, "other ask values kept");
                     updated.Ask.ReportResultsOnCompletion = true;
-                    SettingsData restored = (await admin.UpdateSettingsAsync(updated).ConfigureAwait(false))!;
+                    SettingsData restored = (await admin.Server.UpdateSettingsAsync(updated).ConfigureAwait(false))!;
                     AssertTrue(restored.Ask!.ReportResultsOnCompletion, "turned back on");
                 }
             }));
@@ -138,13 +138,13 @@ namespace Test.Shared.Suites.E2E
 
         private static async Task<bool> TurnIdleAsync(ArmadaClient admin, string threadId)
         {
-            AskMessagePage? page = await admin.EnumerateAskMessagesAsync(threadId).ConfigureAwait(false);
+            AskMessagePage? page = await admin.Ask.EnumerateMessagesAsync(threadId).ConfigureAwait(false);
             return page != null && page.Messages.Any(m => m.ContentText.StartsWith("I proposed a dispatch", StringComparison.Ordinal));
         }
 
         private static async Task<string> DumpAsync(ArmadaClient admin, string threadId)
         {
-            AskMessagePage? page = await admin.EnumerateAskMessagesAsync(threadId, new AskMessageEnumerateQuery { PageSize = 200 }).ConfigureAwait(false);
+            AskMessagePage? page = await admin.Ask.EnumerateMessagesAsync(threadId, new AskMessageEnumerateQuery { PageSize = 200 }).ConfigureAwait(false);
             if (page == null) return "(no messages)";
             return String.Join("\n", page.Messages.Select(m => m.Sequence + " " + m.Role + "/" + m.Kind + ": " + (m.ContentText.Length > 300 ? m.ContentText.Substring(0, 300) : m.ContentText)));
         }

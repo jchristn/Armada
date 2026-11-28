@@ -11,12 +11,16 @@ namespace Armada.Tui.Screens.Configuration
     using Armada.Tui.Services;
     using Armada.Tui.Widgets;
 
-    /// <summary>Ordered persona matching-class editor, including availability and exhaustion controls.</summary>
+    /// <summary>
+    /// Ordered persona matching-class editor, including availability and exhaustion controls, and the escalation ladder
+    /// (RS-5.6), which uses the same matcher.
+    /// </summary>
     public sealed class PersonaPriorityEditor
     {
         private readonly RecordListField<PersonaCaptainPriority> _Priorities;
         private readonly SelectField<string> _Availability;
         private readonly SelectField<string> _Exhaustion;
+        private readonly RecordListField<PersonaCaptainPriority> _Ladder;
 
         /// <summary>Attach localized fields to a persona form. The existing persona is never mutated.</summary>
         /// <exception cref="ArgumentNullException">The context or form is null.</exception>
@@ -29,7 +33,7 @@ namespace Armada.Tui.Screens.Configuration
                 "a adds a priority; Enter edits; Del removes; Alt+Up/Down reorders.");
             _Priorities.EmptyText = "None (default routing)";
             _Priorities.Fingerprint = Describe;
-            _Priorities.Editor = (priority, done) => Edit(context, priority, done);
+            _Priorities.Editor = (priority, done) => Edit(context, "Captain priorities", priority, done);
             _Availability = form.Select("When a priority is unavailable", Enum.GetNames<PersonaPriorityAvailabilityEnum>()
                 .Select(v => new SelectOption<string>(v, context.Loc.T(v == "FallThrough" ? "Try lower priorities" : "Wait for the first priority"))).ToList(),
                 (persona?.PriorityAvailability ?? PersonaPriorityAvailabilityEnum.FallThrough).ToString(), null, true);
@@ -37,6 +41,12 @@ namespace Armada.Tui.Screens.Configuration
                 .Select(v => new SelectOption<string>(v, context.Loc.T(v == "Wait" ? "Wait" : "Use any eligible captain"))).ToList(),
                 (persona?.PriorityExhaustion ?? PersonaPriorityExhaustionEnum.Wait).ToString(), null, true,
                 "Wait for the first priority always waits, regardless of the exhaustion setting.");
+            _Ladder = form.List<PersonaCaptainPriority>("Escalation ladder", p => Describe(p),
+                persona?.EscalationLadder.Select(Copy).ToList(), 4,
+                "Lowest rung first. A work stage whose captain cannot finish moves to the next rung. a adds a rung; Enter edits; Del removes; Alt+Up/Down reorders.");
+            _Ladder.EmptyText = "None (higher tier only)";
+            _Ladder.Fingerprint = Describe;
+            _Ladder.Editor = (rung, done) => Edit(context, "Escalation ladder", rung, done);
         }
 
         /// <summary>Copy form values into a save payload.</summary>
@@ -47,6 +57,7 @@ namespace Armada.Tui.Screens.Configuration
             persona.CaptainPriorities = _Priorities.Items.Select(Copy).ToList();
             persona.PriorityAvailability = EntityForm.EnumValue(_Availability, PersonaPriorityAvailabilityEnum.FallThrough);
             persona.PriorityExhaustion = EntityForm.EnumValue(_Exhaustion, PersonaPriorityExhaustionEnum.Wait);
+            persona.EscalationLadder = _Ladder.Items.Select(Copy).ToList();
         }
 
         private static string Describe(PersonaCaptainPriority priority)
@@ -59,12 +70,12 @@ namespace Armada.Tui.Screens.Configuration
             return new PersonaCaptainPriority { Runtime = priority.Runtime, Model = priority.Model, Endpoint = priority.Endpoint, MinimumTier = priority.MinimumTier };
         }
 
-        private static void Edit(TuiContext context, PersonaCaptainPriority? priority, Action<PersonaCaptainPriority> done)
+        private static void Edit(TuiContext context, string title, PersonaCaptainPriority? priority, Action<PersonaCaptainPriority> done)
         {
-            EntityUi.Run(context, ct => context.Client.ListModelEndpointsAsync(ct), endpoints => EditLoaded(context, priority, done, endpoints ?? new List<ModelEndpoint>()), "Failed to load endpoints.");
+            EntityUi.Run(context, ct => context.Client.ModelEndpoints.ListAsync(ct), endpoints => EditLoaded(context, title, priority, done, endpoints ?? new List<ModelEndpoint>()), "Failed to load endpoints.");
         }
 
-        private static void EditLoaded(TuiContext context, PersonaCaptainPriority? priority, Action<PersonaCaptainPriority> done, List<ModelEndpoint> endpoints)
+        private static void EditLoaded(TuiContext context, string title, PersonaCaptainPriority? priority, Action<PersonaCaptainPriority> done, List<ModelEndpoint> endpoints)
         {
             EntityForm form = new EntityForm(context);
             List<SelectOption<string>> targets = Enum.GetNames<AgentRuntimeEnum>().Where(v => v != "ApiEndpoint").Select(v => new SelectOption<string>(v, v)).ToList();
@@ -83,7 +94,7 @@ namespace Armada.Tui.Screens.Configuration
             SyncTarget();
             form.MarkClean();
             PersonaCaptainPriority? result = null;
-            EntityUi.ShowForm(context, "Captain priorities", form, "Save", token =>
+            EntityUi.ShowForm(context, title, form, "Save", token =>
             {
                 token.ThrowIfCancellationRequested();
                 PersonaCaptainPriority candidate = new PersonaCaptainPriority

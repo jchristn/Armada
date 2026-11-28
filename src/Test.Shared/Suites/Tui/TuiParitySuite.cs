@@ -75,14 +75,14 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
-            cases.Add(TuiCase.Sync(Suite, "api_exports_have_client_methods", "Every client.ts server-calling export has a manifest entry and an ArmadaClient method", () =>
+            cases.Add(TuiCase.Sync(Suite, "api_exports_have_client_methods", "Every client.ts server-calling export has a manifest entry and an ArmadaClient sub-client method that names it", () =>
             {
                 ParityManifest manifest = Load();
                 List<string> exports = DashboardSource.ApiExports();
-                AssertEqual(463, exports.Count, "server-calling exports");
+                AssertEqual(473, exports.Count, "server-calling exports");
                 Missing(manifest, "api", exports);
-                HashSet<string> methods = new HashSet<string>(typeof(ArmadaClient).GetMethods(BindingFlags.Public | BindingFlags.Instance).Select(m => m.Name), StringComparer.Ordinal);
-                List<string> missing = exports.Where(e => !methods.Contains(Char.ToUpperInvariant(e[0]) + e.Substring(1) + "Async")).ToList();
+                HashSet<string> mirrored = new HashSet<string>(ClientRouteMap.ApiMethods().Select(m => m.DashboardExport).Where(n => n != null).Select(n => n!), StringComparer.Ordinal);
+                List<string> missing = exports.Where(e => !mirrored.Contains(e)).ToList();
                 if (missing.Count > 0) throw new AssertionException("client.ts exports without an ArmadaClient method: " + String.Join(", ", missing));
             }));
 
@@ -115,7 +115,9 @@ namespace Test.Shared.Suites.Tui
                     if (e.Tui.StartsWith("ArmadaClient.", StringComparison.Ordinal))
                     {
                         string method = e.Tui.Substring("ArmadaClient.".Length);
-                        AssertTrue(typeof(ArmadaClient).GetMethod(method, BindingFlags.Public | BindingFlags.Instance) != null || typeof(ArmadaClient).GetMethods().Any(m => m.Name == method), e.Tui);
+                        bool onClient = typeof(ArmadaClient).GetMethods(BindingFlags.Public | BindingFlags.Instance).Any(m => m.Name == method);
+                        bool onArea = ClientRouteMap.ApiMethods().Any(m => m.Name == method);
+                        AssertTrue(onClient || onArea, e.Tui);
                     }
                     else if (e.Tui == "Router")
                     {

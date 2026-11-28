@@ -160,8 +160,10 @@ namespace Armada.Tui.Screens.Configuration
             InputField topP = form.Text("Top P", inference.TopP?.ToString(CultureInfo.InvariantCulture), "Provider default (0–1)");
             InputField contextLength = form.Text("Context Window (Ollama num_ctx)", inference.ContextLength?.ToString(CultureInfo.InvariantCulture), "Model default (512–2097152)");
             InputField maxConcurrent = form.Text("Max Concurrent Missions", inference.MaxConcurrentMissions?.ToString(CultureInfo.InvariantCulture), "Unlimited (1–64, per base URL)");
-            CheckField streaming = form.Check("Stream Responses", inference.Streaming);
+            SelectField<string> streaming = form.Enum("Stream Responses", inference.StreamingMode);
             InputField firstResponse = form.Text("First-response Timeout (ms)", inference.FirstResponseTimeoutMs?.ToString(CultureInfo.InvariantCulture), "Request timeout (1000–1800000)");
+            InputField toolWindow = form.Text("Tool Output Window (%)", inference.ToolOutputWindowPercent?.ToString(CultureInfo.InvariantCulture), "12 (1–50, share of the context window)");
+            InputField repeatLimit = form.Text("Repeated Tool Call Limit", inference.RepeatedToolCallLimit?.ToString(CultureInfo.InvariantCulture), "3 (2-20 identical calls in a row before a note; twice stops the run)");
             SelectField<string> scope = form.Scope(existing != null ? existing.Scope : ScopeRules.ResolveCreateScope(context.Session, null));
             CheckField enabled = form.Check("Enabled", existing?.Enabled ?? true);
             form.MarkClean();
@@ -206,8 +208,10 @@ namespace Armada.Tui.Screens.Configuration
                         TopP = String.IsNullOrWhiteSpace(topP.Value) ? null : Double.Parse(topP.Value, CultureInfo.InvariantCulture),
                         ContextLength = String.IsNullOrWhiteSpace(contextLength.Value) ? null : Int32.Parse(contextLength.Value, CultureInfo.InvariantCulture),
                         MaxConcurrentMissions = String.IsNullOrWhiteSpace(maxConcurrent.Value) ? null : Int32.Parse(maxConcurrent.Value, CultureInfo.InvariantCulture),
-                        Streaming = streaming.Value,
-                        FirstResponseTimeoutMs = String.IsNullOrWhiteSpace(firstResponse.Value) ? null : Int32.Parse(firstResponse.Value, CultureInfo.InvariantCulture)
+                        StreamingMode = EntityForm.EnumValue(streaming, InferenceStreamingModeEnum.Automatic),
+                        FirstResponseTimeoutMs = String.IsNullOrWhiteSpace(firstResponse.Value) ? null : Int32.Parse(firstResponse.Value, CultureInfo.InvariantCulture),
+                        ToolOutputWindowPercent = String.IsNullOrWhiteSpace(toolWindow.Value) ? null : Int32.Parse(toolWindow.Value, CultureInfo.InvariantCulture),
+                        RepeatedToolCallLimit = String.IsNullOrWhiteSpace(repeatLimit.Value) ? null : Int32.Parse(repeatLimit.Value, CultureInfo.InvariantCulture)
                     };
                     payload.InferenceOptions.Validate();
                 }
@@ -232,8 +236,8 @@ namespace Armada.Tui.Screens.Configuration
                 payload.Headers = extra;
                 string? key = at == ModelEndpointAuthTypeEnum.None || String.IsNullOrEmpty(apiKey.Value) ? null : apiKey.Value;
                 saved = existing != null
-                    ? await context.Client.UpdateModelEndpointAsync(existing.Id, payload, key, ct).ConfigureAwait(false)
-                    : await context.Client.CreateModelEndpointAsync(payload, key, ct).ConfigureAwait(false);
+                    ? await context.Client.ModelEndpoints.UpdateAsync(existing.Id, payload, key, ct).ConfigureAwait(false)
+                    : await context.Client.ModelEndpoints.CreateAsync(payload, key, ct).ConfigureAwait(false);
                 return null;
             }, () =>
             {
@@ -257,7 +261,7 @@ namespace Armada.Tui.Screens.Configuration
             if (context == null) throw new ArgumentNullException(nameof(context));
             if (endpoint == null) throw new ArgumentNullException(nameof(endpoint));
             EntityUi.Toast(context, NotificationSeverityEnum.Info, context.Loc.T("Validating..."));
-            EntityUi.Run<ModelEndpointProbeResult?>(context, ct => context.Client.ValidateModelEndpointAsync(endpoint.Id, ct), result =>
+            EntityUi.Run<ModelEndpointProbeResult?>(context, ct => context.Client.ModelEndpoints.ValidateAsync(endpoint.Id, ct), result =>
             {
                 if (result == null) return;
                 ShowProbe(context, endpoint, result);

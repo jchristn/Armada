@@ -72,7 +72,7 @@ namespace Test.Shared.Suites.Services
                     Mission waiting = await AddMissionAsync(db, h.Vessel, "downstream", MissionStatusEnum.Pending);
                     waiting.DependsOnMissionId = handoff == "missing" ? "msn_missing" : dependency.Id;
                     if (handoff == "branch_ready" || handoff == "architect_pending") waiting.BranchName = dependency.BranchName;
-                    if (handoff == "architect_ready") waiting.Description = "<!-- ARMADA:ARCHITECT-HANDOFF -->";
+                    if (handoff == "architect_ready") { waiting.ArchitectSourceMissionId = dependency.Id; waiting.ArchitectPlanIndex = 0; }
                     await db.Missions.UpdateAsync(waiting);
                     bool ready = handoff.EndsWith("ready") || handoff == "complete";
                     MissionAssignmentBlocker blocker = (await h.Missions.GetAssignmentBlockerAsync(waiting))!;
@@ -495,12 +495,14 @@ namespace Test.Shared.Suites.Services
                     MissionAssignmentBlocker? blocker = await h.Missions.GetAssignmentBlockerAsync(mission);
                     AssertEqual(MissionAssignmentBlockerReasonEnum.PlacementWaiting, blocker!.Reason, "reason");
                     AssertContains("api-inference-context-v1", blocker.Summary);
-                    AssertContains("api-inference-context-v1", h.Missions.GetPlacementWaitReason(mission.Id) ?? String.Empty);
+                    MissionAdmissionResult? recorded = h.Missions.GetAdmissionResult(mission.Id);
+                    AssertEqual(MissionAssignmentBlockerReasonEnum.PlacementWaiting, recorded!.Blocker.Reason, "dispatch recorded the same typed reason");
+                    AssertEqual(blocker.Summary, recorded.Blocker.Summary, "the blocker reads the dispatch result");
 
                     // Placement now succeeds; provisioning afterwards may still fail in this harness, which is not under test.
                     h.Missions.ResolveDockPlacementAsync = (m, c, v) => Task.FromResult(DockPlacement.OnAdmiral("test"));
                     await h.Missions.TryAssignAsync(mission, h.Vessel);
-                    AssertNull(h.Missions.GetPlacementWaitReason(mission.Id), "the reason is dropped once placement succeeds");
+                    AssertTrue(h.Missions.GetAdmissionResult(mission.Id)?.Blocker.Reason != MissionAssignmentBlockerReasonEnum.PlacementWaiting, "the placement reason is dropped once placement succeeds");
                 }
             }));
 

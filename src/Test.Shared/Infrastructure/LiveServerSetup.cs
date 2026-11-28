@@ -43,7 +43,7 @@ namespace Test.Shared.Infrastructure
         {
             if (admin == null) throw new ArgumentNullException(nameof(admin));
             string suffix = Guid.NewGuid().ToString("N").Substring(0, 6);
-            Fleet fleet = (await admin.CreateFleetAsync(new Fleet { Name = label + "-fleet-" + suffix }).ConfigureAwait(false))!;
+            Fleet fleet = (await admin.Fleets.CreateAsync(new Fleet { Name = label + "-fleet-" + suffix }).ConfigureAwait(false))!;
             string bare = TestGitRepoHelper.CreateBareRepoCopy();
             string working = Path.Combine(TestTemp.NewDirectory("e2e-checkout"), "work");
             int clone = Git(null, out string cloneOutput, "clone", bare, working);
@@ -56,7 +56,7 @@ namespace Test.Shared.Infrastructure
             vessel.DefaultBranch = "main";
             vessel.LandingMode = landingMode;
             vessel.WorkingDirectory = working;
-            Vessel created = (await admin.CreateVesselAsync(vessel).ConfigureAwait(false))!;
+            Vessel created = (await admin.Vessels.CreateAsync(vessel).ConfigureAwait(false))!;
 
             VesselSetup setup = new VesselSetup();
             setup.Fleet = fleet;
@@ -78,7 +78,7 @@ namespace Test.Shared.Infrastructure
             Captain captain = new Captain();
             captain.Name = name + "-" + Guid.NewGuid().ToString("N").Substring(0, 4);
             captain.Runtime = AgentRuntimeEnum.ClaudeCode;
-            return (await admin.CreateCaptainAsync(captain).ConfigureAwait(false))!;
+            return (await admin.Captains.CreateAsync(captain).ConfigureAwait(false))!;
         }
 
         /// <summary>
@@ -106,7 +106,7 @@ namespace Test.Shared.Infrastructure
             production.RollbackCommand = "echo rollback-production";
             production.RollbackVerificationCommand = "echo rollback-verify-production";
             profile.Environments.Add(production);
-            WorkflowProfile createdProfile = (await admin.CreateWorkflowProfileAsync(profile).ConfigureAwait(false))!;
+            WorkflowProfile createdProfile = (await admin.WorkflowProfiles.CreateAsync(profile).ConfigureAwait(false))!;
 
             DeploymentEnvironmentUpsertRequest env = new DeploymentEnvironmentUpsertRequest();
             env.VesselId = vesselId;
@@ -114,7 +114,7 @@ namespace Test.Shared.Infrastructure
             env.Kind = EnvironmentKindEnum.Production;
             env.RequiresApproval = true;
             env.Active = true;
-            DeploymentEnvironment environment = (await admin.CreateEnvironmentAsync(env).ConfigureAwait(false))!;
+            DeploymentEnvironment environment = (await admin.Environments.CreateAsync(env).ConfigureAwait(false))!;
 
             DeploymentUpsertRequest request = new DeploymentUpsertRequest();
             request.VesselId = vesselId;
@@ -122,7 +122,7 @@ namespace Test.Shared.Infrastructure
             request.EnvironmentId = environment.Id;
             request.Title = title;
             request.AutoExecute = true;
-            return (await admin.CreateDeploymentAsync(request).ConfigureAwait(false))!;
+            return (await admin.Deployments.CreateAsync(request).ConfigureAwait(false))!;
         }
 
         /// <summary>

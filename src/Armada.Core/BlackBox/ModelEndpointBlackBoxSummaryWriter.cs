@@ -48,7 +48,7 @@ namespace Armada.Core.BlackBox
         private readonly string _Header = "[ModelEndpointBlackBoxSummaryWriter] ";
         private readonly DatabaseDriver _Database;
         private readonly LoggingModule _Logging;
-        private readonly Func<ModelEndpoint, LoggingModule, CompletionClientBase> _ClientFactory;
+        private readonly Func<ModelEndpoint, LoggingModule, ProviderClientBase> _ClientFactory;
         private int _MaxTokens = 400;
         private int _MaxPromptChars = 12000;
 
@@ -63,7 +63,7 @@ namespace Armada.Core.BlackBox
         /// <param name="logging">Logging module.</param>
         /// <param name="clientFactory">Client factory, or null for <see cref="ModelEndpointClientFactory.CreateCompletion"/>.</param>
         /// <exception cref="ArgumentNullException">Thrown when database or logging is null.</exception>
-        public ModelEndpointBlackBoxSummaryWriter(DatabaseDriver database, LoggingModule logging, Func<ModelEndpoint, LoggingModule, CompletionClientBase>? clientFactory = null)
+        public ModelEndpointBlackBoxSummaryWriter(DatabaseDriver database, LoggingModule logging, Func<ModelEndpoint, LoggingModule, ProviderClientBase>? clientFactory = null)
         {
             _Database = database ?? throw new ArgumentNullException(nameof(database));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
@@ -85,7 +85,7 @@ namespace Armada.Core.BlackBox
                 return null;
             }
             string prompt = BuildPrompt(record, analysis);
-            using (CompletionClientBase client = _ClientFactory(endpoint, _Logging))
+            using (ProviderClientBase client = _ClientFactory(endpoint, _Logging))
             {
                 CompletionOptions options = new CompletionOptions();
                 options.MaxTokens = MaxTokens;
@@ -147,7 +147,7 @@ namespace Armada.Core.BlackBox
 
         private static string? Clean(string text)
         {
-            string t = text.Replace('—', '-').Replace('–', '-').Trim();
+            string t = text.Replace('\u2014', '-').Replace('–', '-').Trim();
             if (t.Length == 0) return null;
             return BlackBoxLimits.Clip(t, BlackBoxLimits.MaxSummaryChars);
         }

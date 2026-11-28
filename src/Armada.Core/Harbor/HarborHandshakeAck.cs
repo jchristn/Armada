@@ -42,6 +42,13 @@ namespace Armada.Core.Harbor
         /// </summary>
         public long? LastJobSequence { get; set; } = null;
 
+        /// <summary>
+        /// Capability flags the Admiral expects that this Harbor did not advertise (see
+        /// <see cref="HarborCapabilityFlags.Advertised"/>), or null when none are missing or the Admiral predates the field.
+        /// The Admiral falls back to the earlier behavior for each one; the Harbor shows "Harbor update recommended".
+        /// </summary>
+        public List<string>? MissingCapabilities { get; set; } = null;
+
         #endregion
     }
 }

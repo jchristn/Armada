@@ -18,6 +18,16 @@ namespace Armada.Core.Services
     /// </summary>
     public class ModelEndpointAuthHandler : DelegatingHandler
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Key passed to a PolyPrompt client that requires one at construction when this handler authenticates the
+        /// request instead. Any request header carrying it is removed before the request is sent.
+        /// </summary>
+        public const string ExternalAuthPlaceholder = "armada-external-auth";
+
+        #endregion
+
         #region Private-Members
 
         private readonly ModelEndpointAuthTypeEnum _AuthType;
@@ -71,6 +81,12 @@ namespace Armada.Core.Services
 
         private void Apply(HttpRequestMessage request)
         {
+            List<string> placeholders = new List<string>();
+            foreach (KeyValuePair<string, IEnumerable<string>> header in request.Headers)
+                foreach (string value in header.Value)
+                    if (value.Contains(ExternalAuthPlaceholder, StringComparison.Ordinal)) placeholders.Add(header.Key);
+            foreach (string name in placeholders) request.Headers.Remove(name);
+
             foreach (KeyValuePair<string, string> header in _Headers)
             {
                 request.Headers.Remove(header.Key);

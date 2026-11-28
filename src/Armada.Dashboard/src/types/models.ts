@@ -244,12 +244,15 @@ export type MissionStatus =
   | 'Blocked';
 
 /** Wire values of VoyageStatusEnum. */
-export type VoyageStatus = 'Open' | 'InProgress' | 'Complete' | 'Failed' | 'Cancelled';
+/** Building: the voyage's missions are still being written; none starts until it is Open. */
+export type VoyageStatus = 'Building' | 'Open' | 'InProgress' | 'Complete' | 'Failed' | 'Cancelled';
 
 /** Wire values of CaptainStateEnum. */
 export type CaptainState = 'Idle' | 'Working' | 'Planning' | 'Refining' | 'Stalled' | 'Stopping' | 'Quarantined' | 'Analyzing';
 
 export interface Captain {
+  /** True when a Harbor running this captain's work is missing an expected capability flag; absent on older servers. */
+  harborUpdateRecommended?: boolean;
   maxConcurrency?: number;
   activeMissionCount?: number;
   activeMissionIds?: string[];
@@ -752,6 +755,8 @@ export interface Voyage {
   /** Current black box entry when the voyage failed. Absent on older servers. */
   lastBlackBoxEntryId?: string | null;
   isEvaluation?: boolean;
+  /** Judge strength rule copied from the pipeline at creation (RS-8.7); null means off. Absent on older servers. */
+  judgeStrength?: JudgeStrengthPolicy | null;
 }
 
 /**
@@ -1721,13 +1726,13 @@ export interface InboxItem {
 }
 
 /** Scorecard threshold a model alert crossed (Armada.Core.Enums.ModelAlertRuleEnum). */
-export type ModelAlertRule = 'FirstPassSuccess' | 'EscalationsInARow' | 'ProtocolRepairRate' | 'CostPerAcceptedResult';
+export type ModelAlertRule = 'FirstPassSuccess' | 'EscalationsInARow' | 'ProtocolRepairRate' | 'CostPerAcceptedResult' | 'TierSuggestion';
 
 /** Whether a model alert still holds (Armada.Core.Enums.ModelAlertStatusEnum). */
 export type ModelAlertStatus = 'Open' | 'Resolved';
 
 /** Suggested action an operator can apply to a model alert (Armada.Core.Enums.ModelAlertActionEnum). */
-export type ModelAlertAction = 'MoveDown' | 'RemoveFromPersona' | 'CompactTemplate' | 'Reevaluate' | 'Ignore';
+export type ModelAlertAction = 'MoveDown' | 'RemoveFromPersona' | 'CompactTemplate' | 'Reevaluate' | 'Ignore' | 'ApplyTier';
 
 /** One suggested action of a model alert; nothing changes until the operator applies it. */
 export interface ModelAlertSuggestedAction {
@@ -2881,6 +2886,10 @@ export interface DispatchRequest {
   branchStrategy?: 'New' | 'ContinueParent' | 'ForkFromParent';
   /** Files or directories this mission may change. */
   ownedPaths?: string[];
+  /** Persona for this mission; when every mission names one and no pipeline is chosen, each runs as one step with it. */
+  persona?: string;
+  /** Implementation (default), or the read-only report modes Audit and Research. */
+  mode?: 'Implementation' | 'Audit' | 'Research';
 }
 
 export interface PlanningSessionCreateRequest {
@@ -3039,6 +3048,8 @@ export interface Persona {
   active: boolean;
   defaultCaptainId?: string | null;
   captainPriorities?: PersonaCaptainPriority[];
+  /** Escalation ladder, lowest rung first (RS-5.6). */
+  escalationLadder?: PersonaCaptainPriority[];
   priorityAvailability?: PersonaPriorityAvailability;
   priorityExhaustion?: PersonaPriorityExhaustion;
   createdUtc: string;
@@ -3055,9 +3066,14 @@ export interface Pipeline {
   stages: PipelineStage[];
   isBuiltIn: boolean;
   active: boolean;
+  /** Judge strength rule (RS-8.7); null means off (pipelines stored before 1.5.0). New pipelines default to Wait. */
+  judgeStrength?: JudgeStrengthPolicy | null;
   createdUtc: string;
   lastUpdateUtc: string;
 }
+
+/** Judge strength rule of a pipeline (Armada.Core.Enums.JudgeStrengthPolicyEnum). */
+export type JudgeStrengthPolicy = 'Off' | 'Wait' | 'ProceedAndFlag';
 
 export interface PipelineStage {
   id: string;
@@ -3096,6 +3112,10 @@ export interface Harbor {
   lastConnectedUtc: string | null;
   createdUtc: string;
   lastUpdateUtc: string;
+  /** Capability flags this Admiral expects that the Harbor did not advertise; absent on older servers. */
+  missingCapabilities?: string[];
+  /** True when the Harbor is missing an expected capability flag and runs earlier behavior for it. */
+  updateRecommended?: boolean;
 }
 
 /** One captain launch the Admiral recorded on a Harbor. */
@@ -3281,6 +3301,9 @@ export interface ModelEndpointHealthRecord {
   success: boolean;
 }
 
+/** Whether an API captain endpoint streams model responses. */
+export type InferenceStreamingMode = 'Automatic' | 'On' | 'Off';
+
 export interface InferenceOptions {
   toolsEnabled: boolean;
   readOnlyTools: boolean;
@@ -3296,10 +3319,19 @@ export interface InferenceOptions {
   contextLength?: number | null;
   /** Missions allowed at once against this base URL; null is unlimited. */
   maxConcurrentMissions?: number | null;
-  /** Stream responses; the request timeout becomes an idle deadline. */
+  /**
+   * Automatic streams on OpenAI-compatible, Ollama and Ollama Cloud endpoints (on a Harbor only when it advertises
+   * api-inference-streaming-v1); On and Off always win. Absent on servers before 1.5.0.
+   */
+  streamingMode?: InferenceStreamingMode;
+  /** Compatibility form: true when streamingMode is On. Keep it equal to streamingMode === 'On' when sending. */
   streaming?: boolean;
   /** Deadline for the model to start responding (model load, prompt evaluation); null uses the request timeout. */
   firstResponseTimeoutMs?: number | null;
+  /** Percent of a known context window one read_file or run_process result may fill (1-50); null uses 12. */
+  toolOutputWindowPercent?: number | null;
+  /** Identical tool calls in a row (2-20) before a corrective note; twice as many stops the run. Null uses 3. */
+  repeatedToolCallLimit?: number | null;
 }
 
 export interface ModelEndpoint {
@@ -3333,6 +3365,12 @@ export interface ModelEndpoint {
   lastHealthCheckUtc: string | null;
   lastHealthError: string | null;
   lastLatencyMs: number | null;
+  /** Context window the model server reported for this endpoint's model (RS-7.8), or null when not discovered. */
+  discoveredContextLength?: number | null;
+  /** Where the discovered context was read, for example "ollama /api/ps", or null. */
+  discoveredContextSource?: string | null;
+  /** When the context was last discovered (UTC), or null. */
+  contextDiscoveredUtc?: string | null;
   healthHistory: ModelEndpointHealthRecord[];
   uptimePercentage: number;
   consecutiveSuccesses: number;
@@ -5122,4 +5160,242 @@ export interface CaptainSelectionHistoryQuery {
   to?: string;
   pageNumber?: number;
   pageSize?: number;
+}
+
+/** Where a model profile's served context came from (Armada.Core.Enums.ContextLengthSourceEnum). */
+export type ContextLengthSource = 'Configured' | 'Discovered' | 'Measured';
+
+/** Where an effective timeout came from (Armada.Core.Enums.TimeoutSourceEnum). */
+export type TimeoutSource = 'Global' | 'Measured' | 'Profile';
+
+/** Persona prompt variant a profile renders (Armada.Core.Enums.PromptVariantEnum). */
+export type PromptVariant = 'Current' | 'Lean' | 'Compact';
+
+/** Stable identity of a model profile (Armada.Core.Models.ModelProfileIdentity). */
+export interface ModelProfileIdentity {
+  runtime: string;
+  provider: string | null;
+  model: string | null;
+  servedContextTokens: number | null;
+  servedContextSource?: ContextLengthSource | null;
+}
+
+/** What the model can use as served: administrator values plus probe results (RS-8.1). */
+export interface ModelProfileCapabilities {
+  toolsAvailable: boolean | null;
+  mcpAvailable: boolean | null;
+  probedToolsAvailable?: boolean | null;
+  probedMcpAvailable?: boolean | null;
+  probedUtc?: string | null;
+}
+
+/** Rendering overrides; null means no override. */
+export interface ModelProfileRendering {
+  template: string | null;
+  repeatContractAtEnd: boolean | null;
+  maxFilesPerMission: number | null;
+}
+
+/** Per-model recovery overrides (RS-5.5); null uses the global setting. */
+export interface ModelProfileRecovery {
+  maxResumes: number | null;
+  unclassifiedResumes: number | null;
+  transientGraceMinutes: number | null;
+  judgeReworkRounds: number | null;
+  outputRepairAttempts: number | null;
+  escalateAfterResumes: number | null;
+}
+
+/** The recovery policy in effect (global settings with the profile overrides applied). */
+export interface RecoveryPolicy {
+  modelProfileId: string | null;
+  maxResumes: number;
+  unclassifiedResumes: number;
+  transientGraceMinutes: number;
+  judgeReworkRounds: number;
+  outputRepairAttempts: number;
+  escalateAfterResumes: number;
+}
+
+/** Per-model timeout overrides in minutes (RS-8.8); null uses the measured-speed default or the global setting. */
+export interface ModelProfileTimeouts {
+  stallThresholdMinutes: number | null;
+  toolWaitHardLimitMinutes: number | null;
+  maxRuntimeMinutes: number | null;
+  firstOutputMinutes: number | null;
+}
+
+/** The timeouts in effect, with where each came from. */
+export interface TimeoutPolicy {
+  modelProfileId: string | null;
+  speedScale: number;
+  stallThresholdMinutes: number;
+  stallThresholdSource: TimeoutSource;
+  toolWaitHardLimitMinutes: number;
+  toolWaitHardLimitSource: TimeoutSource;
+  maxRuntimeMinutes: number;
+  maxRuntimeSource: TimeoutSource;
+  firstOutputMinutes: number;
+  firstOutputSource: TimeoutSource;
+}
+
+/** The newest speed measurement from a probe run (server-owned). */
+export interface ModelProfileSpeed {
+  tokensPerSecond: number | null;
+  firstOutputMs: number | null;
+  measuredUtc: string | null;
+}
+
+/** The administrator's tier and the outcome-data suggestion (RS-8.5); only tier is editable. */
+export interface ModelProfileTiering {
+  tier: CaptainTier | null;
+  suggestedTier: CaptainTier | null;
+  suggestedReason: string | null;
+  suggestedSamples: number | null;
+  suggestedUtc: string | null;
+}
+
+/** One immutable revision of a model profile (runtime version, digest). */
+export interface ModelProfileRevisionSummary {
+  id: string;
+  runtimeVersion: string | null;
+  modelDigest: string | null;
+  firstSeenUtc: string;
+  evaluationRunId?: string | null;
+}
+
+/** The model as served (Armada.Core.Models.ModelProfile). */
+export interface ModelProfile {
+  id: string;
+  tenantId: string | null;
+  identity: ModelProfileIdentity;
+  capabilities: ModelProfileCapabilities;
+  rendering: ModelProfileRendering;
+  recovery: ModelProfileRecovery;
+  tiering: ModelProfileTiering;
+  effectiveRecovery?: RecoveryPolicy | null;
+  timeouts: ModelProfileTimeouts;
+  speed: ModelProfileSpeed;
+  effectiveTimeouts?: TimeoutPolicy | null;
+  notes: string | null;
+  revisions?: ModelProfileRevisionSummary[];
+  createdUtc: string;
+  lastUpdateUtc: string;
+}
+
+/** Body of PUT /api/v1/model-profiles/{id}: a section the body carries replaces it whole; omitted sections keep their value. */
+export interface ModelProfileUpdateRequest {
+  capabilities?: { toolsAvailable: boolean | null; mcpAvailable: boolean | null };
+  rendering?: ModelProfileRendering;
+  recovery?: ModelProfileRecovery;
+  timeouts?: ModelProfileTimeouts;
+  tiering?: { tier: CaptainTier | null };
+  notes?: string;
+}
+
+/** Filters of GET /api/v1/model-profiles. */
+export interface ModelProfileListQuery {
+  runtime?: string;
+  provider?: string;
+  model?: string;
+  pageNumber?: number;
+  pageSize?: number;
+}
+
+/** One stage attempt of a mission (GET /api/v1/missions/{id}/attempts, Armada.Core.Models.MissionAttempt). */
+export interface MissionAttempt {
+  outcomeId: string;
+  attempt: number;
+  reworkRound: number;
+  captainId: string | null;
+  captainName: string | null;
+  runtime: string | null;
+  model: string | null;
+  modelProvider: string | null;
+  modelEndpointId: string | null;
+  disposition: string;
+  failureKind: string | null;
+  failureReason: string | null;
+  runtimeFailureKind: string | null;
+  contractRepairKind: string | null;
+  isRepair: boolean;
+  escalated: boolean;
+  nextCaptainId: string | null;
+  judgeVerdict: string | null;
+  suspectedCause: string | null;
+  isEvaluation: boolean;
+  startedUtc: string | null;
+  endedUtc: string;
+  durationMs: number | null;
+}
+
+/** A mission's attempt history with its escalation and recovery counters (RS-12.1). */
+export interface MissionAttemptHistory {
+  missionId: string;
+  voyageId: string | null;
+  persona: string | null;
+  mode: MissionMode;
+  status: string;
+  captainId: string | null;
+  tier: CaptainTier | null;
+  escalationCount: number;
+  escalatedFromCaptainId: string | null;
+  escalatedFromModel: string | null;
+  reworkEscalated: boolean;
+  redispatchAttempts: number;
+  outputRepairAttempts: number;
+  noOpRedispatchAttempts: number;
+  stallRecoveryAttempts: number;
+  attempts: MissionAttempt[];
+}
+
+/** A finding in a submitted verdict or result (Armada.Core.Models.StageFinding). */
+export interface StageFinding {
+  file: string | null;
+  line: number | null;
+  severity: string;
+  scenario: string;
+  requiredFix: string | null;
+}
+
+/** A submitted Judge verdict (Armada.Core.Models.StageVerdictSubmission). */
+export interface StageVerdictSubmission {
+  verdict: string;
+  correctness: string;
+  blastRadius: string;
+  sourceFidelity: string;
+  summary: string | null;
+  findings: StageFinding[];
+  specConflict: string | null;
+}
+
+/** A submitted stage result (Armada.Core.Models.StageResultSubmission). */
+export interface StageResultSubmission {
+  status: string;
+  summary: string;
+  /** Report sections (Armada.Core.Models.StageReportSection). */
+  sections?: { heading: string; body: string }[] | null;
+  findings: StageFinding[];
+}
+
+/** The typed body of a stage submission: exactly one of plan, verdict, or result is set. */
+export interface StageSubmissionEnvelope {
+  kind: string;
+  plan?: unknown;
+  verdict?: StageVerdictSubmission | null;
+  result?: StageResultSubmission | null;
+}
+
+/** A plan, verdict, or result a captain submitted (GET /api/v1/missions/{id}/submissions), newest first. */
+export interface StageSubmission {
+  /** Submission id (prefix sbm_). */
+  id?: string;
+  tenantId: string | null;
+  missionId: string;
+  attemptId: string;
+  persona: string;
+  kind: string;
+  source: string;
+  submission: StageSubmissionEnvelope;
+  createdUtc: string;
 }

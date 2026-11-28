@@ -39,6 +39,10 @@ namespace Armada.Benchmark.Reporting
         [JsonPropertyName("admissionLatency")]
         public LatencyStatistics AdmissionLatency { get; set; } = new LatencyStatistics();
 
+        /// <summary>Server-side creation to work start (agent process started) time, for missions that started.</summary>
+        [JsonPropertyName("startLatency")]
+        public LatencyStatistics StartLatency { get; set; } = new LatencyStatistics();
+
         /// <summary>Admissions per second from the first creation to the last assignment.</summary>
         [JsonPropertyName("throughputPerSecond")]
         public double ThroughputPerSecond { get; set; }

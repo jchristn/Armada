@@ -40,9 +40,9 @@ namespace Test.Shared.Suites.Services
                 int fmt = args.IndexOf("--format");
                 AssertTrue(fmt >= 0, "expected --format");
                 AssertEqual("json", args[fmt + 1]);
-                int dir = args.IndexOf("--dir");
-                AssertTrue(dir >= 0, "expected --dir");
-                AssertEqual("/tmp/wd", args[dir + 1]);
+                // OpenCode 2 rejects --dir; the process starts in the working directory instead.
+                AssertFalse(args.Contains("--dir"), "--dir must not be passed");
+                AssertFalse(args.Contains("/tmp/wd"), "the working directory is not an argument");
                 // The prompt is delivered on stdin (OpenCodeRuntime.UsePromptStdin), not as a positional
                 // argument, to avoid Windows cmd.exe multi-line-argument truncation.
                 AssertFalse(args.Contains("do the thing"), "prompt must not be a CLI argument");
@@ -148,6 +148,88 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(line.Text.Contains("Let me think"), "the reasoning text should be present");
             }));
 
+            // ---- Final message and provider errors from the JSON stream (RS-7.12) ----
+            const string toolThenText = "{\"type\":\"text\",\"part\":{\"type\":\"text\",\"text\":\"Looking at the parser.\"}}";
+            const string noRouteError = "{\"type\":\"error\",\"timestamp\":1795731191537,\"sessionID\":\"ses_x\",\"error\":{\"type\":\"provider.no-route\",\"message\":\"Model unavailable: nosuchprovider/nosuchmodel\"}}";
+
+            cases.Add(Case("final_message_is_last_turn_text", "The reply is the text after the last tool call, without reasoning or events", TestTags.Positive, () =>
+            {
+                OpenCodeFinalMessage message = new OpenCodeFinalMessage();
+                message.Begin(null);
+                message.Observe(realStepEvent);
+                message.Observe(toolThenText);
+                message.Observe(realReasoningEvent);
+                message.Observe(realToolEvent);
+                message.Observe("{\"type\":\"text\",\"part\":{\"type\":\"text\",\"text\":\"Changed the parser.\"}}");
+                message.Observe("{\"type\":\"text\",\"part\":{\"type\":\"text\",\"text\":\"[ARMADA:RESULT] COMPLETE\"}}");
+                message.Observe("not an event");
+                AssertEqual("Changed the parser.\n[ARMADA:RESULT] COMPLETE", message.Text());
+                AssertEqual(0, message.Complete(0));
+            }));
+
+            cases.Add(Case("error_event_without_recovery_fails", "Exit 0 after an error event with no later reply is a failure; a later reply recovers", TestTags.Negative, () =>
+            {
+                OpenCodeFinalMessage failed = new OpenCodeFinalMessage();
+                failed.Begin(null);
+                failed.Observe(toolThenText);
+                failed.Observe(noRouteError);
+                AssertEqual(OpenCodeFinalMessage.FailedRunExitCode, failed.Complete(0));
+                AssertEqual(1, failed.Complete(1));
+
+                OpenCodeFinalMessage recovered = new OpenCodeFinalMessage();
+                recovered.Begin(null);
+                recovered.Observe(noRouteError);
+                recovered.Observe(realTextEvent);
+                AssertEqual(0, recovered.Complete(0));
+            }));
+
+            cases.Add(Case("error_event_parsed_as_provider_error", "An OpenCode error event on stdout becomes a provider error; a status and an open-model message classify", TestTags.Positive, () =>
+            {
+                RuntimeProviderError? noRoute = RuntimeProviderErrorParser.TryParseOpenCodeJsonLine(noRouteError);
+                AssertNotNull(noRoute, "an error event is a provider error");
+                AssertEqual("provider.no-route", noRoute!.ErrorType);
+                AssertContains("Model unavailable", noRoute.Reason ?? String.Empty);
+
+                RuntimeProviderError? limited = RuntimeProviderErrorParser.TryParseOpenCodeJsonLine("{\"type\":\"error\",\"error\":{\"name\":\"APIError\",\"data\":{\"message\":\"Too Many Requests\",\"statusCode\":429}}}");
+                AssertEqual(429, limited?.HttpStatusCode);
+                AssertEqual(RuntimeFailureKindEnum.Transient, RuntimeFailureClassifier.Classify(1, limited));
+
+                RuntimeProviderError? parse = RuntimeProviderErrorParser.TryParseOpenCodeJsonLine("{\"type\":\"error\",\"error\":{\"name\":\"APIError\",\"data\":{\"message\":\"error parsing tool call: invalid character\",\"statusCode\":500}}}");
+                AssertEqual(OpenModelErrorPatterns.ToolCallParseError, parse?.ErrorType);
+
+                AssertNull(RuntimeProviderErrorParser.TryParseOpenCodeJsonLine(realTextEvent), "a text event is not an error");
+                AssertNull(RuntimeProviderErrorParser.TryParseOpenCodeJsonLine("Error: 429 on stdout narration"), "plain text is not an error");
+            }));
+
+            cases.Add(Case("stub_run_writes_reply_and_classifies_error", "An OpenCode process run writes the rebuilt reply; an error event on stdout raises a provider error", TestTags.Positive, () =>
+            {
+                if (OperatingSystem.IsWindows()) return;
+                string root = Path.Combine(Path.GetTempPath(), "armada-oc-final-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(root);
+                try
+                {
+                    string reply = "{\"type\":\"text\",\"part\":{\"type\":\"text\",\"text\":\"<think>check</think>Done.\"}}";
+                    string ok = WriteStub(root, "ok.sh", new List<string> { realStepEvent, realReasoningEvent, realToolEvent, reply }, 0);
+                    string finalMessage = Path.Combine(root, "final.txt");
+                    StubRunResult okRun = RunStub(ok, root, finalMessage);
+                    AssertEqual(0, okRun.ExitCode);
+                    AssertNull(okRun.Error, "a clean run raises no provider error");
+                    AssertEqual("Done.", File.ReadAllText(finalMessage));
+
+                    string bad = WriteStub(root, "bad.sh", new List<string> { noRouteError }, 1);
+                    string badFinal = Path.Combine(root, "bad.txt");
+                    StubRunResult badRun = RunStub(bad, root, badFinal);
+                    AssertEqual(1, badRun.ExitCode);
+                    AssertNotNull(badRun.Error, "the stdout error event is a provider error");
+                    AssertEqual("provider.no-route", badRun.Error!.ErrorType);
+                    AssertFalse(File.Exists(badFinal), "a failed run writes no final message");
+                }
+                finally
+                {
+                    try { Directory.Delete(root, true); } catch { }
+                }
+            }));
+
             // ---- Tier recognition ----
             cases.Add(Case("opencode_models_classify_to_standard", "Common OpenCode model families classify to a real tier", TestTags.Positive, () =>
             {
@@ -185,6 +267,38 @@ namespace Test.Shared.Suites.Services
         #endregion
 
         #region Private-Methods
+
+        private sealed class StubRunResult
+        {
+            public int? ExitCode { get; set; } = null;
+
+            public RuntimeProviderError? Error { get; set; } = null;
+        }
+
+        private static string WriteStub(string root, string name, List<string> lines, int exitCode)
+        {
+            string path = Path.Combine(root, name);
+            string fixture = Path.Combine(root, name + ".jsonl");
+            File.WriteAllText(fixture, String.Join("\n", lines) + "\n");
+            File.WriteAllText(path, "#!/bin/sh\ncat > /dev/null\ncat '" + fixture + "'\nexit " + exitCode + "\n");
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            return path;
+        }
+
+        private static StubRunResult RunStub(string stub, string root, string finalMessage)
+        {
+            LoggingModule logging = new LoggingModule();
+            logging.Settings.EnableConsole = false;
+            OpenCodeRuntime runtime = new OpenCodeRuntime(logging) { ExecutablePath = stub };
+            StubRunResult result = new StubRunResult();
+            using ManualResetEventSlim exited = new ManualResetEventSlim(false);
+            runtime.OnProviderError += (pid, e) => result.Error = RuntimeFailureClassifier.KeepMoreSignificant(result.Error, e);
+            runtime.OnProcessExited += (pid, code) => { result.ExitCode = code; exited.Set(); };
+            runtime.StartAsync(root, "do it", finalMessageFilePath: finalMessage).GetAwaiter().GetResult();
+            AssertTrue(exited.Wait(TimeSpan.FromSeconds(15)), "stub did not exit");
+            return result;
+        }
 
         private static async Task RunChatAsync(List<string> lines, Action<CaptainChatResponse> assert)
         {

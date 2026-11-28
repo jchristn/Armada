@@ -32,7 +32,7 @@ namespace Armada.Helm.Commands
                 request.IncludePinned = settings.IncludePinned;
                 if (settings.Max.HasValue) request.MaxEntries = settings.Max.Value;
                 request.DryRun = true;
-                BlackBoxPurgeResult? preview = await client.PurgeBlackBoxAsync(request, cancellationToken).ConfigureAwait(false);
+                BlackBoxPurgeResult? preview = await client.BlackBox.PurgeAsync(request, cancellationToken).ConfigureAwait(false);
                 if (preview == null)
                 {
                     Status("Error: the server returned no result.");
@@ -58,7 +58,7 @@ namespace Armada.Helm.Commands
                 }
 
                 request.DryRun = false;
-                BlackBoxPurgeResult? result = await client.PurgeBlackBoxAsync(request, cancellationToken).ConfigureAwait(false);
+                BlackBoxPurgeResult? result = await client.BlackBox.PurgeAsync(request, cancellationToken).ConfigureAwait(false);
                 if (settings.Json) WritePureJson(result);
                 else if (result != null) AnsiConsole.MarkupLine("[green]Purged[/] " + result.Deleted + " entries" + (result.Pending > 0 ? " [gold1](" + result.Pending + " pending)[/]" : "") + ", freed " + Markup.Escape(BlackBoxCli.Bytes(result.BytesFreed)) + ".");
                 return 0;

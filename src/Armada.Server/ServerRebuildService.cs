@@ -47,7 +47,7 @@ namespace Armada.Server
         private readonly string _Header = "[ServerRebuildService] ";
         private readonly DatabaseDriver _Database;
         private readonly ArmadaSettings _Settings;
-        private readonly ISlotManager _Slots;
+        private readonly IRebuildSlotManager _Slots;
         private readonly IHostCommandExecutor _Host;
         private readonly LoggingModule _Logging;
         private readonly Action _StopCallback;
@@ -89,7 +89,7 @@ namespace Armada.Server
         public ServerRebuildService(
             DatabaseDriver database,
             ArmadaSettings settings,
-            ISlotManager slots,
+            IRebuildSlotManager slots,
             IHostCommandExecutor host,
             LoggingModule logging,
             Action stopCallback,

@@ -28,9 +28,11 @@ namespace Armada.Runtimes.Tools
         /// task-planning tools are registered as well.
         /// </summary>
         /// <param name="taskPlan">The per-run task plan the task tools write to, or null to omit the task tools.</param>
-        public BuiltInToolRegistry(TaskPlan? taskPlan = null)
+        /// <param name="limits">Output limits scaled to the endpoint's context window, or null for the limits of an unknown window.</param>
+        public BuiltInToolRegistry(TaskPlan? taskPlan = null, ToolLimits? limits = null)
         {
-            RegisterTool(new ReadFileTool(), ToolMutationKind.ReadOnly);
+            ToolLimits toolLimits = limits ?? new ToolLimits();
+            RegisterTool(new ReadFileTool(toolLimits), ToolMutationKind.ReadOnly);
             RegisterTool(new WriteFileTool(), ToolMutationKind.Mutating);
             RegisterTool(new EditFileTool(), ToolMutationKind.Mutating);
             RegisterTool(new MultiEditTool(), ToolMutationKind.Mutating);
@@ -40,7 +42,7 @@ namespace Armada.Runtimes.Tools
             RegisterTool(new ManageDirectoryTool(), ToolMutationKind.Mutating);
             RegisterTool(new GlobTool(), ToolMutationKind.ReadOnly);
             RegisterTool(new GrepTool(), ToolMutationKind.ReadOnly);
-            RegisterTool(new RunProcessTool(), ToolMutationKind.Mutating);
+            RegisterTool(new RunProcessTool(toolLimits), ToolMutationKind.Mutating);
 
             if (taskPlan != null)
             {

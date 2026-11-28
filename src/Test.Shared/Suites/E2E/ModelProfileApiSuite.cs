@@ -119,6 +119,7 @@ namespace Test.Shared.Suites.E2E
                 {
                     capabilities = new { toolsAvailable = true, mcpAvailable = false },
                     rendering = new { template = "Compact", repeatContractAtEnd = true, maxFilesPerMission = 3 },
+                    recovery = new { maxResumes = 6, judgeReworkRounds = 1 },
                     notes = "Slow but careful."
                 };
                 AssertStatusCode(HttpStatusCode.Forbidden, await u.PutAsync(path, JsonHelper.ToJsonContent(update)).ConfigureAwait(false), "a regular user cannot update");
@@ -129,6 +130,10 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual((bool?)true, afterUpdate.Capabilities.ToolsAvailable, "tools");
                 AssertEqual("Compact", afterUpdate.Rendering.Template, "template");
                 AssertEqual((int?)3, afterUpdate.Rendering.MaxFilesPerMission, "max files");
+                AssertEqual((int?)6, afterUpdate.Recovery.MaxResumes, "recovery override stored");
+                AssertNotNull(afterUpdate.EffectiveRecovery, "policy in effect returned");
+                AssertEqual(6, afterUpdate.EffectiveRecovery!.MaxResumes, "override in effect");
+                AssertTrue(afterUpdate.EffectiveRecovery.JudgeReworkRounds >= 2, "a profile cannot shorten the rework chain");
                 AssertEqual("Slow but careful.", afterUpdate.Notes, "notes");
                 AssertEqual("qwen3.8:27b", afterUpdate.Identity.Model, "identity unchanged");
                 AssertEqual(2, afterUpdate.Revisions.Count, "revisions returned");
@@ -138,8 +143,10 @@ namespace Test.Shared.Suites.E2E
                 ModelProfile kept = await JsonHelper.DeserializeAsync<ModelProfile>(notesOnly).ConfigureAwait(false);
                 AssertNull(kept.Notes, "empty notes clear");
                 AssertEqual("Compact", kept.Rendering.Template, "omitted rendering kept");
+                AssertEqual((int?)6, kept.Recovery.MaxResumes, "omitted recovery kept");
                 AssertEqual((bool?)true, kept.Capabilities.ToolsAvailable, "omitted capabilities kept");
                 AssertStatusCode(HttpStatusCode.BadRequest, await a.PutAsync(path, JsonHelper.ToJsonContent(new { rendering = new { maxFilesPerMission = 0 } })).ConfigureAwait(false), "max files below 1");
+                AssertStatusCode(HttpStatusCode.BadRequest, await a.PutAsync(path, JsonHelper.ToJsonContent(new { recovery = new { maxResumes = 11 } })).ConfigureAwait(false), "resumes above 10");
                 AssertStatusCode(HttpStatusCode.NotFound, await a.PutAsync("/api/v1/model-profiles/mdl_missing", JsonHelper.ToJsonContent(update)).ConfigureAwait(false), "missing profile");
 
                 string compat = path + "/revisions/" + seeded.First.Id + "/compatible-with";

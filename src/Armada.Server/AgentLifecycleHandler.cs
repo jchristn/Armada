@@ -56,6 +56,11 @@ namespace Armada.Server
 
         #endregion
 
+        /// <summary>
+        /// Mission status transitions (RS-3.5); the server replaces this with the instance shared across services.
+        /// </summary>
+        public MissionTransitions Transitions { get; set; }
+
         #region Private-Members
 
         private string _Header = "[AgentLifecycle] ";
@@ -89,7 +94,7 @@ namespace Armada.Server
         /// <summary>
         /// Accumulates agent stdout per mission for pipeline handoff.
         /// </summary>
-        private System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.StringBuilder> _MissionOutput = new System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.StringBuilder>();
+        private System.Collections.Concurrent.ConcurrentDictionary<string, BoundedTextBuffer> _MissionOutput = new System.Collections.Concurrent.ConcurrentDictionary<string, BoundedTextBuffer>();
 
         /// <summary>
         /// Tracks how many papercuts each mission has stored, so a runaway reporter is capped.
@@ -221,6 +226,7 @@ namespace Armada.Server
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _Database = database ?? throw new ArgumentNullException(nameof(database));
+            Transitions = new MissionTransitions(database, logging);
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _RuntimeFactory = runtimeFactory ?? throw new ArgumentNullException(nameof(runtimeFactory));
             _HostProcessExecutor = new LocalHostProcessExecutor(_RuntimeFactory);
@@ -475,7 +481,8 @@ namespace Armada.Server
             if (mission == null) throw new ArgumentNullException(nameof(mission));
             if (_SessionTokens == null || !_Settings.Mcp.MissionScopedTokens) return null;
             if (String.IsNullOrEmpty(mission.TenantId) || String.IsNullOrEmpty(mission.UserId)) return null;
-            int runtimeMinutes = _Settings.MaxMissionRuntimeMinutes > 0 ? _Settings.MaxMissionRuntimeMinutes : 24 * 60;
+            // A model profile can raise the runtime ceiling up to TimeoutPolicyResolver.MaxScale times the global (RS-8.8).
+            int runtimeMinutes = _Settings.MaxMissionRuntimeMinutes > 0 ? (int)Math.Ceiling(_Settings.MaxMissionRuntimeMinutes * TimeoutPolicyResolver.MaxScale) : 24 * 60;
             TimeSpan lifetime = TimeSpan.FromMinutes(runtimeMinutes + 30);
             return _SessionTokens.CreateMissionScopedToken(mission.TenantId!, mission.UserId!, mission.Id, captain.Id, lifetime).Token;
         }
@@ -514,7 +521,7 @@ namespace Armada.Server
                     _Logging.Debug(_Header + "could not read the final message artifact for mission " + missionId + ": " + ex.Message);
                 }
             }
-            if (_MissionOutput.TryGetValue(missionId, out System.Text.StringBuilder? sb))
+            if (_MissionOutput.TryGetValue(missionId, out BoundedTextBuffer? sb))
             {
                 lock (sb)
                 {
@@ -534,7 +541,7 @@ namespace Armada.Server
             if (String.IsNullOrEmpty(missionId)) return null;
             _MissionPapercutCounts.TryRemove(missionId, out _);
             string? streamedOutput = null;
-            if (_MissionOutput.TryRemove(missionId, out System.Text.StringBuilder? sb))
+            if (_MissionOutput.TryRemove(missionId, out BoundedTextBuffer? sb))
             {
                 streamedOutput = sb.ToString().Trim();
                 if (String.IsNullOrEmpty(streamedOutput))
@@ -1088,6 +1095,7 @@ namespace Armada.Server
             string commitInstructions = await _TemplateService.RenderCommitInstructionsAsync(_Settings.MessageTemplates, templateContext).ConfigureAwait(false);
             if (!String.IsNullOrEmpty(commitInstructions))
                 prompt += "\n\n" + commitInstructions;
+            prompt = MissionPromptBuilder.AppendContractReminder(prompt, mission.Persona, (await ReadLaunchProfileAsync(captain).ConfigureAwait(false))?.Rendering);
 
             string missionLogDir = Path.Combine(_Settings.LogDirectory, "missions");
             string logFilePath = Path.Combine(missionLogDir, mission.Id + ".log");
@@ -1188,6 +1196,36 @@ namespace Armada.Server
 
                     // CliPermissionLaunch.Apply already carries every resolved policy, including Bypass and Refuse,
                     // so the Harbor's API runtime enforces the policy reported in this mission's log.
+                }
+
+                // Tell the runtime explicitly whether this persona must end with the completion line (the API endpoint
+                // runtime reads it; a Harbor receives it in the launch environment).
+                if (Armada.Core.Services.CompletionLine.IsRequiredFor(mission.Persona))
+                {
+                    environment ??= new Dictionary<string, string>();
+                    environment[Armada.Core.Services.CompletionLine.RequiredEnvironmentVariable] = "1";
+                }
+
+                // Name the Armada MCP tools this persona is shown up front (the API endpoint runtime defers the rest of the
+                // catalog behind discovery). Exposure only: the mission token still decides what may be called. CLI
+                // runtimes load MCP schemas on their own and are not given a scope.
+                if (captain.Runtime == AgentRuntimeEnum.ApiEndpoint)
+                {
+                    environment ??= new Dictionary<string, string>();
+                    environment[Armada.Core.Services.PersonaToolScope.EnvironmentVariable] =
+                        Armada.Core.Services.PersonaToolScope.Format(Armada.Core.Services.PersonaToolScope.ForPersona(mission.Persona));
+                }
+
+                // RS-6.3: name the submit tool this stage calls, so the API endpoint runtime offers it natively (CLI runtimes see
+                // the MCP submit tools directly).
+                string? submitTool = Armada.Core.Services.StageSubmissionTools.ToolForPersona(mission.Persona);
+                if (submitTool != null && captain.Runtime == AgentRuntimeEnum.ApiEndpoint)
+                {
+                    environment ??= new Dictionary<string, string>();
+                    environment[Armada.Core.Services.StageSubmissionTools.ToolEnvironmentVariable] = submitTool;
+                    environment[Armada.Core.Services.StageSubmissionTools.PersonaEnvironmentVariable] = String.IsNullOrWhiteSpace(mission.Persona)
+                        ? Armada.Core.PersonaCatalog.Worker
+                        : Armada.Core.PersonaCatalog.NormalizeName(mission.Persona);
                 }
 
                 processId = await runtime.StartAsync(
@@ -1514,8 +1552,8 @@ namespace Armada.Server
             }
             if (!String.IsNullOrEmpty(outputMissionId))
             {
-                System.Text.StringBuilder sb = _MissionOutput.GetOrAdd(outputMissionId, _ => new System.Text.StringBuilder());
-                BoundedTextBuffer.AppendLine(sb, line, _MaxMissionOutputChars);
+                BoundedTextBuffer sb = _MissionOutput.GetOrAdd(outputMissionId, _ => new BoundedTextBuffer(_MaxMissionOutputChars));
+                lock (sb) sb.AppendLine(line);
             }
 
             ProgressParser.ProgressSignal? signal = ProgressParser.TryParse(line);
@@ -1637,9 +1675,7 @@ namespace Armada.Server
                 return false;
             }
 
-            mission.Status = requested;
-            mission.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+            if (!await Transitions.TryTransitionAsync(mission, new[] { mission.Status }, requested, null, CancellationToken.None).ConfigureAwait(false)) return false;
             _Logging.Info(_Header + "mission " + mission.Id + " transitioned to " + requested + " via agent signal");
             return true;
         }
@@ -1966,6 +2002,21 @@ namespace Armada.Server
         /// off the launch runs on the Admiral host (where the dock is); with it on the launch is refused with
         /// <see cref="HarborDockNotFoundException"/>, which fails the mission, because retrying cannot help.
         /// </summary>
+        private async Task<ModelProfile?> ReadLaunchProfileAsync(Captain captain)
+        {
+            // Best effort: the launch prompt renders without the profile's rendering overrides when it cannot be read.
+            if (String.IsNullOrEmpty(captain.ModelProfileId)) return null;
+            try
+            {
+                return await _Database.ModelProfiles.ReadAsync(captain.ModelProfileId).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Debug(_Header + "could not read model profile " + captain.ModelProfileId + " for the launch prompt: " + ex.Message);
+                return null;
+            }
+        }
+
         private async Task<LaunchExecutorResolution> ResolveLaunchExecutorAsync(Captain captain, Mission mission, Dock dock)
         {
             string? pinnedHarborId = String.IsNullOrWhiteSpace(dock.HarborId) ? null : dock.HarborId;

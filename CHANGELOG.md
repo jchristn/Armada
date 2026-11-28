@@ -4,7 +4,499 @@ All notable changes to Armada are documented in this file.
 
 ---
 
-## Unreleased
+## v1.5.0 (unreleased)
+
+Armada 1.5.0 makes pipelines that mix open models (Qwen3.8 and others served by Ollama, vLLM, or a proxy such as
+Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `RELIABILITY_SIMPLICITY_PLAN.md`.
+
+### Security
+
+- **REST voyage and mission creation check that the vessel and voyage belong to the caller.** `POST /api/v1/voyages`
+  and `POST /api/v1/missions` accepted another tenant's `VesselId` (and a mission another tenant's `VoyageId`), so a user
+  who knew the id could create work that a captain then ran in that tenant's repository. Both now return `404`, as MCP
+  already did (RS-2.9).
+
+### Reliability
+
+- **Mission state lives in typed columns, not in description text.** Migration 133 adds escalation, fan-out, Architect
+  slice, launch and note columns to missions and fills them from the old description markers, so an upgraded database
+  keeps its state. A brief that happens to contain "## Escalated to " no longer pins a mission's captain or blocks its
+  escalation, and renaming an Architect slice no longer breaks recovery of an interrupted fan-out (RS-3.1 to RS-3.3).
+- **A mission's description is never rewritten after it is created.** Handoffs, review feedback, reviewer guidance,
+  repair, resume, escalation and integration notes are kept as the mission's `Notes` (one per kind) and rendered after
+  the description when a captain launches. Missions expose the new `Notes`, `EscalationCount`,
+  `EscalatedFromCaptainId`, `EscalatedFromModel`, `FanOutCompletedUtc`, `ArchitectSourceMissionId`,
+  `ArchitectPlanIndex`, `LaunchIntentUtc` and `LaunchJobId` fields (RS-3.4).
+- **Every mission status change goes through one checked transition.** It refuses an edge the state machine does not
+  have, writes only while the mission still has the status the caller read, emits `mission.status_changed` exactly
+  once, and settles the voyage when the mission finishes. Before, 34 of the 66 places that changed a status wrote
+  the whole row unconditionally, so a late handler could overwrite a newer state. A source scan now fails the build's
+  tests if a direct status write returns. A stage approved in review whose handoff then fails is now marked Failed and
+  its later stages are cancelled; before, that write was silently refused and the later stages waited forever
+  (RS-3.5, RS-3.6).
+- **One path creates every voyage.** REST, MCP, WebSocket, planning sessions, fleet actions and battery runs now
+  create voyages through `VoyageCreationService`, replacing four `DispatchVoyageAsync` overloads and two copies of the
+  creation loop (a standard voyage is a pipeline with one stage). What used to differ by surface is now the same: the
+  voyage belongs to the caller (it used to belong to the vessel's owner), an MCP bare
+  voyage keeps its landing mode, an MCP objective link also records the voyage's missions, an unknown objective
+  creates nothing (REST created the voyage and then failed), and a planning session's link is written with the voyage.
+  The .NET client's `VoyageDispatchRequest` gains `ObjectiveId`, `CaptainAssignments` and `LandingMode` to match REST
+  (RS-4.1).
+- **Missions in a voyage request take a persona and a mode.** `POST /api/v1/voyages` missions accept `Persona` and
+  `Mode` (`Implementation`, `Audit`, `Research`), as the MCP `dispatch` tool does. MCP advertised `persona` before but
+  dropped it, so every MCP mission ran as the pipeline decided; it is now applied. When every mission names a persona
+  and no pipeline is given, each runs as one stage with its persona; a multi-stage pipeline still picks its own. The
+  dashboard and mobile voyage forms and the TUI Create Voyage screen have a Persona and a Mode per mission,
+  `armada voyage create` has `--persona` and `--mode`, the .NET client's `DispatchRequest` has both fields, and Postman
+  has a "Dispatch Persona and Mode Voyage" example (RS-4.2).
+- **No captain starts before its whole voyage exists.** A voyage is now created with the new status `Building`; every
+  mission of every stage is written in one transaction, playbook snapshots follow, and only then does the voyage move
+  to `Open` and get one assignment pass. Before, each mission was written and assigned in turn, so the first could be
+  running while the rest were still being created, and a crash part-way left a half-built open voyage. A mission of a
+  `Building` voyage is never admitted. A creation that fails or is cut short by a restart is moved to `Failed` by the
+  next health check, its missions cancelled with a black box entry. The dispatch advisor still sees the voyage's
+  earlier missions, so overlap warnings and chaining inside one voyage are unchanged (RS-4.3).
+- **An Architect's plan becomes missions in one write.** The fan-out (the first slice written into the waiting Worker,
+  every further slice with its Judge and other stages, ownership, Worker envelopes, the plan's parent links and the
+  Architect's completion mark) is computed first and written in one transaction with its playbook snapshots. Before,
+  each row was written in turn, so a slice could start while its siblings did not exist yet, and a restart part-way
+  left a partial fan-out for recovery to patch. If a slice moved on meanwhile, nothing is written and recovery
+  computes the fan-out again (RS-4.3).
+- **A stage handoff prepares every next stage at once.** When a stage finishes, all the stages waiting on it get its
+  branch and handoff note in one transaction. Before, a restart between them could leave a Judge prepared and a Test
+  Engineer not until recovery ran (RS-4.3).
+- **One check for mission trees, whatever the plan's format.** REST and MCP voyages and Architect plans in every
+  format (v2 to v4, unversioned JSON, `[ARMADA:MISSION]` markers) go through one validator with typed findings. An
+  older-format plan whose parent is itself, a later mission, a dropped entry, or deeper than `MaxHierarchyDepth` is
+  no longer quietly flattened: the Architect gets a repair turn naming each mission, and the plan fails as invalid
+  output if it is still wrong. A voyage request with a `BranchStrategy` but no `ParentKey` is rejected. Ownership
+  overlaps between missions that can run at once are reported for every dispatch; only contract v4 rejects them (RS-4.4).
+- **One dispatcher, woken by events.** The Admiral has a single dispatch pass. Completion, review, cancel, a new
+  voyage with waiting missions, a Harbor linking, and an endpoint breaker reopening wake it at once instead of
+  waiting for the 10 s heartbeat, which stays as a safety net. Wakes raised together collapse into one pass, and a
+  completing mission never waits for dispatch. The separate head-of-queue dispatch that ran inside completion, and
+  assigned only one mission, is gone: one pass now fills every free captain. Background launches stop with the
+  server instead of running on after shutdown (RS-4.5).
+- **One admission result per mission.** Every dispatch attempt records one typed `MissionAssignmentBlocker` for a
+  mission it leaves Pending, including the gates only dispatch can check (launch policy, dock placement, usage
+  selection, lock timeouts, lost claims). The dispatch log, the assignment blocker shown in the dashboard, TUI and
+  API, and the stuck-admission monitor all read that result, so they can no longer disagree. The monitor stops
+  re-running admission on 64 sampled missions every heartbeat; it flags a mission that three passes left unclaimed
+  with every gate open, and reports how long it has waited (RS-4.6).
+- **One read per dispatch pass.** A dispatch pass reads captains, running missions per vessel, admission rows,
+  voyages, vessels, personas, endpoints and model profiles once and evaluates every pending mission against them,
+  instead of reading them again for each mission. A claim drops the state it can change, so the next mission in the
+  pass never admits against counts from before it. Running missions on a vessel come from one indexed query
+  (`EnumerateRunningOnVesselAsync`) instead of a scan of every active status on every vessel (RS-4.7).
+- **One capacity model.** The Admiral's dispatch check, mission admission and the verification repair path now read
+  one model of the global mission limit, runtime caps and endpoint caps, built from the same captain snapshot and
+  execution-slot count. The Admiral used to count Working captains while admission counted Assigned and InProgress
+  missions, so the two could disagree; and a dispatch pass now stops as soon as no captain has room under any cap,
+  instead of trying every pending mission against a full runtime or endpoint. A mission is skipped before the shared
+  admission lock when the global limit is already full. A claim made outside a dispatch pass (voyage creation, a
+  repair) is now counted when the pass takes the lock, so the pass cannot admit against counts from before it (RS-4.8).
+- **A narrower admission lock.** Captain selection, usage evidence, the Harbor policy gate and dock placement now run
+  before the shared admission lock, so a slow dock placement on one vessel no longer holds up admission on every other
+  vessel. The lock covers only a final re-check of the global, runtime and endpoint caps for the chosen captain and the
+  claim itself, so parallel dispatch passes still cannot admit past any cap (RS-4.9).
+- **No second agent after a crash at launch.** If the Admiral stopped after an agent process started but before its id
+  was saved, the restarted Admiral treated the mission as never launched and dispatched it again while the first agent
+  kept working in the dock. Armada now records the launch intent before starting the agent. On startup it stops a
+  leftover local agent whose process id and exact start time match the launch record (a reused id is never touched),
+  then resumes the mission in its dock. Agents on a Harbor were already covered: a reconnecting Harbor stops every job
+  the restarted Admiral does not own (RS-4.10).
+- **One failure taxonomy.** Every source of a mission failure (runtime exit, Definition of Done, landing, merge queue,
+  a lost landing handoff, a failure with no recorded kind) now maps to the mission failure kind in one place,
+  `FailureKindMapper`, which replaces three separate classifiers and inline mappings in the Admiral. Behavior is
+  unchanged. The mapping table is in docs/MODEL_HETEROGENEITY.md Part 4 (RS-5.1).
+- **Unexplained exits are Unclassified, not Crash.** A captain that exits non-zero without a provider error Armada
+  recognizes is now `Unclassified`. It gets one resume in place, then escalation to the voyage planner, instead of
+  being treated as a crash. `Crash` now means the process died abnormally (killed by a signal, a Windows crash status,
+  or cancelled). Repeated `Unclassified` exits still count toward crash-loop quarantine, and the acceptance gate's G6
+  counts them per runtime and model (RS-5.2).
+- **Open-model server errors are recognized.** Ollama, vLLM, LM Studio, llama.cpp and LiteLLM report most failures
+  only as a message. Armada now gives those messages a machine type. A crashed runner or a model still loading is
+  transient. Out of memory and no tool support make the captain unavailable. A context overflow, a tool call the server
+  could not parse, or a 400 on the tool or schema shape is a task failure. A tool-call parse error no longer counts
+  against the endpoint's circuit breaker or its outage grace. Remediation text names the fix. The table tests run on
+  responses captured from live servers plus the servers' own source text (RS-5.3).
+- **A 429 is backpressure, not a usage limit.** A rate-limited captain used to be quarantined. Now it is quarantined
+  only when the provider says the quota is gone: `insufficient_quota` or a usage-limit error, a stated reset time, or a
+  `Retry-After` over 10 minutes. Otherwise the captain resumes after the endpoint's `Retry-After`. API captains now
+  read `Retry-After` from the response and wait out up to 30 seconds inside the run. HTTP 402 stays a usage limit
+  (RS-5.4).
+- **Recovery policy per model.** A model profile has a `Recovery` section that overrides, for the missions of its
+  captains, the in-place resumes, the resumes after an `Unclassified` exit, the transient outage grace, the Judge rework
+  rounds and the output-contract repairs. Each value is null unless set, and null uses the global setting. Judge rework
+  rounds take the larger of the two, so a profile never shortens the rework chain. A profile read returns
+  `EffectiveRecovery`, the policy in effect. Two new settings replace hard-coded values: `UnclassifiedResumeLimit`
+  (default 1) and `JudgeReworkRounds` (default 2). Migration 135 adds the columns (RS-5.5).
+- **Escalation ladder.** A persona has an `EscalationLadder` of captain classes, lowest rung first (for example
+  Qwen3.8, GPT-6.1, Opus), stored as relational rows like `CaptainPriorities`. A work stage whose captain cannot finish
+  moves on the same branch to the next rung with an eligible captain; with no ladder it moves only to a captain with a
+  strictly higher tier, so no escalation goes sideways. Escalation now takes up to `MaxEscalations` hops (default 2)
+  instead of one, works for standalone missions, and is triggered by spent resumes, an `Unclassified` exit past its
+  resume, two unparsable tool calls in a row, repeated no-op completions and Judge rejections past the rework budget.
+  A model profile's `EscalateAfterResumes` escalates before the resumes are spent, and `EscalateOnOpenEndpointBreaker`
+  (off by default) escalates a transient failure at once when the endpoint's breaker is open. Strict captain
+  assignments still never escalate. Migration 136 adds the ladder table and the profile column (RS-5.6).
+- **Escalation carries memory.** The escalated captain's note now says how the previous attempt failed (failure kind,
+  runtime classification, exit code), the black box rule hint for that failure, which files it changed, and the end of
+  its output (redacted, at most 2000 characters), so the stronger model starts from the evidence instead of only the
+  branch (RS-5.7).
+- **Rescues stop retrying the same captain.** From the second rescue of a failed mission on, the rescue goes to a
+  captain the escalation selector picks with the failed captain excluded (the Worker escalation ladder, or a strictly
+  higher tier), and every rescue brief includes the last failed attempt's failure kind, black box hint and redacted
+  output tail (RS-5.8).
+- **RecoveryExhausted means the rescue budget ran out.** The `RecoveryExhausted` escalation trigger now fires once per
+  recovery incident, keyed by the original mission, when every allowed rescue has failed. Every terminal mission failure
+  fires `MissionFailed`, keyed by the mission, instead of `RecoveryExhausted` keyed by captain. Move rules that relied on
+  the old behavior to `MissionFailed`. A mitigated recovery incident closes only after the next pass confirms the landed
+  rescue is still Complete; otherwise it reopens and recovery continues (RS-5.9).
+- **One engine decides recovery.** Resume in place, output repair, Judge rework, escalation, no-op and interruption
+  re-dispatch, and incident rescues are now chosen by one `RecoveryPolicyEngine` from the failure's site and kind, the
+  attempts spent and the captain's recovery policy, instead of separate checks in each path. Behavior is unchanged,
+  except that a successful escalation now resets the malformed tool call count for the mission. The order of actions is
+  in [Captain routing](docs/CAPTAIN_ROUTING.md#how-recovery-is-chosen) (RS-5.10).
+- **Recovery no longer depends on error message text.** A landing handoff that records no merge queue entry raises
+  `MergeQueueEntryNotFoundException`; the merge queue on a Harbor merges the pushed copy of a branch when the local
+  branch is gone, decided from the git refs rather than git's message; and a process that could not start is detected
+  from the exception type alone.
+- **Two iteration-limit stops in a row escalate.** A captain that stops at its iteration (model-turn) limit is
+  resumed once as before; if the resumed attempt stops at the limit again, the mission moves up the escalation ladder
+  instead of spending more resumes, the same rule as two unparsable tool calls in a row. The stop is recognized from the
+  runtime's `max_iterations_reached` error type.
+- **Legacy mission markers are deprecated.** An Architect plan written as `[ARMADA:MISSION]` markers still works while
+  `AcceptLegacyMissionMarkers` is on (the default), logs a warning each time it is used, and is removed in 2.0 (D-027).
+  Turn the setting off to require an `armada-plan` block; marker output then gets the output repair turn like a missing
+  plan. The setting is in the dashboard, TUI and mobile Agent settings.
+- **Plan and verdict parsing is more forgiving, without guessing.** An Architect plan in a `~~~` fence, written as bare
+  JSON, or inside a fence with prose is accepted when there is exactly one; two plans are still refused, and plan errors
+  name the JSON path, line and position. A FAIL or NEEDS_REVISION verdict written in prose under a Verdict heading is
+  recovered; a prose PASS still goes to format repair. A verdict after a fence cut open by output truncation is read.
+- **API endpoint captains on Judge and Architect stages are no longer asked for a completion line.** The Admiral now
+  says which missions need `[ARMADA:RESULT] COMPLETE` (`ARMADA_REQUIRES_COMPLETION_LINE`) instead of the runtime
+  searching the prompt for it, and a bold, backticked or bulleted completion line is accepted.
+- **Handoffs are stored once and cover the whole chain.** Each stage's handoff is written when the stage completes, in
+  the same database write that prepares the next stage, and keyed by attempt (migration 137, `attempt_id`), so two
+  attempts are never merged because their outputs had the same length. A later stage also sees the earlier stages of its
+  chain, newest first, within its budget, so the Judge sees the Worker's report and not only the Test Engineer's.
+- **Every output contract comes from one place and is stated once.** The Worker result, the verifier sections, the Judge
+  verdicts (now including SPEC_CONFLICT everywhere) and the Architect v4 plan with a complete JSON example are generated
+  from the models by `StageOutputContract` and appended once under `## Output Contract`. Before, the Judge prompt stated
+  its contract three times and the brief omitted SPEC_CONFLICT. Markers are no longer shown in backticks, and the .NET
+  restore advice comes from the .NET workflow profile. Built-in templates you have not edited are upgraded; edited ones
+  are kept, with the generated contract appended after them.
+- **API captains see the Armada tools their stage uses.** A mission launch names the few Armada MCP tools its persona
+  needs (`ARMADA_MCP_TOOL_SCOPE`): a Judge gets 5 tools, about 835 schema tokens, instead of discovering them in a
+  catalog of about 270 tools (about 62,000 tokens). The rest stays reachable through `armada_discover_mcp_tools`, and
+  permissions are unchanged. The context-window check now counts the tool schemas sent on every turn, and a reply
+  without tools uses the same explicit completion requirement as the tool loop.
+- **A broken report is reformatted before the stage is rerun.** When a Judge, verifier or Architect finishes its work
+  but its report breaks the output contract, one tool-less call restates the stage's own output in the contract's format,
+  given the parser's errors. The original output and diff are kept. The restatement is accepted only when it parses and
+  adds no verdict, evidence, finding or mission the original lacked; otherwise the stage reruns as before. Review-gated
+  stages are never repaired. `OutputRepairNormalizerCaptainId` (dashboard, TUI and mobile Agent settings) picks the
+  captain that does it; empty uses the stage's own captain.
+- **A Judge PASS must cite evidence.** A PASS that names no check it ran and no file it inspected is a format failure.
+  Citing one inspected file is enough.
+- **Captains can submit their result as typed JSON.** `armada_submit_plan`, `armada_submit_verdict` and
+  `armada_submit_result` check a submission at once with the same rules as the text contract and return any errors in
+  the same call, so a format slip is fixed in the loop instead of by a rerun. The latest submission of an attempt is
+  stored (migration 138, `stage_submissions`), decides the plan, verdict or result over any marker line, and can be read
+  at `GET /api/v1/missions/{id}/submissions` or with `get_mission_submissions`. Only the mission's own captain, in the
+  matching persona, may submit. Marker text stays the fallback.
+- **API endpoint captains get the submit tool natively.** A run that stops without submitting and without a valid text
+  result gets up to two turns that offer only the submit tool with a required tool call.
+- **Structured findings.** The Judge and verifiers submit findings as file, line, severity, scenario and required fix,
+  and these become the handoff findings. Text output is asked for a `## Findings` section; the heading scraper is the
+  fallback.
+- **One prompt composer, one contract, one budget.** Every launch (first run, rework, repair rerun, rescue) builds its
+  instructions the same way. The persona template's declared slots decide where the handoff goes, so it is delivered
+  once, also for edited templates. The output contract is stated once, at the end of the file; rework sections, repair
+  notes and rescue briefs no longer repeat it. When the captain's context length is known, the whole file plus the API
+  runtime's tool schemas is held to a quarter of it: papercuts, skills and similar sections are replaced by a one-line
+  note first, and the description, acceptance criteria, handoff, rules and contract are never trimmed.
+- **Cold loads and proxy timeouts are retried; a token repeat loop is not.** Errors such as "waiting for llama runner
+  to start" now count as a model still loading, and a 504 or upstream timeout from a proxy (new error type
+  `proxy_timeout`) is Transient. Ollama's "token repeat limit reached" 500 was retried unchanged as a server error; it
+  is now a degenerate-output task failure. A keep_alive warm-up for Ollama endpoints loads the model without
+  generating (RS-7.16, RS-7.17).
+- **OpenCode captains work again, and CLI replies no longer carry reasoning.** OpenCode runs with `--format json`, but
+  its output was read as plain text, so every final message held raw JSON event lines; the reply is now rebuilt from
+  its text events, and its error events reach the provider error parser (exit 0 after an unrecovered error is a
+  failure). The `--dir` flag, which OpenCode 2 rejects, is no longer passed. Think blocks, a bare closing think tag and
+  an unclosed think block are stripped from the final message of Mux, OpenCode, pi, Gemini and Cursor captains
+  (RS-7.12).
+- **File edits keep the file's encoding and line endings.** `edit_file`, `multi_edit` and `write_file` rewrote files
+  without the UTF-8 byte order mark and with the platform line ending; they now keep the byte order mark, encoding and
+  CRLF or LF endings of the existing file (RS-7.14).
+- **Edits that paste `read_file` line numbers are rejected.** An edit or write whose every line carries the line-number
+  prefix `read_file` shows fails with `line_number_prefix` and a message saying to drop the numbers, instead of writing
+  them into the code (RS-7.15).
+- **Tool output maximums scale to the context window.** With a known context length, the hard maximums for `read_file`
+  and process output are the new inference option `toolOutputWindowPercent` (default 12, 1 to 50) of the window;
+  explicit reads page at that maximum, and files up to 16 MB are paged instead of refused. The default page of 200
+  lines and 24,000 characters is unchanged, and an unknown window keeps the 1 MB and 100 KB caps (RS-7.9).
+- **Context length is discovered when it is not configured.** An endpoint with no `ContextLength` reads the served
+  window from Ollama (`/api/ps`, then the Modelfile `num_ctx`) or vLLM (`/v1/models` `max_model_len`) at validation and
+  before an API captain's first turn, and stores it as `DiscoveredContextLength` with its source and time (migration
+  139). A configured value always wins; the trained maximum is never used. Compaction and the context-limit stop now
+  apply whenever a window is known. A Harbor that advertises `api-context-discovery-v1` discovers on its own host
+  (RS-7.8).
+- **PolyPrompt 5.0.1.** Upgraded from 3.5.0. OpenAI and OpenAI-compatible endpoints stay on Chat Completions; Azure
+  OpenAI uses the v1 Chat Completions route with the `api-key` header, so `ApiVersion` is now ignored (RS-7.1).
+- **The API runtime's turn loop is split into tested parts.** `ApiAgentRuntime.RunLoopAsync` became a turn loop, a
+  terminal policy and a context policy, each with its own suite; behavior is unchanged (RS-7.11).
+- **Streaming is on by default for OpenAI-compatible and Ollama endpoints.** The new inference option `streamingMode`
+  (`Automatic`, `On`, `Off`; default `Automatic`) streams OpenAI-compatible, Ollama and Ollama Cloud endpoints, so
+  progress reaches the stall detector; hosted providers stay off. A stored 1.4.0 `streaming: false` reads as
+  `Automatic`, so turning streaming off now means choosing `Off`. On a Harbor, `Automatic` streams only when the Harbor
+  advertises `api-inference-streaming-v1` (RS-7.7).
+- **Harbor update recommended.** Each 1.5.0 runtime behavior that runs on a Harbor has a capability flag
+  (`HarborCapabilityFlags`; table in `docs/HARBOR_PROTOCOL.md`). A Harbor that lacks one keeps its 1.4.0 behavior and
+  is marked `updateRecommended`, with the missing flags in `missingCapabilities`; a captain whose session or active
+  mission is on such a Harbor carries `harborUpdateRecommended`. The dashboard, TUI, mobile app and Harbor app show
+  "Harbor update recommended" (RS-7.13).
+- **Compaction also shrinks old file bodies and reasoning.** Old `write_file`, `edit_file` and `multi_edit` calls in
+  an API captain's history keep their path and a size note instead of the full text, and old reasoning is stripped;
+  the turns behind the last 6 tool outputs stay whole. Token estimates use 3.2 characters per token (was 4 in the
+  instructions budget), so that budget trims slightly sooner (RS-7.10).
+- **A malformed tool call or a repeat loop gets a correction, not the same request again.** When the provider fails a
+  turn on a broken tool call or Ollama's token repeat limit, the API runtime adds a correcting turn (the valid tool
+  names and an argument example, or "do not repeat yourself") and raises the temperature by 0.2, at most twice in a
+  row; then the run fails as before. A streamed 429 now keeps its Retry-After wait (RS-7.3).
+- **Reasoning stays out of replies and history.** A lone closing think tag or an unclosed leading think block is
+  stripped from an API captain's visible text and final message, and leaked reasoning is removed from the history
+  sent back; provider state that must be replayed is kept (RS-7.6).
+- **Ollama models are loaded before the first turn.** API captains on Ollama endpoints send the keep_alive warm-up
+  first, so a cold load no longer eats into the first turn; a failed warm-up only logs a warning (RS-7.16).
+- **Tool calls written as text are run.** When an API captain's model writes a tool call as text (`<tool_call>` JSON,
+  `<function=name>` tags, or a fenced JSON call) instead of a native call, Armada runs it as a real call if the tool is
+  permitted; never from a failed or length-cut reply. Each recovery is logged as a `[recovery]` diagnostic with a
+  per-model total (RS-7.2).
+- **An unknown tool name gets a useful error.** A call to a tool that does not exist returns `unknown_tool` with
+  "unknown tool <name>; available: ..." instead of saying the endpoint's policy disabled it (RS-7.4).
+- **Repeated identical tool calls are stopped.** From the `repeatedToolCallLimit`-th identical consecutive call (new
+  inference option, default 3, 2 to 20) each result carries a corrective note; at twice the limit the run ends as
+  degenerate output, a task failure that escalation sees (RS-7.5).
+- **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
+  start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
+  restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a
+  new grace period, and re-fired every escalation. They are now kept in a new `recovery_state` table (migration 134)
+  and reloaded at startup (RS-3.7).
+- **A mission whose merge entry already landed is completed after a restart.** If the Admiral stopped between
+  marking a merge queue entry Landed and completing its mission, the mission stayed `WorkProduced` for good. Each
+  queue pass now completes such missions first (RS-2.3).
+- **The merge queue renews its processing lease before every entry.** A pass longer than the lease (several builds and
+  test runs) could be taken over by another instance and processed twice. The lease length is the new setting
+  `MergeQueueLeaseSeconds` (default 900, 5 to 14400) (RS-2.5).
+- **Autonomous recovery is crash-consistent.** A recovery incident is created with its failure kind in one write, so a
+  restart can no longer open a second incident for the same failure; a rescue that was created but not yet recorded on
+  its incident is adopted rather than left uncounted against the rescue budget (RS-2.6).
+- **A restart no longer charges queued missions a retry.** A mission that was Assigned but had not started its agent
+  when the Admiral stopped returns to Pending without spending one of its redispatch attempts (RS-2.7).
+- **Every Architect slice keeps the voyage's playbooks.** Slices after the first, and the stages cloned for them,
+  were created without the playbook snapshots the voyage selected, so they ran without those playbooks (RS-2.8).
+- **Planning dispatch keeps the drafted objective.** A voyage dispatched from a planning session now carries the
+  drafted description instead of "Created from planning session ...", which Architect slices passed to every Worker
+  as the overall objective. The session stays linked through `SourcePlanningSessionId` (RS-2.4).
+
+- **A push refused because the target moved is retried.** The merge queue requeues the entry and integrates it again
+  from a fresh fetch, up to `MergeQueueRequeueLimit` times (default 3, 0 to 10, 0 keeps the 1.4.0 behavior), instead
+  of failing it as Infra. Detection uses git exit codes only (`merge-base --is-ancestor` after a fresh fetch), and hook
+  or permission refusals still fail at once. A lost landing handoff is enqueued again under the same limit before it
+  is flagged LandingFailed. New events `merge_queue.requeued` and `mission.landing_handoff_requeued` (RS-9.1).
+- **One landing reconciler.** The landed-entry promotion, merged-by-hand, landing-integrity and LandingFailed sweeps
+  are one `LandingReconciler` that scans unlanded missions once per health tick and runs explicit cases (RS-9.2).
+- **The merge queue fetches once per repository and target branch per pass** instead of about twice per entry
+  (RS-9.3).
+- **Optional batched landing.** `MergeQueueBatchSize` (default 1, off; up to 20) merges several entries, verifies once,
+  pushes once, and splits the batch in half when verification fails. On a six-entry simulation it takes 3.8 s against
+  10.1 s serially; `benchmarks/run-landing-batch.sh` runs the comparison (RS-9.4).
+### Routing and contracts
+
+- **GPT 6 and later classify as Premium.** The tier pattern stopped at GPT 5, so `gpt-6.1` ranked as Standard beside
+  Sonnet and open models. `o3` and `o4` now match only as model names, and a Gemini model is Premium only with
+  `-pro`. Mini, nano, and flash variants stay Economy (RS-2.2).
+- **Finding severity is read by whole words.** "High - follows from ...", "Blocking: allows ...", and "Critical, no
+  information ..." were read as non-blocking because "low" and "info" matched inside other words, so a real blocker
+  could reach the Worker as optional (RS-2.1).
+- **A near-miss SPEC_CONFLICT verdict is recovered when it quotes the criterion.** `**ARMADA VERDICT: SPEC
+  CONFLICT**` with a non-empty `## Spec Conflict` section is repaired like the other verdicts; without the section it
+  is still refused (RS-2.12).
+
+- **Slow models get longer timeouts.** Model profiles take overrides for the stall threshold, tool-wait hard limit,
+  maximum runtime and a new first-output time, and record their measured speed from probe runs (migration 141). An
+  unset value on a model measured slower than `TimeoutScaleReferenceTokensPerSecond` (default 30, 0 turns it off) is
+  the global value scaled up, at most four times: a Qwen at 10 tokens/s gets a 30 minute stall threshold instead of 10.
+  The first-output time applies until a mission's first output. Profile reads return `effectiveTimeouts` (RS-8.8).
+- **Endpoint concurrency caps count real servers.** The key is scope, normalized URL and model instead of the raw base
+  URL: `localhost`, `127.0.0.1` and `::1`, with or without a trailing slash or `/v1`, are one server; a loopback
+  endpoint has its own budget on each Harbor and on the Admiral; two models on one server count separately, and a
+  circuit breaker opened by one model no longer blocks the other (RS-8.9).
+
+- **Probes fill a model's capabilities.** A tool-calling probe records on the profile whether the model's tool calls
+  and MCP tools work, so the envelope's `requiredTools` works without hand edits; values set by hand still win. A
+  served window the probe reads becomes the endpoint's discovered context when none is configured (migration 142)
+  (RS-8.1).
+- **Model profile rendering settings apply.** `Template` picks the prompt variant (Current, Lean or Compact; anything
+  else is rejected), `RepeatContractAtEnd` repeats the output contract at the end of the launch prompt, and
+  `MaxFilesPerMission` adds a file limit to the instructions of personas that write changes (RS-8.2).
+- **Small context windows get a smaller prompt automatically.** The prompt variant comes from the voyage override,
+  then the captain option, then the profile template, then the served context: Compact at or below
+  `PromptVariantCompactMaxContextTokens` (default 32768), Lean at or below `PromptVariantLeanMaxContextTokens` (default
+  65536), 0 turns either off. A Qwen served at 32768 tokens now gets Compact instead of Current. Handoff budgets also
+  use the discovered context (RS-8.3).
+- **Each runtime gets the instructions file it reads.** Codex now gets `AGENTS.override.md` (was `CODEX.md`, which
+  Codex never loads), OpenCode `AGENTS.md` (was `CLAUDE.md`), and the API endpoint, Custom and unknown runtimes
+  `ARMADA.md` (was `CLAUDE.md`). The repository's own AGENTS.md or CLAUDE.md is carried into the generated file
+  (RS-8.10).
+
+- **A captain whose context cannot hold the prompt is not picked.** The estimated prompt (description, output
+  contract, a 2,048-token allowance and the handoff share for dependent stages) must fit in 75% of the served context;
+  otherwise the mission waits as `NoEligibleCaptain` with `selectionReasonCode` `context_too_small`, and each captain's
+  status says how many tokens it needs (RS-8.4).
+- **Model profiles carry a tier.** Routing uses an explicit captain tier, then the administrator-set profile tier
+  (`tiering.tier`), then the model name. With `RoutingData.SuggestTiers` on (off by default), outcome data suggests a
+  tier as a `TierSuggestion` alert in Needs You with an "Apply tier" action; suggestions are never applied on their
+  own. Migration 140 (RS-8.5).
+- **Captains can be ranked by results.** With `RoutingData.RankByOutcomes` (off by default), captains within a tier
+  whose model has at least 20 results for the persona (14-day half-life; both settings) come first by score; the rest
+  keep the load and last-update order. Each ranked choice is a `mission.routing_ranked` event (RS-8.6) Ranking slows dispatch: in the
+  100-captain admission benchmark p50 rose from 1.47 s to 1.90 s and p95 from 1.76 s to 3.07 s, so it is off by
+  default and the dashboard's Reliability settings say so; turn it on when routing by recorded results is worth it.
+- **The Judge must be as strong as the work it reviews.** New pipeline field `judgeStrength` (`Off`, `Wait`,
+  `ProceedAndFlag`): a Judge below the highest tier of the reviewed stages waits with code `judge_strength`, or runs
+  and records `mission.judge_strength_exception`; a Judge from a different model family is preferred. New pipelines
+  default to `Wait`; existing pipelines and voyages stay Off. `ExcludeReviewAuthorsFromJudge` now excludes every
+  captain on an author's model, not only the author's captain (RS-8.7).
+
+### Measurement
+
+- **Battery runs can run under a mixed pipeline.** `BatteryRunRequest` and MCP `run_battery` take `Pipeline` and
+  `CaptainOverrides` (a captain per persona). Each Worker task then runs as a voyage through every stage of that
+  pipeline and is graded on the final branch (RS-1.6).
+- **`armada_stage_outcomes_total`** counts stage attempts by persona, runtime, model, disposition, failure kinds, and
+  contract repair (RS-1.4).
+- **The 1.5.0 acceptance gate** (`src/Armada.Gate`, `benchmarks/config/reference-pipelines.json`) runs the reference
+  pipelines against an isolated Admiral and scores the gate measures; `benchmarks/start-bench-server.sh` gained
+  `--real-agents` (RS-1.5).
+
+### Performance
+
+- **Orphaned dock reclaim reads mission statuses once per sweep** instead of once per dock (RS-10.1).
+- **The recovery coordinator reads only recently updated missions.** Failed and LandingFailed missions come from a new
+  time-bounded status query on all four providers instead of a full scan filtered in memory; migration 143 adds a
+  (status, last_update_utc) index on missions (RS-10.2).
+- **Escalation and Judge routing batch their reads.** Model profiles and parent missions are read in single queries
+  instead of one per captain or parent (RS-10.3).
+- **The dispatch advisor reads a vessel's context once per voyage creation**, and overlap checks prefer a mission's
+  declared owned paths over paths guessed from its brief (RS-10.4).
+- **Live output buffers are ring buffers.** Mission, planning and refinement output no longer copies the whole buffer
+  on each append past the cap (6,000 lines into 256 KiB: 192 ms before, 8 ms after) (RS-10.5).
+
+### Product surfaces
+
+- **Pipeline reliability metrics and Grafana dashboard.** New `armada_stage_attempts_duration_seconds`,
+  `armada_stage_repairs_total`, and `armada_stage_escalations_total` (labels persona, runtime, model, and repair kind
+  or failure kind; no mission ids), plus the `armada-pipeline-reliability` dashboard: completion rate by model and
+  persona, failure kinds, repairs, escalations, dispatch latency, and attempt duration (RS-12.5).
+- **The Harbor app shows its capability flags**, a banner with update steps when the Admiral needs flags this Harbor
+  lacks, and the context windows it discovered for local endpoints (RS-12.19).
+
+### Code health
+
+- **Breaking: the .NET SDK uses sub-clients.** `ArmadaClient` exposes one sub-client per area over a shared transport
+  (`client.Missions.GetAsync(id)`, `client.Battery.ListRunsAsync(...)`); the 1.4 flat methods are removed.
+  `docs/SDK_MIGRATION_1.5.md` maps every 1.4 method to its 1.5 call. `ArmadaClient` and Core's `ArmadaApiClient` are no
+  longer partial classes (RS-11.1).
+- **No partial classes.** `MissionService` is a single facade over 23 services with one responsibility each
+  (`MissionLauncher`, `StageCompletionHandler`, `MissionCaptainRouter`, `ArchitectFanOutService`,
+  `MissionHandoffService`, `MissionReworkService`, `OutputRepairService`, and others) sharing one
+  `MissionServiceContext`; `AdmiralService` moves Harbor link episodes to `CaptainLinkMonitor`; battery pack authoring
+  moves to `BatteryPackAccessService`; the mission, captain, and captain selection database methods split into focused
+  classes on all four providers. Only the Avalonia windows the XAML compiler completes stay partial, and a source scan
+  keeps it that way. Black box records now name the owning service as their component (RS-11.1, RS-11.2).
+- **`SlotManager` is now `RebuildSlotManager`** (and `IRebuildSlotManager`), naming the binary rebuild slots it
+  manages (RS-11.3).
+- **Unique-violation and git identity handling no longer match exception text.** Captain selection and captain slot
+  writes use provider error codes; a failed commit retries as Armada only when `git var` reports no author or committer
+  identity (RS-11.4).
+- The Release build of `Armada.sln` is warning-free on net8.0 and net10.0 (RS-11.5). The verification resume stamp and tool lifecycle lines are deserialized into typed classes instead of read through `JsonDocument`, and em-dashes are gone from product C# code.
+
+- **Battery runs can be listed and cancelled.** `GET /api/v1/battery/runs` (paged; tenant, captain, status filters)
+  and `POST /api/v1/battery/runs/{id}/cancel` (stops open missions and releases docks), with MCP `list_battery_runs`
+  and `cancel_battery_run`, SDK methods, Postman requests, and `armada battery runs` / `armada battery cancel`. The
+  gate runner cancels its run on Ctrl+C and uploads its report unless run with `--no-upload` (RS-12.1a).
+- **Mission attempt history.** `GET /api/v1/missions/{id}/attempts`, MCP `get_mission_attempts`, and
+  `armada mission attempts <id>` list each attempt's captain, model, disposition, failure kind, repair, escalation,
+  Judge verdict, and duration (RS-12.1, RS-12.8).
+- **Reliability summary and gate reports.** `GET /api/v1/reliability/summary` (per model and persona completion,
+  failure kinds, repairs, escalations, `Unclassified` rate; server-side filtering, sorting, paging) and
+  `/api/v1/reliability/gate-reports` (list, upload, get by id or `latest`; stored under `<data>/gate-reports/`, newest
+  200 kept), with MCP tools and SDK methods (RS-12.1).
+- **MCP `update_model_profile`** sets a profile's tier, timeouts, and recovery policy. `docs/MCP_API.md` marks which
+  tools a captain calls and which are operator tools (RS-12.2).
+- **WebSocket attempt events.** `mission.escalated`, `mission.repaired`, and `mission.attempt_changed`;
+  `mission.changed` also carries persona, mode, captain, tier, escalation count, and redispatch and repair attempts
+  (RS-12.3).
+- **The settings API carries every 1.5.0 setting**, including `TimeoutScaleReferenceTokensPerSecond`, the prompt
+  variant thresholds, `MergeQueueRequeueLimit`, `MergeQueueBatchSize`, and `RoutingData` (RS-12.4).
+- **Dashboard: Model Profiles** under Captains, with served context and its source, configured or probed tools,
+  tier and outcome suggestion, recovery policy and timeouts (override, value in effect, and source), and an admin
+  editor. Pipelines gain the Judge strength rule and "Create from template"; endpoints show discovered context; the
+  mission create form has Persona and Dispatch has Mode. Localized in all eight locales (RS-12.11, RS-12.12,
+  RS-12.14).
+
+- **VS Code extension:** mission views show the typed reason a mission is waiting with the advice that clears it,
+  a recovery block (tier, escalations, redispatch and repair counts), and an attempts list; Model Profiles pages open
+  in editor tabs (RS-12.18).
+
+- **Mobile app:** mission detail shows attempts (captain, model, disposition, failure kind, repair, escalation, Judge
+  verdict, duration) and submitted results with findings by severity; a Model Profiles tab under Captains shows
+  served context, tools, tier and suggestion, recovery policy and timeouts read-only. The app accepts `escalated` and
+  `recovery_exhausted` pushes (RS-12.16).
+
+- **Dashboard reliability views.** Mission detail shows an attempts card (captain, model, outcome, failure kind, next
+  step, duration; live on attempt events) and submitted results with findings by severity. A Reliability tab under
+  Captains lists completion, failures, repairs, escalations, `Unclassified` rate, and failure kinds per model and
+  persona with server-side filtering, sorting, and paging, plus the latest gate report. A Battery Runs tab lists runs
+  with Cancel. Settings has a Reliability and Routing section for every 1.5.0 setting (RS-12.10, RS-12.13, RS-12.4).
+
+- **CLI:** `armada mission create --persona --mode`, `armada persona list|show|ladder` (`--rung`, `--clear`),
+  `armada model-profile list|show|update` (tier, recovery, and timeout flags; `-1` clears an override), and
+  `armada battery report [id]` (RS-12.8).
+- **TUI:** Captains gains Model Profiles, Reliability (with the latest gate report), and Battery Runs (cancel) tabs;
+  the model profile page shows and edits tier, recovery, and timeouts with their source; mission detail has an
+  Attempts panel and names the typed blocker reason; pipelines edit the Judge strength rule (RS-12.9).
+
+### Documentation
+
+- New `docs/OPEN_MODELS.md`: running Qwen3.8 and other open models in pipelines with Opus and GPT-6.1 (endpoint setup, served context and prompt variants, streaming and timeouts, concurrency caps, escalation ladder, Judge strength, tiers and outcome ranking, reference pipelines, known limits).
+- `docs/MODEL_GUIDANCE.md`, `docs/MODEL_HETEROGENEITY.md`, `docs/CAPTAIN_ROUTING.md`, `docs/PERSONAS.md`, `docs/PERSONAS_GUIDE.md` and `docs/PIPELINES.md` describe the 1.5.0 behavior: what the ApiEndpoint runtime absorbs, admission order and typed blockers, escalation ladders, Judge strength, and source pointers to the services that replaced the MissionService partial files.
+- `CLAUDE.md` and `AGENTS.md` describe the MissionService facade and its services, the SourceGuards scans, SDK sub-clients, and the no-partial-classes rule.
+- `docs/REST_API.md`, `docs/MCP_API.md`, `docs/OPERATIONS.md` (every 1.5.0 reliability setting with default, range and effect), `docs/UPGRADING.md` (migrations 133 to 143, behavior changes and how to reverse each), `DEPRECATION.md`, `docs/MERGING.md`, `docs/BLACKBOX.md`, `docs/CONCURRENCY_TESTING.md`, `docs/PERFORMANCE.md`, `docs/TESTING.md`, `docs/RELEASING.md` (reliability gate step; the stale dist drift check text removed), `docs/DASHBOARD_NAVIGATION.md`, the orchestrator and instructions guides, `README.md`, `DOCKERHUB_README.md`, `GETTING_STARTED.md` and `FAST_TRACK_SETUP.md` cover 1.5.0 and link `docs/OPEN_MODELS.md`.
+
+- `POST /api/v1/battery/runs/enumerate` and `POST /api/v1/reliability/gate-reports/enumerate` (new `GateReportQuery`) are the POST forms of the two GET lists, with SDK methods `Battery.EnumerateRunsAsync` and `Reliability.EnumerateGateReportsAsync` and Postman requests. `GET /api/v1/missions/{id}/submissions` returns at most the newest 200 submissions.
+- Push notifications gain the `MissionEscalated` (one per escalation, to the owner or the tenant admins) and `RecoveryExhausted` (one per incident whose rescue budget is spent) categories, honoring device category switches, tenant scope, dedupe and the rate limit. Devices registered earlier opt in from Preferences; the per-device category limit is now 16.
+- Fix: on PostgreSQL the dispatcher picked the newest Pending mission instead of the oldest (`EnumerateByStatusAsync` now orders by priority, then oldest first, on every provider). On SQL Server the write that records a launch retries transient deadlocks, so a running mission no longer stays `Assigned`.
+- Mobile: the iOS bundle ID and Android package are `ai.latticetech.armada`; `eas.json` has `development`, `development-device`, `preview` and `production` profiles with EAS remote build numbers; the app version is 1.5.0 with `extra.releaseVersion` shown in Preferences; the AD_ID permission is blocked; store graphics, listing copy and screenshot scripts are under `src/Armada.Mobile/store/`, and `APP_STORE_SUBMISSION.md` records the review answers.
+- Mobile: the Captains hub gains Reliability (outcomes per model and persona, with the latest gate report) and Battery Runs (status filter, cancel for admins) tabs, and the Activity hub gains a Concurrency tab; the mobile parity manifest has no planned entries.
+- Every collection a REST route or MCP tool returns now declares a size limit (`[CollectionBound]`), including attempt
+  history, reliability summaries, gate reports and stage submissions. A captain submission over its findings (200),
+  sections (50), checks (100) or inspected-file (500) limit is rejected with the field named; escalation memory keeps
+  at most 200 changed files.
+
+### Tests
+
+- Cases that set a skip reason now also set Touchstone's skip flag; five suites ran cases that were meant to skip,
+  including the real pi smoke cases on hosts without pi. Real pi runs are opt-in with `ARMADA_TEST_REAL_PI=1`.
+- New: the open-model simulator (`Runtimes.OpenModelSimulator`), crash consistency (`Services.CrashConsistency`),
+  canned model outputs (`Services.ModelOutputContract`), and gate scoring (`Models.GateScoring`).
+- Fixed: the TUI focus sweep at 80x24 and 120x40 (stale placements under nested focus scopes), the passive usage
+  capture contract's timestamp precision, and the compose validation's missing Grafana password.
+- The upgrade test runs from a 1.4.0 baseline: it seeds missions in every text-marker state and checks the migration 133 backfill, and seeds vessels with the numeric concurrency limits 1.3.0 and later require. Results for the upgrade test and the crash-point matrix on all four providers are in `benchmarks/VERIFICATION_1.5.0.md`.
 
 ## v1.4.0 (2026-11-21)
 

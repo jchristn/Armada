@@ -270,10 +270,10 @@ namespace Test.Shared.Suites.Services
 
                     Voyage standard = await service.DispatchVoyageAsync("Eval", "d", vessel.Id,
                         new List<MissionDescription> { new MissionDescription("m1", "d1"), new MissionDescription("m2", "d2") },
-                        null, null, null, null, CancellationToken.None, null, true).ConfigureAwait(false);
+                        isEvaluation: true).ConfigureAwait(false);
                     Voyage staged = await service.DispatchVoyageAsync("Eval staged", "d", vessel.Id,
                         new List<MissionDescription> { new MissionDescription("m3", "d3") },
-                        pipeline.Id, null, null, null, CancellationToken.None, null, true).ConfigureAwait(false);
+                        pipeline.Id, isEvaluation: true).ConfigureAwait(false);
 
                     foreach (Voyage voyage in new[] { standard, staged })
                     {
@@ -585,15 +585,15 @@ namespace Test.Shared.Suites.Services
                     captain.ProcessId = 4242;
                     await CaptainAssignmentFixture.CreateAsync(db, captain);
 
-                    RuntimeProviderError endpoint500 = new RuntimeProviderError { HttpStatusCode = 500, ErrorType = "llm_error", Message = "error parsing tool call", Reason = "the model endpoint rejected the request" };
+                    RuntimeProviderError endpoint500 = new RuntimeProviderError { HttpStatusCode = 500, ErrorType = "llm_error", Message = "internal server error", Reason = "the model endpoint rejected the request" };
                     await service.HandleProcessExitAsync(4242, RuntimeFailureClassifier.Decide(1, endpoint500), captain.Id, mission.Id).ConfigureAwait(false);
 
                     Mission? resumed = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
                     AssertEqual(MissionStatusEnum.InProgress, resumed!.Status, "a transient endpoint error resumes instead of failing");
                     AssertEqual(1, relaunches, "relaunched once in the same dock");
                     AssertEqual(dock.Id, resumed.DockId, "the same dock, with the work so far");
-                    AssertContains("Earlier attempt 1 stopped", resumed.Description ?? "");
-                    AssertContains("git status", resumed.Description ?? "");
+                    AssertContains("Earlier attempt 1 stopped", Armada.Core.Services.MissionNotes.EffectiveDescription(resumed));
+                    AssertContains("git status", Armada.Core.Services.MissionNotes.EffectiveDescription(resumed));
                     Voyage? stillRunning = await db.Voyages.ReadAsync(voyage.Id).ConfigureAwait(false);
                     AssertEqual(VoyageStatusEnum.InProgress, stillRunning!.Status, "the voyage keeps running");
 
@@ -610,6 +610,135 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(2, relaunches);
                     AssertContains("rejected the request", failed.FailureReason ?? "");
                     AssertEqual(MissionFailureKindEnum.Infra, failed.FailureKind, "an endpoint outage is the environment, not a crash to rescue");
+                    try { Directory.Delete(dock.WorktreePath, true); } catch { }
+                }
+            }));
+
+            cases.Add(CaseAsync("handle_process_exit_async_resumes_unclassified_exit_once", "An Unclassified exit (no recognized provider error) resumes in place once, then fails instead of spending the whole recovery budget", TestTags.Reliability, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    StubGitService git = new StubGitService();
+                    ArmadaSettings settings = CreateSettings();
+                    settings.MaxRecoveryAttempts = 3;
+                    settings.LogDirectory = Path.Combine(Path.GetTempPath(), "armada_test_logs_" + Guid.NewGuid().ToString("N"));
+                    LoggingModule logging = CreateLogging();
+                    IDockService dockService = new DockService(logging, db, settings, git);
+                    CaptainService captainService = new CaptainService(logging, db, settings, git, dockService);
+                    int relaunches = 0;
+                    captainService.OnLaunchAgent = (_, _, _) => { relaunches++; return Task.FromResult(7100 + relaunches); };
+                    IMissionService missionService = new MissionService(logging, db, settings, dockService, captainService);
+                    AdmiralService service = new AdmiralService(logging, db, settings, captainService, missionService, new VoyageService(logging, db), dockService);
+
+                    Vessel vessel = await db.Vessels.CreateAsync(new Vessel("unclassified-vessel", "https://github.com/test/repo.git")).ConfigureAwait(false);
+                    Voyage voyage = new Voyage("Unclassified Voyage");
+                    voyage.Status = VoyageStatusEnum.InProgress;
+                    await db.Voyages.CreateAsync(voyage);
+
+                    Dock dock = new Dock(vessel.Id);
+                    dock.WorktreePath = Path.Combine(Path.GetTempPath(), "armada_unclassified_dock_" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(dock.WorktreePath);
+                    dock.Active = true;
+                    dock = await db.Docks.CreateAsync(dock).ConfigureAwait(false);
+
+                    Mission mission = new Mission("Worker on an open model", "Do the work.");
+                    mission.VoyageId = voyage.Id;
+                    mission.VesselId = vessel.Id;
+                    mission.Persona = "Worker";
+                    mission.Status = MissionStatusEnum.InProgress;
+                    mission.ProcessId = 4343;
+                    mission.DockId = dock.Id;
+                    await db.Missions.CreateAsync(mission);
+
+                    Captain captain = new Captain("mux", AgentRuntimeEnum.Mux);
+                    captain.State = CaptainStateEnum.Working;
+                    captain.Assignment = mission;
+                    captain.ProcessId = 4343;
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
+
+                    RuntimeExitInfo unexplained = RuntimeFailureClassifier.Decide(1, null);
+                    AssertEqual(RuntimeFailureKindEnum.Unclassified, unexplained.FailureKind);
+                    await service.HandleProcessExitAsync(4343, unexplained, captain.Id, mission.Id).ConfigureAwait(false);
+                    Mission? resumed = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.InProgress, resumed!.Status, "the first unexplained exit resumes");
+                    AssertEqual(1, relaunches);
+                    AssertEqual(dock.Id, resumed.DockId, "in the same dock");
+
+                    await service.HandleProcessExitAsync(resumed.ProcessId!.Value, RuntimeFailureClassifier.Decide(1, null), captain.Id, mission.Id).ConfigureAwait(false);
+                    Mission? failed = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Failed, failed!.Status, "a second unexplained exit does not resume again, though MaxRecoveryAttempts is 3");
+                    AssertEqual(1, relaunches);
+                    AssertEqual(MissionFailureKindEnum.Crash, failed.FailureKind, "still eligible for a bounded rescue");
+                    try { Directory.Delete(dock.WorktreePath, true); } catch { }
+                }
+            }));
+
+            cases.Add(CaseAsync("model_profile_recovery_policy_overrides_unclassified_resumes", "RS-5.5: a captain's model profile recovery policy replaces the global Unclassified resume limit for its missions", TestTags.Reliability, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    StubGitService git = new StubGitService();
+                    ArmadaSettings settings = CreateSettings();
+                    settings.MaxRecoveryAttempts = 3;
+                    settings.UnclassifiedResumeLimit = 1;
+                    settings.LogDirectory = Path.Combine(Path.GetTempPath(), "armada_test_logs_" + Guid.NewGuid().ToString("N"));
+                    LoggingModule logging = CreateLogging();
+                    IDockService dockService = new DockService(logging, db, settings, git);
+                    CaptainService captainService = new CaptainService(logging, db, settings, git, dockService);
+                    int relaunches = 0;
+                    captainService.OnLaunchAgent = (_, _, _) => { relaunches++; return Task.FromResult(7200 + relaunches); };
+                    IMissionService missionService = new MissionService(logging, db, settings, dockService, captainService);
+                    AdmiralService service = new AdmiralService(logging, db, settings, captainService, missionService, new VoyageService(logging, db), dockService);
+
+                    Vessel vessel = await db.Vessels.CreateAsync(new Vessel("policy-vessel", "https://github.com/test/repo.git")).ConfigureAwait(false);
+                    Voyage voyage = new Voyage("Policy Voyage");
+                    voyage.Status = VoyageStatusEnum.InProgress;
+                    await db.Voyages.CreateAsync(voyage);
+
+                    Dock dock = new Dock(vessel.Id);
+                    dock.WorktreePath = Path.Combine(Path.GetTempPath(), "armada_policy_dock_" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(dock.WorktreePath);
+                    dock.Active = true;
+                    dock = await db.Docks.CreateAsync(dock).ConfigureAwait(false);
+
+                    Mission mission = new Mission("Worker on an open model", "Do the work.");
+                    mission.VoyageId = voyage.Id;
+                    mission.VesselId = vessel.Id;
+                    mission.Persona = "Worker";
+                    mission.Status = MissionStatusEnum.InProgress;
+                    mission.ProcessId = 4444;
+                    mission.DockId = dock.Id;
+                    await db.Missions.CreateAsync(mission);
+
+                    Captain captain = new Captain("mux", AgentRuntimeEnum.Mux);
+                    captain.State = CaptainStateEnum.Working;
+                    captain.Assignment = mission;
+                    captain.ProcessId = 4444;
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
+
+                    // The profile the captain's stage outcomes resolve to (same identity key), so a relaunch keeps the link.
+                    ModelProfile profile = new ModelProfile();
+                    profile.Identity.Runtime = "Mux";
+                    profile.Recovery.UnclassifiedResumes = 2;
+                    profile = await db.ModelProfiles.CreateAsync(profile, ModelProfileRules.IdentityKey(null, profile.Identity)).ConfigureAwait(false);
+                    AssertTrue(await db.ModelProfiles.LinkCaptainAsync(captain.Id, profile.Id).ConfigureAwait(false), "captain linked to the profile");
+
+                    int processId = 4444;
+                    for (int exit = 1; exit <= 2; exit++)
+                    {
+                        await service.HandleProcessExitAsync(processId, RuntimeFailureClassifier.Decide(1, null), captain.Id, mission.Id).ConfigureAwait(false);
+                        Mission? resumed = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                        AssertEqual(MissionStatusEnum.InProgress, resumed!.Status, "unexplained exit " + exit + " resumes under the profile's limit of 2");
+                        processId = resumed.ProcessId!.Value;
+                    }
+
+                    AssertEqual(2, relaunches);
+                    await service.HandleProcessExitAsync(processId, RuntimeFailureClassifier.Decide(1, null), captain.Id, mission.Id).ConfigureAwait(false);
+                    Mission? failed = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Failed, failed!.Status, "the third unexplained exit does not resume");
+                    AssertEqual(2, relaunches);
                     try { Directory.Delete(dock.WorktreePath, true); } catch { }
                 }
             }));
@@ -660,7 +789,7 @@ namespace Test.Shared.Suites.Services
                     captain.ProcessId = 4242;
                     await CaptainAssignmentFixture.CreateAsync(db, captain);
 
-                    RuntimeProviderError endpoint500 = new RuntimeProviderError { HttpStatusCode = 500, ErrorType = "llm_error", Message = "error parsing tool call", Reason = "the model endpoint rejected the request" };
+                    RuntimeProviderError endpoint500 = new RuntimeProviderError { HttpStatusCode = 500, ErrorType = "llm_error", Message = "internal server error", Reason = "the model endpoint rejected the request" };
                     await service.HandleProcessExitAsync(4242, RuntimeFailureClassifier.Decide(1, endpoint500), captain.Id, mission.Id).ConfigureAwait(false);
 
                     int? processId = 4242;
@@ -673,7 +802,7 @@ namespace Test.Shared.Suites.Services
                     }
                     AssertEqual(3, relaunches, "resumed past MaxRecoveryAttempts of 1");
                     Mission? after = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
-                    int notes = (after!.Description ?? "").Split("stopped" + "\n", StringSplitOptions.None).Length - 1;
+                    int notes = Armada.Core.Services.MissionNotes.EffectiveDescription(after).Split("stopped" + "\n", StringSplitOptions.None).Length - 1;
                     AssertEqual(1, notes, "a repeating failure is recorded once, not once per resume");
                     try { Directory.Delete(dock.WorktreePath, true); } catch { }
                 }
@@ -723,8 +852,8 @@ namespace Test.Shared.Suites.Services
                     Mission? resumed = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
                     AssertEqual(MissionStatusEnum.InProgress, resumed!.Status, "a failing build resumes the local model");
                     AssertEqual(1, relaunches);
-                    AssertContains("stage check failed", resumed.Description ?? "");
-                    AssertContains("CS1513", resumed.Description ?? "", "the build output reaches the model");
+                    AssertContains("stage check failed", Armada.Core.Services.MissionNotes.EffectiveDescription(resumed));
+                    AssertContains("CS1513", Armada.Core.Services.MissionNotes.EffectiveDescription(resumed), "the build output reaches the model");
 
                     // A frontier captain is not checked: it proceeds to completion.
                     Captain claude = new Captain("claude", AgentRuntimeEnum.ClaudeCode);
@@ -776,8 +905,8 @@ namespace Test.Shared.Suites.Services
                     Dock dock = new Dock(vessel.Id) { WorktreePath = Path.Combine(Path.GetTempPath(), "armada_esc_dock_" + Guid.NewGuid().ToString("N")), Active = true };
                     Directory.CreateDirectory(dock.WorktreePath);
                     dock = await db.Docks.CreateAsync(dock).ConfigureAwait(false);
-                    Mission worker = await db.Missions.CreateAsync(new Mission("Build it [Worker]", "Do it.") { VoyageId = voyage.Id, VesselId = vessel.Id, Persona = "Worker", Status = MissionStatusEnum.InProgress, ProcessId = 4242, DockId = dock.Id, BranchName = "armada/mux/w" }).ConfigureAwait(false);
-                    Captain mux = await CaptainAssignmentFixture.CreateAsync(db, new Captain("mux", AgentRuntimeEnum.Mux) { State = CaptainStateEnum.Working, ProcessId = 4242, RecoveryAttempts = 1 , Assignment = new Mission { Id = worker.Id, DockId = dock.Id }}).ConfigureAwait(false);
+                    Mission worker = await db.Missions.CreateAsync(new Mission("Build it [Worker]", "Do it. A brief may quote the old marker text:\n\n## Escalated to nobody\n\nwhich no longer blocks escalation (RS-3.2).") { VoyageId = voyage.Id, VesselId = vessel.Id, Persona = "Worker", Status = MissionStatusEnum.InProgress, ProcessId = 4242, DockId = dock.Id, BranchName = "armada/mux/w" }).ConfigureAwait(false);
+                    Captain mux = await CaptainAssignmentFixture.CreateAsync(db, new Captain("mux", AgentRuntimeEnum.Mux) { State = CaptainStateEnum.Working, ProcessId = 4242, RecoveryAttempts = 1, Tier = CaptainTierEnum.Economy, Assignment = new Mission { Id = worker.Id, DockId = dock.Id }}).ConfigureAwait(false);
 
                     RuntimeProviderError endpoint500 = new RuntimeProviderError { HttpStatusCode = 500, ErrorType = "llm_error", Reason = "the model endpoint rejected the request" };
                     await service.HandleProcessExitAsync(4242, RuntimeFailureClassifier.Decide(1, endpoint500), mux.Id, worker.Id).ConfigureAwait(false);
@@ -786,8 +915,67 @@ namespace Test.Shared.Suites.Services
                     AssertNotEqual(MissionStatusEnum.Failed, escalated!.Status, "the stuck Worker is not failed");
                     AssertEqual(claude.Id, escalated.RequestedCaptainId, "the planner's captain takes it over");
                     AssertEqual("armada/mux/w", escalated.BranchName, "on the same branch");
-                    AssertContains("## Escalated to claude", escalated.Description ?? "");
+                    AssertContains("## Escalated to claude", Armada.Core.Services.MissionNotes.EffectiveDescription(escalated));
+                    AssertEqual(1, escalated.EscalationCount, "escalation is counted in its column");
+                    AssertEqual(mux.Id, escalated.EscalatedFromCaptainId, "the captain it was taken from is recorded");
                     try { Directory.Delete(dock.WorktreePath, true); } catch { }
+                }
+            }));
+
+            cases.Add(CaseAsync("repeated_malformed_tool_calls_escalate", "RS-5.6: a second unparsable tool call in a row moves the mission up the escalation ladder instead of resuming again", TestTags.Reliability, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LadderScenario scenario = await LadderScenario.CreateAsync(testDb.Driver, CreateLogging(), CreateSettings()).ConfigureAwait(false);
+                    RuntimeProviderError parse = new RuntimeProviderError { ErrorType = OpenModelErrorPatterns.ToolCallParseError, Reason = "could not parse the tool call" };
+                    await scenario.Service.HandleProcessExitAsync(4646, RuntimeFailureClassifier.Decide(1, parse), scenario.Qwen.Id, scenario.Mission.Id).ConfigureAwait(false);
+                    Mission? resumed = await testDb.Driver.Missions.ReadAsync(scenario.Mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.InProgress, resumed!.Status, "the first malformed tool call resumes in place");
+                    await scenario.Service.HandleProcessExitAsync(resumed.ProcessId!.Value, RuntimeFailureClassifier.Decide(1, parse), scenario.Qwen.Id, scenario.Mission.Id).ConfigureAwait(false);
+                    Mission? escalated = await testDb.Driver.Missions.ReadAsync(scenario.Mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Pending, escalated!.Status, "the second one escalates");
+                    AssertEqual(scenario.Gpt.Id, escalated.RequestedCaptainId, "to the next rung");
+                    AssertEqual(1, escalated.EscalationCount);
+                    AssertEqual("qwen3.8", escalated.EscalatedFromModel);
+                    scenario.Cleanup();
+                }
+            }));
+
+            cases.Add(CaseAsync("repeated_iteration_limit_escalates", "RS-5.12: a second iteration-limit exit in a row moves the mission up the escalation ladder instead of resuming again", TestTags.Reliability, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LadderScenario scenario = await LadderScenario.CreateAsync(testDb.Driver, CreateLogging(), CreateSettings()).ConfigureAwait(false);
+                    RuntimeProviderError limit = new RuntimeProviderError { ErrorType = RuntimeFailureClassifier.MaxIterationsReached, Reason = "mux stopped: reached the 50-iteration limit" };
+                    await scenario.Service.HandleProcessExitAsync(4646, RuntimeFailureClassifier.Decide(1, limit), scenario.Qwen.Id, scenario.Mission.Id).ConfigureAwait(false);
+                    Mission? resumed = await testDb.Driver.Missions.ReadAsync(scenario.Mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.InProgress, resumed!.Status, "the first iteration-limit exit resumes in place");
+                    await scenario.Service.HandleProcessExitAsync(resumed.ProcessId!.Value, RuntimeFailureClassifier.Decide(1, limit), scenario.Qwen.Id, scenario.Mission.Id).ConfigureAwait(false);
+                    Mission? escalated = await testDb.Driver.Missions.ReadAsync(scenario.Mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Pending, escalated!.Status, "the second one escalates");
+                    AssertEqual(scenario.Gpt.Id, escalated.RequestedCaptainId, "to the next rung");
+                    AssertEqual(1, escalated.EscalationCount);
+                    scenario.Cleanup();
+                }
+            }));
+
+            cases.Add(CaseAsync("escalate_after_resumes_skips_remaining_resumes", "RS-5.6: a profile with EscalateAfterResumes 0 escalates a task failure at once while resumes remain", TestTags.Reliability, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LadderScenario scenario = await LadderScenario.CreateAsync(testDb.Driver, CreateLogging(), CreateSettings()).ConfigureAwait(false);
+                    ModelProfile profile = new ModelProfile();
+                    profile.Identity.Runtime = "Mux";
+                    profile.Recovery.EscalateAfterResumes = 0;
+                    profile = await testDb.Driver.ModelProfiles.CreateAsync(profile, ModelProfileRules.IdentityKey(null, profile.Identity)).ConfigureAwait(false);
+                    AssertTrue(await testDb.Driver.ModelProfiles.LinkCaptainAsync(scenario.Qwen.Id, profile.Id).ConfigureAwait(false), "captain linked to the profile");
+                    RuntimeProviderError degenerate = new RuntimeProviderError { ErrorType = "degenerate_output", Reason = "the model repeated itself" };
+                    await scenario.Service.HandleProcessExitAsync(4646, RuntimeFailureClassifier.Decide(1, degenerate), scenario.Qwen.Id, scenario.Mission.Id).ConfigureAwait(false);
+                    Mission? escalated = await testDb.Driver.Missions.ReadAsync(scenario.Mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Pending, escalated!.Status, "no resume was spent");
+                    AssertEqual(scenario.Gpt.Id, escalated.RequestedCaptainId);
+                    AssertEqual(0, scenario.Relaunches, "the captain was not relaunched");
+                    scenario.Cleanup();
                 }
             }));
 
@@ -834,8 +1022,8 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(RuntimeFailureKindEnum.Transient, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 503 }));
                 AssertEqual(RuntimeFailureKindEnum.Transient, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { ErrorType = "llm_connection_error" }));
                 AssertEqual(RuntimeFailureKindEnum.TaskFailure, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { ErrorType = "max_iterations_reached" }));
-                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 429 }));
-                AssertEqual(RuntimeFailureKindEnum.Crash, RuntimeFailureClassifier.Classify(1, null));
+                AssertEqual(RuntimeFailureKindEnum.Transient, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 429 }));
+                AssertEqual(RuntimeFailureKindEnum.Unclassified, RuntimeFailureClassifier.Classify(1, null));
             }));
 
             cases.Add(CaseAsync("handle_process_exit_async_waits_for_launch_to_be_recorded", "HandleProcessExitAsync waits for an Assigned mission's launch to be recorded before handling a fast exit", TestTags.Positive, async () =>
@@ -1677,7 +1865,7 @@ namespace Test.Shared.Suites.Services
                     await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     DateTime before = DateTime.UtcNow;
-                    RuntimeProviderError providerError = new RuntimeProviderError { HttpStatusCode = 429, ErrorType = "rate_limit_error", RetryAfterSeconds = 300 };
+                    RuntimeProviderError providerError = new RuntimeProviderError { HttpStatusCode = 429, ErrorType = "insufficient_quota", RetryAfterSeconds = 300 };
                     await service.HandleProcessExitAsync(4343, RuntimeFailureClassifier.Decide(1, providerError), captain.Id, mission.Id).ConfigureAwait(false);
 
                     Captain? updatedCaptain = await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
@@ -1804,7 +1992,8 @@ namespace Test.Shared.Suites.Services
                     Mission? updatedMission = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
                     Captain? updatedCaptain = await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
                     AssertEqual(MissionStatusEnum.Failed, updatedMission!.Status);
-                    AssertEqual("Agent process exited with code 1", updatedMission.FailureReason, "The failure reason comes from the exit info, not a scraped log line");
+                    AssertTrue((updatedMission.FailureReason ?? "").StartsWith("Agent process exited with code 1\nRemediation: The runtime reported no provider error.", StringComparison.Ordinal),
+                        "The failure reason comes from the exit info, not a scraped log line: " + updatedMission.FailureReason);
                     AssertEqual(CaptainStateEnum.Idle, updatedCaptain!.State, "Log words neither stall nor quarantine the captain");
                     AssertNull(updatedCaptain.QuarantineUntilUtc);
                 }
@@ -2194,6 +2383,50 @@ namespace Test.Shared.Suites.Services
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
                 tags: new List<string> { tag });
+        }
+
+
+        // A Mux Worker on qwen3.8 (Economy) whose persona's ladder is qwen3.8, then gpt-6.1 (RS-5.6).
+        private sealed class LadderScenario
+        {
+            public AdmiralService Service { get; private set; } = null!;
+            public Mission Mission { get; private set; } = null!;
+            public Captain Qwen { get; private set; } = null!;
+            public Captain Gpt { get; private set; } = null!;
+            public int Relaunches { get; private set; } = 0;
+            private string _DockPath = String.Empty;
+
+            public static async Task<LadderScenario> CreateAsync(DatabaseDriver db, LoggingModule logging, ArmadaSettings settings)
+            {
+                LadderScenario scenario = new LadderScenario();
+                StubGitService git = new StubGitService();
+                settings.MaxRecoveryAttempts = 3;
+                settings.TransientOutageGraceMinutes = 0;
+                settings.LogDirectory = Path.Combine(Path.GetTempPath(), "armada_test_logs_" + Guid.NewGuid().ToString("N"));
+                IDockService dockService = new DockService(logging, db, settings, git);
+                CaptainService captainService = new CaptainService(logging, db, settings, git, dockService);
+                captainService.OnLaunchAgent = (_, _, _) => { scenario.Relaunches++; return Task.FromResult(7300 + scenario.Relaunches); };
+                IMissionService missionService = new MissionService(logging, db, settings, dockService, captainService);
+                scenario.Service = new AdmiralService(logging, db, settings, captainService, missionService, new VoyageService(logging, db), dockService);
+
+                Persona worker = new Persona("Worker", "persona.worker");
+                worker.EscalationLadder = new List<PersonaCaptainPriority> { new PersonaCaptainPriority { Model = "qwen3.8" }, new PersonaCaptainPriority { Model = "gpt-6.1" } };
+                await db.Personas.CreateAsync(worker).ConfigureAwait(false);
+                Vessel vessel = await db.Vessels.CreateAsync(new Vessel("ladder-vessel", "https://github.com/test/repo.git")).ConfigureAwait(false);
+                Dock dock = new Dock(vessel.Id) { WorktreePath = Path.Combine(Path.GetTempPath(), "armada_ladder_dock_" + Guid.NewGuid().ToString("N")), Active = true };
+                Directory.CreateDirectory(dock.WorktreePath);
+                scenario._DockPath = dock.WorktreePath;
+                dock = await db.Docks.CreateAsync(dock).ConfigureAwait(false);
+                scenario.Mission = await db.Missions.CreateAsync(new Mission("Build it", "Do the work.") { VesselId = vessel.Id, Persona = "Worker", Status = MissionStatusEnum.InProgress, ProcessId = 4646, DockId = dock.Id, BranchName = "armada/ladder" }).ConfigureAwait(false);
+                scenario.Qwen = await CaptainAssignmentFixture.CreateAsync(db, new Captain("qwen", AgentRuntimeEnum.Mux) { Model = "qwen3.8", State = CaptainStateEnum.Working, ProcessId = 4646, Assignment = new Mission { Id = scenario.Mission.Id, DockId = dock.Id } }).ConfigureAwait(false);
+                scenario.Gpt = await CaptainAssignmentFixture.CreateAsync(db, new Captain("gpt", AgentRuntimeEnum.Codex) { Model = "gpt-6.1", State = CaptainStateEnum.Idle }).ConfigureAwait(false);
+                return scenario;
+            }
+
+            public void Cleanup()
+            {
+                try { Directory.Delete(_DockPath, true); } catch { }
+            }
         }
 
         #endregion

@@ -80,3 +80,20 @@ describe('mission hierarchy in the voyage form', () => {
     expect(parseOwnedPaths(undefined)).toEqual([]);
   });
 });
+
+describe('mission persona and mode in the voyage form', () => {
+  it('sends a trimmed persona and a non-default mode, and omits them when unset', () => {
+    const request = buildVoyageCreateRequest(form({
+      missions: [
+        { key: 'm1', title: 'Review', description: '', priority: 100, persona: ' Judge ', mode: 'Audit' },
+        { key: 'm2', title: 'Build', description: '', priority: 100, persona: '', mode: 'Implementation' },
+        { key: 'm3', title: 'Plain', description: '', priority: 100 },
+      ],
+    }));
+    expect(request.missions[0]).toMatchObject({ persona: 'Judge', mode: 'Audit' });
+    expect(request.missions[1]).not.toHaveProperty('persona');
+    expect(request.missions[1]).not.toHaveProperty('mode');
+    expect(request.missions[2]).not.toHaveProperty('persona');
+    expect(request.missions[2]).not.toHaveProperty('mode');
+  });
+});

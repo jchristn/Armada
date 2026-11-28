@@ -41,9 +41,9 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 using (SqliteCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = @"INSERT INTO model_endpoints
-                        (id, tenant_id, user_id, name, kind, scope, provider, base_url, api_key, model, region, project, api_version, access_key_id, auth_type, auth_username, auth_header_name, auth_query_parameter, auth_headers_json, inference_options_json, dimensionality, timeout_ms, enabled, health_status, last_health_check_utc, last_health_error, last_latency_ms, health_history_json, created_utc, last_update_utc)
+                        (id, tenant_id, user_id, name, kind, scope, provider, base_url, api_key, model, region, project, api_version, access_key_id, auth_type, auth_username, auth_header_name, auth_query_parameter, auth_headers_json, inference_options_json, dimensionality, timeout_ms, enabled, health_status, last_health_check_utc, last_health_error, last_latency_ms, health_history_json, discovered_context_length, discovered_context_source, context_discovered_utc, created_utc, last_update_utc)
                         VALUES
-                        (@id, @tenant_id, @user_id, @name, @kind, @scope, @provider, @base_url, @api_key, @model, @region, @project, @api_version, @access_key_id, @auth_type, @auth_username, @auth_header_name, @auth_query_parameter, @auth_headers_json, @inference_options_json, @dimensionality, @timeout_ms, @enabled, @health_status, @last_health_check_utc, @last_health_error, @last_latency_ms, @health_history_json, @created_utc, @last_update_utc);";
+                        (@id, @tenant_id, @user_id, @name, @kind, @scope, @provider, @base_url, @api_key, @model, @region, @project, @api_version, @access_key_id, @auth_type, @auth_username, @auth_header_name, @auth_query_parameter, @auth_headers_json, @inference_options_json, @dimensionality, @timeout_ms, @enabled, @health_status, @last_health_check_utc, @last_health_error, @last_latency_ms, @health_history_json, @discovered_context_length, @discovered_context_source, @context_discovered_utc, @created_utc, @last_update_utc);";
                     BindEndpoint(cmd, endpoint);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
@@ -89,6 +89,9 @@ namespace Armada.Core.Database.Sqlite.Implementations
                         last_health_check_utc = @last_health_check_utc,
                         last_health_error = @last_health_error,
                         last_latency_ms = @last_latency_ms,
+                        discovered_context_length = @discovered_context_length,
+                        discovered_context_source = @discovered_context_source,
+                        context_discovered_utc = @context_discovered_utc,
                         health_history_json = @health_history_json,
                         created_utc = @created_utc,
                         last_update_utc = @last_update_utc
@@ -116,6 +119,9 @@ namespace Armada.Core.Database.Sqlite.Implementations
                         last_health_check_utc = @last_health_check_utc,
                         last_health_error = @last_health_error,
                         last_latency_ms = @last_latency_ms,
+                        discovered_context_length = @discovered_context_length,
+                        discovered_context_source = @discovered_context_source,
+                        context_discovered_utc = @context_discovered_utc,
                         health_history_json = @health_history_json,
                         last_update_utc = @last_update_utc
                         WHERE id = @id AND last_update_utc = @expected_last_update_utc;";
@@ -124,9 +130,38 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     cmd.Parameters.AddWithValue("@last_health_check_utc", endpoint.LastHealthCheckUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(endpoint.LastHealthCheckUtc.Value) : DBNull.Value);
                     cmd.Parameters.AddWithValue("@last_health_error", (object?)endpoint.LastHealthError ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@last_latency_ms", endpoint.LastLatencyMs.HasValue ? (object)endpoint.LastLatencyMs.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@discovered_context_length", endpoint.DiscoveredContextLength.HasValue ? (object)endpoint.DiscoveredContextLength.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@discovered_context_source", (object?)endpoint.DiscoveredContextSource ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@context_discovered_utc", endpoint.ContextDiscoveredUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(endpoint.ContextDiscoveredUtc.Value) : DBNull.Value);
                     cmd.Parameters.AddWithValue("@health_history_json", JsonSerializer.Serialize(endpoint.HealthHistory ?? new List<ModelEndpointHealthRecord>(), _Json));
                     cmd.Parameters.AddWithValue("@last_update_utc", SqliteDatabaseDriver.ToIso8601(endpoint.LastUpdateUtc));
                     cmd.Parameters.AddWithValue("@expected_last_update_utc", SqliteDatabaseDriver.ToIso8601(expectedLastUpdateUtc));
+                    int changed = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    return changed == 1;
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> UpdateContextDiscoveryAsync(string id, int contextLength, string source, DateTime discoveredUtc, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
+            if (String.IsNullOrWhiteSpace(source)) throw new ArgumentNullException(nameof(source));
+            using (SqliteWriteLease writeLease = await _Driver.WriteGate.EnterAsync(token).ConfigureAwait(false))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqliteCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = @"UPDATE model_endpoints SET
+                        discovered_context_length = @discovered_context_length,
+                        discovered_context_source = @discovered_context_source,
+                        context_discovered_utc = @context_discovered_utc
+                        WHERE id = @id;";
+                    cmd.Parameters.AddWithValue("@id", id);
+                    cmd.Parameters.AddWithValue("@discovered_context_length", contextLength);
+                    cmd.Parameters.AddWithValue("@discovered_context_source", source);
+                    cmd.Parameters.AddWithValue("@context_discovered_utc", SqliteDatabaseDriver.ToIso8601(discoveredUtc));
                     int changed = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                     return changed == 1;
                 }
@@ -344,6 +379,9 @@ namespace Armada.Core.Database.Sqlite.Implementations
             cmd.Parameters.AddWithValue("@last_health_check_utc", endpoint.LastHealthCheckUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(endpoint.LastHealthCheckUtc.Value) : DBNull.Value);
             cmd.Parameters.AddWithValue("@last_health_error", (object?)endpoint.LastHealthError ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@last_latency_ms", endpoint.LastLatencyMs.HasValue ? (object)endpoint.LastLatencyMs.Value : DBNull.Value);
+            cmd.Parameters.AddWithValue("@discovered_context_length", endpoint.DiscoveredContextLength.HasValue ? (object)endpoint.DiscoveredContextLength.Value : DBNull.Value);
+            cmd.Parameters.AddWithValue("@discovered_context_source", (object?)endpoint.DiscoveredContextSource ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@context_discovered_utc", endpoint.ContextDiscoveredUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(endpoint.ContextDiscoveredUtc.Value) : DBNull.Value);
             cmd.Parameters.AddWithValue("@health_history_json", JsonSerializer.Serialize(endpoint.HealthHistory ?? new List<ModelEndpointHealthRecord>(), _Json));
             cmd.Parameters.AddWithValue("@created_utc", SqliteDatabaseDriver.ToIso8601(endpoint.CreatedUtc));
             cmd.Parameters.AddWithValue("@last_update_utc", SqliteDatabaseDriver.ToIso8601(endpoint.LastUpdateUtc));
@@ -384,6 +422,9 @@ namespace Armada.Core.Database.Sqlite.Implementations
             endpoint.AuthQueryParameter = SqliteDatabaseDriver.NullableString(reader["auth_query_parameter"]);
             endpoint.Headers = ModelEndpointHeaderRecord.DeserializeHeaders(SqliteDatabaseDriver.NullableString(reader["auth_headers_json"]));
             endpoint.InferenceOptions = reader["inference_options_json"] == DBNull.Value ? new InferenceOptions() : JsonSerializer.Deserialize<InferenceOptions>(reader["inference_options_json"].ToString()!) ?? new InferenceOptions();
+            endpoint.DiscoveredContextLength = reader["discovered_context_length"] == DBNull.Value ? null : Convert.ToInt32(reader["discovered_context_length"]);
+            endpoint.DiscoveredContextSource = reader["discovered_context_source"] == DBNull.Value ? null : reader["discovered_context_source"].ToString();
+            endpoint.ContextDiscoveredUtc = SqliteDatabaseDriver.FromIso8601Nullable(reader["context_discovered_utc"]);
 
             string? historyJson = SqliteDatabaseDriver.NullableString(reader["health_history_json"]);
             if (!String.IsNullOrWhiteSpace(historyJson))

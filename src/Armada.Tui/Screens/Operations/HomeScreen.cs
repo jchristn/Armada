@@ -377,22 +377,22 @@ namespace Armada.Tui.Screens.Operations
             _LoadPending = false;
             Call(async (c, t) =>
             {
-                Task<ArmadaStatus?> status = Safe(c.GetStatusAsync(t));
+                Task<ArmadaStatus?> status = Safe(c.Status.GetAsync(t));
                 ArmadaPageQuery mq = new ArmadaPageQuery();
                 mq.PageSize = 10;
-                Task<EnumerationResult<MissionSummary>?> missions = Safe(c.ListMissionSummariesAsync(mq, t));
+                Task<EnumerationResult<MissionSummary>?> missions = Safe(c.Missions.ListSummariesAsync(mq, t));
                 FleetActionRunEnumerateQuery pq = new FleetActionRunEnumerateQuery();
                 pq.Status = FleetActionRunStatusEnum.Pending;
                 pq.PageSize = 1;
                 FleetActionRunEnumerateQuery rq = new FleetActionRunEnumerateQuery();
                 rq.Status = FleetActionRunStatusEnum.Running;
                 rq.PageSize = 1;
-                Task<EnumerationResult<FleetActionRun>?> pending = Safe(c.EnumerateFleetActionRunsAsync(pq, t));
-                Task<EnumerationResult<FleetActionRun>?> running = Safe(c.EnumerateFleetActionRunsAsync(rq, t));
-                Task<VesselHealthSummary?> health = Safe(c.GetVesselHealthSummaryAsync(t));
+                Task<EnumerationResult<FleetActionRun>?> pending = Safe(c.FleetActions.EnumerateRunsAsync(pq, t));
+                Task<EnumerationResult<FleetActionRun>?> running = Safe(c.FleetActions.EnumerateRunsAsync(rq, t));
+                Task<VesselHealthSummary?> health = Safe(c.VesselHealth.GetSummaryAsync(t));
                 EnumerationQuery vq = new EnumerationQuery();
                 vq.PageSize = ActiveVoyagePageSize;
-                Task<EnumerationResult<VoyageProgress>?> voyages = Safe(c.EnumerateVoyageProgressAsync(vq, t));
+                Task<EnumerationResult<VoyageProgress>?> voyages = Safe(c.Voyages.EnumerateProgressAsync(vq, t));
                 await Task.WhenAll(status, missions, pending, running, health, voyages).ConfigureAwait(false);
                 HomeData data = new HomeData();
                 data.Status = status.Result;
@@ -437,7 +437,7 @@ namespace Armada.Tui.Screens.Operations
             filter.FleetId = String.IsNullOrEmpty(HistoryFleet.Value) ? null : HistoryFleet.Value;
             filter.VesselId = String.IsNullOrEmpty(HistoryVessel.Value) ? null : HistoryVessel.Value;
             Chart.EmptyText = "Loading mission history...";
-            Call((c, t) => c.GetMissionHistoryAsync(filter, t), result =>
+            Call((c, t) => c.Missions.GetHistoryAsync(filter, t), result =>
             {
                 History = result;
                 Chart.EmptyText = "No mission data for this time range";
@@ -936,14 +936,14 @@ namespace Armada.Tui.Screens.Operations
 
         private void RestartMission(MissionSummary m)
         {
-            Call((c, t) => c.RestartMissionAsync(m.Id, t), r => LoadAll(), null, ex => { });
+            Call((c, t) => c.Missions.RestartAsync(m.Id, t), r => LoadAll(), null, ex => { });
         }
 
         private void DeleteMission(MissionSummary m)
         {
             Confirm("Delete Mission", Tr("Delete this mission?"), () =>
             {
-                Run((c, t) => c.DeleteMissionAsync(m.Id, t), LoadAll, null, ex => ShowMessage(Tr("Failed to delete mission.")));
+                Run((c, t) => c.Missions.DeleteAsync(m.Id, t), LoadAll, null, ex => ShowMessage(Tr("Failed to delete mission.")));
             }, "Delete");
         }
 

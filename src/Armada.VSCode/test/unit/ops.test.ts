@@ -3,7 +3,7 @@ import { beforeEach, describe, it } from 'node:test';
 import type { MissionSummary } from '@dashboard/types/models';
 import { nativeCommandForRoute } from '../../src/surfaces/blackbox/entryView';
 import { isDetailMessage, renderDetailHtml } from '../../src/surfaces/ops/detailHtml';
-import { missionPage, statusTone, voyagePage } from '../../src/surfaces/ops/detailPages';
+import { attemptRow, dispositionTone, missionPage, statusTone, voyagePage } from '../../src/surfaces/ops/detailPages';
 import { renderFormHtml } from '../../src/surfaces/ops/formPanel';
 import { parseArmadaDocumentPath } from '../../src/surfaces/ops/opsDocuments';
 import { domainsForEvent, OpsStore } from '../../src/surfaces/ops/opsStore';
@@ -165,6 +165,43 @@ describe('ops detail pages and documents', () => {
     assert.ok(html.includes('value="&quot;x&quot;"'));
     assert.ok(html.includes('<option value="b" selected>B</option>'));
     assert.ok(html.includes('aria-required="true"'));
+  });
+
+  it('shows attempts, failure kinds, repairs and escalations from the attempt history', () => {
+    const store = new OpsStore({ isConnected: () => false });
+    const attempt = (n: number, extra: Record<string, unknown>) => ({
+      outcomeId: `out_${n}`, attempt: n, reworkRound: 0, captainId: 'cpt_1', captainName: 'qwen-1', runtime: 'OpenCode', model: 'qwen3.8', modelProvider: null, modelEndpointId: null,
+      disposition: 'Completed', failureKind: null, failureReason: null, runtimeFailureKind: null, contractRepairKind: null, isRepair: false, escalated: false, nextCaptainId: null,
+      judgeVerdict: null, suspectedCause: null, isEvaluation: false, startedUtc: null, endedUtc: null, durationMs: 65000, ...extra,
+    });
+    const history = {
+      missionId: 'msn_x', voyageId: 'vyg_1', persona: 'Worker', mode: 'Default', status: 'Complete', captainId: 'cpt_2', tier: 'Frontier', escalationCount: 1, escalatedFromCaptainId: 'cpt_1',
+      escalatedFromModel: 'qwen3.8', reworkEscalated: false, redispatchAttempts: 0, outputRepairAttempts: 1, noOpRedispatchAttempts: 0, stallRecoveryAttempts: 0,
+      attempts: [attempt(1, { disposition: 'Escalated', failureKind: 'ToolCallInvalid', isRepair: true, contractRepairKind: 'FormatOnly', escalated: true }), attempt(2, { model: 'opus', captainName: 'opus-1', captainId: 'cpt_2', durationMs: 800 })],
+    };
+    const page = missionPage(mission('Complete'), store, undefined, NOW, history);
+    const recovery = page.sections.find((s) => s.kind === 'fields' && s.title === 'Recovery');
+    assert.ok(recovery && recovery.kind === 'fields');
+    assert.deepStrictEqual(recovery.rows.map((r) => `${r.label}=${r.value}`), ['Tier=Frontier', 'Escalations=1 (from qwen3.8)', 'Output repairs=1']);
+    const list = page.sections.find((s) => s.kind === 'list' && s.title === 'Attempts (2)');
+    assert.ok(list && list.kind === 'list');
+    assert.strictEqual(list.items[0].label, 'Attempt 1: qwen3.8 on qwen-1');
+    assert.strictEqual(list.items[0].description, 'Tool Call Invalid · repair (Format Only) · escalated · 1m 5s');
+    assert.deepStrictEqual(list.items[0].status, { label: 'Escalated', tone: 'warn' });
+    assert.strictEqual(attemptRow(history.attempts[1]).description, '800 ms');
+    assert.strictEqual(dispositionTone('Failed'), 'error');
+    assert.ok(!missionPage(mission('Complete'), store, undefined, NOW).sections.some((s) => s.kind === 'list'), 'no history, no attempts section');
+  });
+
+  it('shows the typed reason and advice of a waiting mission', () => {
+    const store = new OpsStore({ isConnected: () => false });
+    const pending = { ...mission('Pending'), assignmentBlocker: { reason: 'EndpointMissionLimit', summary: 'The endpoint is at its cap.', advice: [{ text: 'Raise MaxConcurrentMissions on the endpoint.' }], untilUtc: null, dependsOnMissionId: null, blockingMissionIds: [], captains: [], computedUtc: '2026-11-20T11:55:00Z' } } as unknown as Parameters<typeof missionPage>[0];
+    const section = missionPage(pending, store, undefined, NOW).sections.find((s) => s.kind === 'text' && s.title === 'Endpoint Mission Limit');
+    assert.ok(section && section.kind === 'text');
+    assert.strictEqual(section.text, 'The endpoint is at its cap.\n- Raise MaxConcurrentMissions on the endpoint.');
+    assert.strictEqual(section.tone, 'warn');
+    const running = { ...pending, status: 'InProgress' } as typeof pending;
+    assert.ok(!missionPage(running, store, undefined, NOW).sections.some((s) => s.kind === 'text' && s.title === 'Endpoint Mission Limit'), 'only waiting missions show a blocker');
   });
 
   it('humanizes statuses and times', () => {

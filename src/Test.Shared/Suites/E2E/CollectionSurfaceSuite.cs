@@ -32,6 +32,7 @@ namespace Test.Shared.Suites.E2E
         private static readonly Dictionary<string, string> _UnpagedListRoutes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["GET /api/v1/ask/quick-actions"] = "Fixed catalog defined in code",
+            ["GET /api/v1/missions/{id}/submissions"] = "One mission's newest 200 stage submissions (StageSubmissionAccessService.MaxSubmissions)",
         };
 
         // GET routes shaped like a collection (no trailing path parameter) that are not paged, with why they are a
@@ -48,6 +49,9 @@ namespace Test.Shared.Suites.E2E
             ["GET /api/v1/captains/{id}/tools"] = "One captain's tool sources (at most 256) and counts; its tools are one EnumerationResult page (POST .../tools/enumerate twin)",
             ["GET /api/v1/captains/{id}/log"] = "Log read bounded by lines (1-5000) with offset paging",
             ["GET /api/v1/harbors/{id}/metrics"] = "One Harbor's metrics",
+            ["GET /api/v1/missions/{id}/attempts"] = "One mission's attempt history (MissionAttemptHistory), bounded by its recovery and escalation budget",
+            ["GET /api/v1/missions/{id}/submissions"] = "One mission's newest 200 stage submissions (StageSubmissionAccessService.MaxSubmissions)",
+            ["GET /api/v1/reliability/summary"] = "Aggregated summary whose rows are paged by pageNumber and pageSize",
             ["GET /api/v1/missions/{id}/captain-selection"] = "One current-attempt/latest-retained decision summary; history is separately paginated",
             ["GET /api/v1/missions/history"] = "Aggregated summary buckets",
             ["GET /api/v1/metrics/concurrency"] = "Aggregated wait buckets (at most 48) and per-gate totals for one window",

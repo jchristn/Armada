@@ -92,7 +92,10 @@ namespace Armada.Core.Services
         {
             if (stage == null) throw new ArgumentNullException(nameof(stage));
 
-            string output = stage.AgentOutput ?? String.Empty;
+            // RS-6.2, RS-6.7: a submitted verdict or result decides the artifact; its structured findings replace the
+            // heading scraper, which stays the fallback for text-only output.
+            StageSubmissionEnvelope? submission = StageSubmissionText.Read(stage.AgentOutput, stage.Persona);
+            string output = (submission != null ? StageSubmissionText.Render(submission, stage.Persona) : StageSubmissionText.WithoutBlocks(stage.AgentOutput)) ?? String.Empty;
             string persona = String.IsNullOrWhiteSpace(stage.Persona) ? PersonaCatalog.Worker : PersonaCatalog.NormalizeName(stage.Persona);
 
             HandoffArtifact artifact = new HandoffArtifact
@@ -115,7 +118,7 @@ namespace Armada.Core.Services
             artifact.CompletionLines = ExtractCompletionLines(output);
             artifact.Verdict = DecideVerdict(persona, output, artifact.CompletionLines);
             bool blocking = IsBlockingVerdict(persona, output, artifact.Verdict);
-            artifact.Findings = ExtractFindings(output, blocking);
+            artifact.Findings = (submission != null ? StageSubmissionText.HandoffFindings(submission) : null) ?? ExtractFindings(output, blocking);
             artifact.AcceptanceCriteria = ExtractAcceptanceCriteria(stage.Description);
             if (check != null) artifact.CheckResults.Add(check);
             artifact.CommitReferences = ExtractCommitReferences(stage.CommitHash, output);
@@ -377,10 +380,19 @@ namespace Armada.Core.Services
             return finding;
         }
 
+        private static readonly Regex _NonBlockingSeverity = new Regex(@"\bnon-?blocking\b|\boptional\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+        private static readonly Regex _BlockingSeverity = new Regex(@"\bblocking\b|\bblocker\b|\bhigh\b|\bcritical\b|\bmajor\b|\bmedium\b|\bsevere\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+        private static readonly Regex _WeakSeverity = new Regex(@"\blow\b|\bminor\b|\bnit\b|\bnitpick\b|\binfo\b|\binformational\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
         private static HandoffFindingSeverityEnum ParseSeverity(string value, HandoffFindingSeverityEnum fallback)
         {
-            if (Regex.IsMatch(value, @"non-?blocking|optional|low|minor|nit|info", RegexOptions.IgnoreCase)) return HandoffFindingSeverityEnum.NonBlocking;
-            if (Regex.IsMatch(value, @"blocking|high|critical|major|medium", RegexOptions.IgnoreCase)) return HandoffFindingSeverityEnum.Blocking;
+            // Whole words only, and non-blocking phrases before blocking terms: "High - follows from", "Blocking: allows",
+            // and "Critical, no information" must not match "low", "low", and "info" inside other words.
+            if (_NonBlockingSeverity.IsMatch(value)) return HandoffFindingSeverityEnum.NonBlocking;
+            if (_BlockingSeverity.IsMatch(value)) return HandoffFindingSeverityEnum.Blocking;
+            if (_WeakSeverity.IsMatch(value)) return HandoffFindingSeverityEnum.NonBlocking;
             return fallback;
         }
 

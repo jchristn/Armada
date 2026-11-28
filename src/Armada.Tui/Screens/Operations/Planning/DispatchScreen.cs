@@ -278,7 +278,7 @@ namespace Armada.Tui.Screens.Operations
             Dispatching = true;
             Result = null;
             Playbooks.Disabled = true;
-            Call((c, t) => c.CreateVoyageAsync(req, t), voyage =>
+            Call((c, t) => c.Voyages.CreateAsync(req, t), voyage =>
             {
                 Dispatching = false;
                 Playbooks.Disabled = false;
@@ -606,7 +606,7 @@ namespace Armada.Tui.Screens.Operations
             }
 
             LoadingReadiness = true;
-            Call((c, t) => c.GetVesselReadinessAsync(vesselId!, null, t), r =>
+            Call((c, t) => c.Vessels.GetReadinessAsync(vesselId!, null, t), r =>
             {
                 if (generation != _ReadinessGeneration) return;
                 Readiness = r;

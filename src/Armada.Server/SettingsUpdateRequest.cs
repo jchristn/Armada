@@ -133,6 +133,18 @@ namespace Armada.Server
         public bool? BlockDependentsOfFailedStages { get; set; }
 
         /// <summary>
+        /// When true, an Architect plan written as legacy [ARMADA:MISSION] markers is still accepted (deprecated, removed
+        /// in 2.0). Null leaves the stored value unchanged.
+        /// </summary>
+        public bool? AcceptLegacyMissionMarkers { get; set; }
+
+        /// <summary>
+        /// Captain that runs the format-only repair turn. An empty string clears it (the stage's own captain is used); null
+        /// leaves the stored value unchanged.
+        /// </summary>
+        public string? OutputRepairNormalizerCaptainId { get; set; }
+
+        /// <summary>
         /// Optional remote-control tunnel settings update.
         /// When supplied, replaces the full remoteControl settings object.
         /// </summary>
@@ -195,5 +207,61 @@ namespace Armada.Server
         /// token. Applied live.
         /// </summary>
         public PushSettings? Push { get; set; }
+    
+
+        /// <summary>
+        /// Output rate, in tokens per second, at or above which a model keeps the global timeouts; slower measured models get scaled timeouts (at most four times). 0 turns scaling off. 0 to 1000 (400 otherwise). Null leaves it unchanged.
+        /// </summary>
+        public int? TimeoutScaleReferenceTokensPerSecond { get; set; }
+
+        /// <summary>
+        /// Served context at or below which a mission renders the Compact prompt variant when nothing else chooses one. 0 turns it off. 0 to 2097152 (400 otherwise). Null leaves it unchanged.
+        /// </summary>
+        public int? PromptVariantCompactMaxContextTokens { get; set; }
+
+        /// <summary>
+        /// Served context at or below which a mission renders the Lean prompt variant when nothing else chooses one and Compact does not apply. 0 turns it off. 0 to 2097152 (400 otherwise). Null leaves it unchanged.
+        /// </summary>
+        public int? PromptVariantLeanMaxContextTokens { get; set; }
+
+        /// <summary>
+        /// Times landing work is requeued (a non-fast-forward push retried from a fresh fetch, a lost landing handoff enqueued again) before it fails. Clamped to 0..10. Null leaves it unchanged.
+        /// </summary>
+        public int? MergeQueueRequeueLimit { get; set; }
+
+        /// <summary>
+        /// Queued entries of one vessel and branch merged, verified and pushed together (1 is off). Clamped to 1..20. Null leaves it unchanged.
+        /// </summary>
+        public int? MergeQueueBatchSize { get; set; }
+
+        /// <summary>
+        /// Lifetime in seconds of the merge queue processing lease. Clamped to 5..14400. Null leaves it unchanged.
+        /// </summary>
+        public int? MergeQueueLeaseSeconds { get; set; }
+
+        /// <summary>
+        /// In-place resumes after an Unclassified exit before the mission goes to escalation. Clamped to 0..3. Null leaves it unchanged.
+        /// </summary>
+        public int? UnclassifiedResumeLimit { get; set; }
+
+        /// <summary>
+        /// Automatic Judge rework rounds for one implementation slice before a different Worker captain is tried. Clamped to 1..5. Null leaves it unchanged.
+        /// </summary>
+        public int? JudgeReworkRounds { get; set; }
+
+        /// <summary>
+        /// Escalation hops one mission may take (0 turns automatic escalation off). Clamped to 0..5. Null leaves it unchanged.
+        /// </summary>
+        public int? MaxEscalations { get; set; }
+
+        /// <summary>
+        /// When true, a transient failure on a captain whose endpoint circuit breaker is open escalates right away. Null leaves it unchanged.
+        /// </summary>
+        public bool? EscalateOnOpenEndpointBreaker { get; set; }
+
+        /// <summary>
+        /// Routing from outcome data (RankByOutcomes, SuggestTiers, MinimumSamples 5..1000, HalfLifeDays 1..365). When supplied, replaces the full object; omitted fields take their defaults and out-of-range values are clamped. Applied live.
+        /// </summary>
+        public RoutingDataSettings? RoutingData { get; set; }
     }
 }

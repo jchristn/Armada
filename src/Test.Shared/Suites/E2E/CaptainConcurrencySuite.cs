@@ -116,6 +116,7 @@ namespace Test.Shared.Suites.E2E
                         AssertTrue(StubAgentProcesses.IsRunning(running[2].ProcessId!.Value));
                         AssertTrue(StubAgentProcesses.IsRunning(pending.ProcessId!.Value));
                         using (HttpResponseMessage response = await client.PostAsync("/api/v1/missions/" + failed.Id + "/restart", JsonHelper.ToJsonContent(new { }), ct)) response.EnsureSuccessStatusCode();
+                        await E2eBackgroundLaunch.SettleAsync(client, ct);
                         failed = await Get<Mission>(client, "/api/v1/missions/" + failed.Id);
                         AssertEqual(MissionStatusEnum.InProgress, failed.Status);
                         AssertEqual(captain.Id, failed.CaptainId);

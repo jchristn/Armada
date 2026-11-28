@@ -250,6 +250,43 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(voyageMissions.Any(m => m.DependsOnMissionId != null), "a voyage mission is chained");
             }));
 
+            cases.Add(Case("voyage_advice_reads_the_vessel_once_and_prefers_owned_paths", "Creating a voyage reads the vessel context once for all its missions, finds overlaps between them from declared owned paths, and ignores files guessed from prose when paths are declared (RS-10.4)", TestTags.Positive, async () =>
+            {
+                using TestDatabase t = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                using BlackBoxRuntime bb = BlackBoxTestKit.Runtime(t.Driver);
+                int loads = 0;
+                bb.Insights.Analyzer.TrackedFilesOverride = v => { Interlocked.Increment(ref loads); return new List<string> { "src/a.cs", "src/b.cs", "src/ui/c.ts", "docs/d.md" }; };
+                AdmiralService admiral = CreateAdmiral(t.Driver);
+                admiral.DispatchAdvisor = bb.Insights.DispatchAdvisor;
+                Vessel vessel = await t.Driver.Vessels.CreateAsync(new Vessel("bb-batch-" + Suffix(), "https://example.invalid/batch.git") { SerializeOverlappingMissions = false }).ConfigureAwait(false);
+
+                Voyage voyage = await admiral.DispatchVoyageAsync("Batch", "v", vessel.Id, new List<MissionDescription>
+                {
+                    new MissionDescription("Owner one", "Refactor the parser.") { OwnedPaths = new List<string> { "src/ui/" } },
+                    new MissionDescription("Owner two", "Rename helpers; see docs/d.md for naming.") { OwnedPaths = new List<string> { "src/ui/*.ts" } },
+                    new MissionDescription("Prose only", "Touch only docs/d.md"),
+                    new MissionDescription("Elsewhere", "Touch only src/a.cs")
+                }).ConfigureAwait(false);
+
+                AssertEqual(1, loads, "one vessel read for four missions");
+                List<Mission> missions = await t.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
+                Mission one = missions.Single(m => m.Title == "Owner one");
+                Mission two = missions.Single(m => m.Title == "Owner two");
+                Mission prose = missions.Single(m => m.Title == "Prose only");
+                List<MissionOverlapWarning> warnings = voyage.OverlapWarnings ?? new List<MissionOverlapWarning>();
+                AssertTrue(warnings.Any(w => w.MissionId == two.Id && w.OverlappingMissionId == one.Id), "owned paths overlap inside the voyage");
+                AssertFalse(warnings.Any(w => w.MissionId == prose.Id && w.OverlappingMissionId == two.Id),
+                    "declared paths replace the docs/d.md the brief of Owner two names");
+                Mission elsewhere = missions.Single(m => m.Title == "Elsewhere");
+                AssertFalse(warnings.Any(w => w.MissionId == elsewhere.Id), "no overlap with unrelated owned paths");
+
+                MissionFileSet declared = MissionOverlapAnalyzer.LikelyFiles(new Mission("x", "Touch only docs/d.md") { OwnedPathsJson = "[\"src/a.cs\",\"src/ui/\",\"*.md\"]" }, null);
+                AssertTrue(declared.Files.Contains("src/a.cs"), "owned file");
+                AssertTrue(declared.Directories.Contains("src/ui"), "owned directory");
+                AssertFalse(declared.Files.Contains("docs/d.md"), "brief scope ignored when paths are declared");
+                AssertEqual(2, declared.Count, "a root-level glob is too broad to compare");
+            }));
+
             cases.Add(Case("dispatch_survives_a_failing_advisor", "A throwing advisor is logged and the mission is still dispatched without warnings", TestTags.Negative, async () =>
             {
                 using TestDatabase t = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

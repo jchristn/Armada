@@ -47,7 +47,9 @@ namespace Armada.Helm.Commands
                     {
                         Title = desc,
                         Description = desc,
-                        VesselId = vesselId
+                        VesselId = vesselId,
+                        Persona = string.IsNullOrWhiteSpace(settings.Persona) ? null : settings.Persona.Trim(),
+                        Mode = settings.Mode
                     });
                 }
             }

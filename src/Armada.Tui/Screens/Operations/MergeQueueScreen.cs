@@ -133,7 +133,7 @@ namespace Armada.Tui.Screens.Operations
         {
             ArmadaPageQuery q = new ArmadaPageQuery(query.PageNumber, query.PageSize);
             q.With("userId", UserScope?.Value);
-            EnumerationResult<MergeEntry>? result = await Context.Client.ListMergeQueueAsync(q, token).ConfigureAwait(false);
+            EnumerationResult<MergeEntry>? result = await Context.Client.MergeQueue.ListAsync(q, token).ConfigureAwait(false);
             List<MergeEntry> rows = result?.Objects ?? new List<MergeEntry>();
             return new GridPage<MergeEntry>(rows, result?.TotalRecords ?? rows.Count);
         }
@@ -209,7 +209,7 @@ namespace Armada.Tui.Screens.Operations
                 entry.VesselId = String.IsNullOrEmpty(vessel.Value) ? null : vessel.Value;
                 entry.TestCommand = String.IsNullOrWhiteSpace(test.Value) ? null : test.Value.Trim();
                 entry.Priority = Int32.Parse(priority.Value, NumberStyles.Integer, CultureInfo.InvariantCulture);
-                Call((c, t) => c.EnqueueMergeAsync(entry, t), r =>
+                Call((c, t) => c.MergeQueue.EnqueueAsync(entry, t), r =>
                 {
                     d.Complete();
                     Toast(NotificationSeverityEnum.Success, Tr("Merge entry enqueued."));
@@ -224,7 +224,7 @@ namespace Armada.Tui.Screens.Operations
         {
             Confirm("Process Merge Queue", Tr("Process all queued entries in the merge queue now?"), () =>
             {
-                Run((c, t) => c.ProcessAllMergeQueueAsync(t), () =>
+                Run((c, t) => c.MergeQueue.ProcessAllAsync(t), () =>
                 {
                     Toast(NotificationSeverityEnum.Success, Tr("Merge queue processing started."));
                     Refresh();
@@ -236,7 +236,7 @@ namespace Armada.Tui.Screens.Operations
         {
             Confirm("Process Entry", Tr("Process merge entry {{id}} now?", LocalizationArgs.Of("id", e.Id)), () =>
             {
-                Run((c, t) => c.ProcessMergeEntryAsync(e.Id, t), () =>
+                Run((c, t) => c.MergeQueue.ProcessAsync(e.Id, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Success, Tr("Merge entry {{id}} processing started.", LocalizationArgs.Of("id", e.Id)));
                     Refresh();
@@ -248,7 +248,7 @@ namespace Armada.Tui.Screens.Operations
         {
             Confirm("Cancel Entry", Tr("Cancel merge entry {{id}}?", LocalizationArgs.Of("id", e.Id)), () =>
             {
-                Run((c, t) => c.CancelMergeEntryAsync(e.Id, t), () =>
+                Run((c, t) => c.MergeQueue.CancelAsync(e.Id, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Merge entry {{id}} cancelled.", LocalizationArgs.Of("id", e.Id)));
                     Refresh();
@@ -260,7 +260,7 @@ namespace Armada.Tui.Screens.Operations
         {
             Confirm("Delete Entry", Tr("Delete merge entry {{id}}? This cannot be undone.", LocalizationArgs.Of("id", e.Id)), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting merge queue entry", t => Context.Client.DeleteMergeEntryAsync(e.Id, t), () =>
+                DeleteProgress.RunVoid(Context, "Deleting merge queue entry", t => Context.Client.MergeQueue.DeleteAsync(e.Id, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Merge entry {{id}} deleted.", LocalizationArgs.Of("id", e.Id)));
                     Refresh();
@@ -280,7 +280,7 @@ namespace Armada.Tui.Screens.Operations
                     int failed = 0;
                     foreach (string id in ids)
                     {
-                        try { await Context.Client.DeleteMergeEntryAsync(id, t).ConfigureAwait(false); }
+                        try { await Context.Client.MergeQueue.DeleteAsync(id, t).ConfigureAwait(false); }
                         catch (Armada.Client.ArmadaApiException) { failed++; }
                     }
 

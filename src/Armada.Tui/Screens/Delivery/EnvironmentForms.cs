@@ -84,8 +84,8 @@ namespace Armada.Tui.Screens.Delivery
                     Active = active.Value
                 };
                 saved = existing != null
-                    ? await context.Client.UpdateEnvironmentAsync(existing.Id, payload, ct).ConfigureAwait(false)
-                    : await context.Client.CreateEnvironmentAsync(payload, ct).ConfigureAwait(false);
+                    ? await context.Client.Environments.UpdateAsync(existing.Id, payload, ct).ConfigureAwait(false)
+                    : await context.Client.Environments.CreateAsync(payload, ct).ConfigureAwait(false);
                 return null;
             }, () =>
             {
@@ -108,7 +108,7 @@ namespace Armada.Tui.Screens.Delivery
             if (context == null) throw new ArgumentNullException(nameof(context));
             if (environment == null) throw new ArgumentNullException(nameof(environment));
             DeploymentEnvironmentUpsertRequest payload = DuplicatePayload(environment);
-            EntityUi.Run<DeploymentEnvironment?>(context, ct => context.Client.CreateEnvironmentAsync(payload, ct), created =>
+            EntityUi.Run<DeploymentEnvironment?>(context, ct => context.Client.Environments.CreateAsync(payload, ct), created =>
             {
                 if (created == null) return;
                 EntityUi.Toast(context, NotificationSeverityEnum.Success, EntityUi.T(context, "Environment \"{{name}}\" duplicated.", "name", created.Name));

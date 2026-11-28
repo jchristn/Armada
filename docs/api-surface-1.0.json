@@ -825,6 +825,23 @@
       "experimental": false
     },
     {
+      "method": "GET",
+      "route": "/api/v1/battery/runs",
+      "auth": "Authenticated",
+      "resource": "BatteryRun:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BatteryRun>",
+        "400": ""
+      },
+      "tags": [
+        "Battery"
+      ],
+      "summary": "List battery runs",
+      "experimental": false
+    },
+    {
       "method": "POST",
       "route": "/api/v1/battery/runs",
       "auth": "TenantAdmin",
@@ -844,6 +861,23 @@
       "experimental": false
     },
     {
+      "method": "POST",
+      "route": "/api/v1/battery/runs/enumerate",
+      "auth": "Authenticated",
+      "resource": "BatteryRun:Read",
+      "requestType": "BatteryRunQuery",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BatteryRun>",
+        "400": ""
+      },
+      "tags": [
+        "Battery"
+      ],
+      "summary": "Enumerate battery runs",
+      "experimental": false
+    },
+    {
       "method": "GET",
       "route": "/api/v1/battery/runs/{id}",
       "auth": "Authenticated",
@@ -858,6 +892,25 @@
         "Battery"
       ],
       "summary": "Get a battery run",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/battery/runs/{id}/cancel",
+      "auth": "TenantAdmin",
+      "resource": "BatteryRun:Execute",
+      "requestType": "BatteryRunCancelRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "BatteryRun",
+        "400": "",
+        "403": "ApiErrorResponse",
+        "404": ""
+      },
+      "tags": [
+        "Battery"
+      ],
+      "summary": "Cancel a battery run",
       "experimental": false
     },
     {
@@ -4174,6 +4227,23 @@
     },
     {
       "method": "GET",
+      "route": "/api/v1/missions/{id}/attempts",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "MissionAttemptHistory",
+        "404": ""
+      },
+      "tags": [
+        "Reliability"
+      ],
+      "summary": "Get a mission's attempt history",
+      "experimental": false
+    },
+    {
+      "method": "GET",
       "route": "/api/v1/missions/{id}/blackbox",
       "auth": "Authenticated",
       "resource": "BlackBox:Read",
@@ -4652,6 +4722,23 @@
         "Missions"
       ],
       "summary": "Transition mission status",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/missions/{id}/submissions",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "List<StageSubmission>",
+        "404": ""
+      },
+      "tags": [
+        "StageSubmissions"
+      ],
+      "summary": "List a mission's stage submissions",
       "experimental": false
     },
     {
@@ -6432,6 +6519,95 @@
         "Releases"
       ],
       "summary": "Refresh a release",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/reliability/gate-reports",
+      "auth": "TenantAdmin",
+      "resource": "GateReport:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<GateReport>",
+        "400": "",
+        "403": "ApiErrorResponse"
+      },
+      "tags": [
+        "Reliability"
+      ],
+      "summary": "List gate reports",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/reliability/gate-reports",
+      "auth": "AdminOnly",
+      "resource": "GateReport:Create",
+      "requestType": "GateReport",
+      "requestRequired": true,
+      "responses": {
+        "201": "GateReport",
+        "400": "",
+        "403": "ApiErrorResponse"
+      },
+      "tags": [
+        "Reliability"
+      ],
+      "summary": "Upload a gate report",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/reliability/gate-reports/enumerate",
+      "auth": "TenantAdmin",
+      "resource": "GateReport:Read",
+      "requestType": "GateReportQuery",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<GateReport>",
+        "400": "",
+        "403": "ApiErrorResponse"
+      },
+      "tags": [
+        "Reliability"
+      ],
+      "summary": "Enumerate gate reports",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/reliability/gate-reports/{id}",
+      "auth": "TenantAdmin",
+      "resource": "GateReport:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "GateReport",
+        "403": "ApiErrorResponse",
+        "404": ""
+      },
+      "tags": [
+        "Reliability"
+      ],
+      "summary": "Get a gate report",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/reliability/summary",
+      "auth": "Authenticated",
+      "resource": "StageOutcome:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "ReliabilitySummary",
+        "400": ""
+      },
+      "tags": [
+        "Reliability"
+      ],
+      "summary": "Reliability per model and persona",
       "experimental": false
     },
     {
@@ -9566,6 +9742,118 @@
       "experimental": false
     },
     {
+      "name": "armada_submit_plan",
+      "auth": "Authenticated",
+      "resource": "Mission:Update",
+      "arguments": [
+        {
+          "name": "contractVersion",
+          "type": "integer|null",
+          "required": true
+        },
+        {
+          "name": "decisions",
+          "type": "array<string>",
+          "required": false
+        },
+        {
+          "name": "missions",
+          "type": "array<object>",
+          "required": true
+        },
+        {
+          "name": "requirements",
+          "type": "array<string>",
+          "required": false
+        }
+      ],
+      "description": "Submit your Architect plan (contract version 4) for this mission. Only the Architect of the mission may call it. The submission is checked at once; on errors nothing is stored and the errors are returned so you can fix them and call again. The last accepted submission is your result and replaces any marker lines in your reply.",
+      "experimental": false
+    },
+    {
+      "name": "armada_submit_result",
+      "auth": "Authenticated",
+      "resource": "Mission:Update",
+      "arguments": [
+        {
+          "name": "evidence",
+          "type": "object",
+          "required": false
+        },
+        {
+          "name": "findings",
+          "type": "array<object>",
+          "required": false
+        },
+        {
+          "name": "sections",
+          "type": "array<object>",
+          "required": false
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "summary",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Submit your stage result (complete, or blocked for a verifier), the report sections your contract lists, structured findings and the evidence you checked. Only the captain of the mission may call it. The submission is checked at once; on errors nothing is stored and the errors are returned so you can fix them and call again. The last accepted submission is your result and replaces any marker lines in your reply.",
+      "experimental": false
+    },
+    {
+      "name": "armada_submit_verdict",
+      "auth": "Authenticated",
+      "resource": "Mission:Update",
+      "arguments": [
+        {
+          "name": "blastRadius",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "correctness",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "evidence",
+          "type": "object",
+          "required": false
+        },
+        {
+          "name": "findings",
+          "type": "array<object>",
+          "required": false
+        },
+        {
+          "name": "sourceFidelity",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "specConflict",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "summary",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "verdict",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Submit your Judge verdict, the three review lenses, structured findings and the evidence you checked for this mission. Only the Judge of the mission may call it. The submission is checked at once; on errors nothing is stored and the errors are returned so you can fix them and call again. The last accepted submission is your result and replaces any marker lines in your reply.",
+      "experimental": false
+    },
+    {
       "name": "authorize_captain_selection_recovery",
       "auth": "TenantAdmin",
       "resource": "Mission:Update",
@@ -9610,6 +9898,25 @@
         }
       ],
       "description": "Stop the turn running in an Ask Armada conversation.",
+      "experimental": false
+    },
+    {
+      "name": "cancel_battery_run",
+      "auth": "TenantAdmin",
+      "resource": "BatteryRun:Execute",
+      "arguments": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Cancel a fixture battery run as a stopped Full Evaluate does: no further task is dispatched, the open mission is cancelled (releasing its dock and captain), and the run ends Cancelled with finished results kept. Waits up to 10 seconds, then returns the run (still Running while its open mission stops; poll get_battery_run). A finished run is returned unchanged. Needs a global admin or a tenant admin of the run's tenant.",
       "experimental": false
     },
     {
@@ -10908,6 +11215,11 @@
           "required": false
         },
         {
+          "name": "escalationLadder",
+          "type": "array<object>",
+          "required": false
+        },
+        {
           "name": "name",
           "type": "string",
           "required": true
@@ -10943,6 +11255,11 @@
       "arguments": [
         {
           "name": "description",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "judgeStrength",
           "type": "string",
           "required": false
         },
@@ -12860,6 +13177,20 @@
       "experimental": false
     },
     {
+      "name": "get_gate_report",
+      "auth": "TenantAdmin",
+      "resource": "GateReport:Read",
+      "arguments": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Get one stored acceptance gate report by id, or the newest with id latest. Global and tenant admins.",
+      "experimental": false
+    },
+    {
       "name": "get_handoff_artifact",
       "auth": "Authenticated",
       "resource": "HandoffArtifact:Read",
@@ -12935,6 +13266,20 @@
       "experimental": false
     },
     {
+      "name": "get_mission_attempts",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "arguments": [
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Get a mission's attempt history: its recovery counters (redispatchAttempts, outputRepairAttempts, noOpRedispatchAttempts, stallRecoveryAttempts), escalation state (escalationCount, escalatedFromCaptainId, escalatedFromModel, tier, reworkEscalated), persona and mode, and every recorded attempt oldest first with captain, model, disposition (Completed, Relaunched, OutputRepair, Escalated, Failed, Interrupted, Cancelled, Pending), failureKind, runtimeFailureKind, contractRepairKind, isRepair, escalated, nextCaptainId, judgeVerdict and timing.",
+      "experimental": false
+    },
+    {
       "name": "get_mission_diff",
       "auth": "Authenticated",
       "resource": "Mission:Read",
@@ -12975,6 +13320,20 @@
         }
       ],
       "description": "Get the session log for a mission. Supports pagination.",
+      "experimental": false
+    },
+    {
+      "name": "get_mission_submissions",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "arguments": [
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "List what a mission submitted through armada_submit_plan, armada_submit_verdict or armada_submit_result, newest first, one entry per accepted submission with its attempt, source and typed content. The latest submission of an attempt decides that attempt's plan, verdict or result.",
       "experimental": false
     },
     {
@@ -13038,7 +13397,7 @@
           "required": true
         }
       ],
-      "description": "Get one model profile visible to the caller (the model as served: runtime, provider, model and served context) with its capabilities, rendering overrides, notes and immutable revisions (runtime version, model digest, sampling, tool configuration, compatibleWith, firstSeenUtc), oldest first. Profiles are advisory: they do not set a captain's tier or change routing. A captain's modelProfileId points at its profile.",
+      "description": "Get one model profile visible to the caller (the model as served: runtime, provider, model and served context) with its capabilities, rendering overrides, recovery policy overrides (recovery) and the policy in effect for its captains (effectiveRecovery: maxResumes, unclassifiedResumes, transientGraceMinutes, judgeReworkRounds, outputRepairAttempts, escalateAfterResumes), notes and immutable revisions (runtime version, model digest, sampling, tool configuration, compatibleWith, firstSeenUtc), oldest first. Profiles are advisory: they do not set a captain's tier or change routing. A captain's modelProfileId points at its profile.",
       "experimental": false
     },
     {
@@ -13157,6 +13516,70 @@
         }
       ],
       "description": "Inspect one release record including linked voyages, missions, checks, versions, tags, notes, and derived artifacts.",
+      "experimental": false
+    },
+    {
+      "name": "get_reliability_summary",
+      "auth": "Authenticated",
+      "resource": "StageOutcome:Read",
+      "arguments": [
+        {
+          "name": "descending",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "fromUtc",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "includeEvaluation",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "model",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "persona",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "tenantId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "toUtc",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Pipeline reliability per (model, persona) over a window from stage outcomes: attempts, completed, failed, relaunched, repairs, escalations, unclassified, completionRate, unclassifiedRate, failureKinds, runtimeFailureKinds and medianDurationMs, plus totals. Window defaults to the last 14 days (at most 90); production attempts only unless includeEvaluation. Sorted and paged on the server.",
       "experimental": false
     },
     {
@@ -13836,6 +14259,40 @@
       "experimental": false
     },
     {
+      "name": "list_battery_runs",
+      "auth": "Authenticated",
+      "resource": "BatteryRun:Read",
+      "arguments": [
+        {
+          "name": "captainId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "tenantId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "List one page of fixture battery runs visible to the caller, newest first, without their per-task results. A global admin sees every tenant (tenantId filters); everyone else their own tenant. Returns an enumeration result (objects, totalRecords, totalPages).",
+      "experimental": false
+    },
+    {
       "name": "list_blackbox_entries",
       "auth": "Authenticated",
       "resource": "BlackBox:Read",
@@ -14210,6 +14667,25 @@
         }
       ],
       "description": "List the failure-cause rules visible to the caller in evaluation order (priority ascending, then name), one page at a time: the caller's tenant plus the rules for every tenant, built-in rules included. The first enabled matching rule assigns a stage outcome's suspected cause.",
+      "experimental": false
+    },
+    {
+      "name": "list_gate_reports",
+      "auth": "TenantAdmin",
+      "resource": "GateReport:Read",
+      "arguments": [
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        }
+      ],
+      "description": "List stored acceptance gate reports (G1 to G12 measures with per-pipeline counts), newest first. Global and tenant admins.",
       "experimental": false
     },
     {
@@ -15506,6 +15982,11 @@
           "required": true
         },
         {
+          "name": "captainOverrides",
+          "type": "array<object>",
+          "required": false
+        },
+        {
           "name": "createFixtureVessel",
           "type": "boolean",
           "required": false
@@ -15514,6 +15995,11 @@
           "name": "packs",
           "type": "array<string>",
           "required": true
+        },
+        {
+          "name": "pipeline",
+          "type": "string",
+          "required": false
         },
         {
           "name": "promptVariant",
@@ -17180,6 +17666,50 @@
       "experimental": false
     },
     {
+      "name": "update_model_profile",
+      "auth": "TenantAdmin",
+      "resource": "ModelProfile:Update",
+      "arguments": [
+        {
+          "name": "capabilities",
+          "type": "object",
+          "required": false
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "notes",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "recovery",
+          "type": "object",
+          "required": false
+        },
+        {
+          "name": "rendering",
+          "type": "object",
+          "required": false
+        },
+        {
+          "name": "tiering",
+          "type": "object",
+          "required": false
+        },
+        {
+          "name": "timeouts",
+          "type": "object",
+          "required": false
+        }
+      ],
+      "description": "Update the mutable parts of a model profile, as PUT /api/v1/model-profiles/{id}: capabilities, rendering (template Current, Lean or Compact), recovery policy overrides, per-profile timeouts, the administrator's tier, and notes. A section left out keeps its value; inside a section, a null value uses the global setting. Admins only. Returns the profile with its effective recovery policy and timeouts.",
+      "experimental": false
+    },
+    {
       "name": "update_objective",
       "auth": "TenantAdmin",
       "resource": "Objective:Update",
@@ -17366,6 +17896,11 @@
         {
           "name": "description",
           "type": "string",
+          "required": false
+        },
+        {
+          "name": "escalationLadder",
+          "type": "array<object>",
           "required": false
         },
         {
@@ -18845,6 +19380,28 @@
         "generic": false
       },
       {
+        "type": "mission.attempt_changed",
+        "scope": "tenant",
+        "hasMessage": false,
+        "payloadType": "MissionAttemptChange",
+        "fields": [
+          "missionId",
+          "voyageId",
+          "status",
+          "captainId",
+          "persona",
+          "tier",
+          "escalationCount",
+          "escalatedFromCaptainId",
+          "escalatedFromModel",
+          "redispatchAttempts",
+          "outputRepairAttempts",
+          "noOpRedispatchAttempts",
+          "stallRecoveryAttempts"
+        ],
+        "generic": false
+      },
+      {
         "type": "mission.batch_deleted",
         "scope": "tenant",
         "hasMessage": true,
@@ -18869,7 +19426,14 @@
           "title",
           "status",
           "voyageId",
-          "activity"
+          "activity",
+          "persona",
+          "mode",
+          "captainId",
+          "tier",
+          "escalationCount",
+          "redispatchAttempts",
+          "outputRepairAttempts"
         ],
         "generic": false
       },
@@ -18902,6 +19466,28 @@
           "voyageId"
         ],
         "generic": true
+      },
+      {
+        "type": "mission.escalated",
+        "scope": "tenant",
+        "hasMessage": false,
+        "payloadType": "MissionAttemptChange",
+        "fields": [
+          "missionId",
+          "voyageId",
+          "status",
+          "captainId",
+          "persona",
+          "tier",
+          "escalationCount",
+          "escalatedFromCaptainId",
+          "escalatedFromModel",
+          "redispatchAttempts",
+          "outputRepairAttempts",
+          "noOpRedispatchAttempts",
+          "stallRecoveryAttempts"
+        ],
+        "generic": false
       },
       {
         "type": "mission.landing_failed",
@@ -18947,6 +19533,28 @@
           "voyageId"
         ],
         "generic": true
+      },
+      {
+        "type": "mission.repaired",
+        "scope": "tenant",
+        "hasMessage": false,
+        "payloadType": "MissionAttemptChange",
+        "fields": [
+          "missionId",
+          "voyageId",
+          "status",
+          "captainId",
+          "persona",
+          "tier",
+          "escalationCount",
+          "escalatedFromCaptainId",
+          "escalatedFromModel",
+          "redispatchAttempts",
+          "outputRepairAttempts",
+          "noOpRedispatchAttempts",
+          "stallRecoveryAttempts"
+        ],
+        "generic": false
       },
       {
         "type": "mission.restarted",
@@ -20600,6 +21208,232 @@
           "short": null,
           "valueKind": "vector",
           "type": "String[]",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "battery cancel",
+      "description": "Cancel a battery run (cancels its open mission, releases its dock)",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "run",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "reason",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "battery report",
+      "description": "Show the latest reliability gate report (or one by ID)",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "report",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "battery runs",
+      "description": "List battery runs (--status, --captain)",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "captain",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "status",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
           "required": false
         }
       ]
@@ -24687,6 +25521,76 @@
       ]
     },
     {
+      "command": "mission attempts",
+      "description": "Show a mission's attempts, failure kinds, repairs and escalations",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "mission",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
       "command": "mission cancel",
       "description": "Cancel a mission",
       "parameters": [
@@ -24818,6 +25722,14 @@
         },
         {
           "kind": "option",
+          "name": "mode",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
           "name": "page",
           "short": null,
           "valueKind": "scalar",
@@ -24835,6 +25747,14 @@
         {
           "kind": "option",
           "name": "parent",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "persona",
           "short": null,
           "valueKind": "scalar",
           "type": "String",
@@ -25563,6 +26483,514 @@
         {
           "kind": "argument",
           "name": "mission",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "model-profile list",
+      "description": "List model profiles",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "model-profile show",
+      "description": "Show a model profile's context, tier, recovery policy and timeouts",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "model-profile update",
+      "description": "Change a model profile's tier, recovery policy or timeouts (-1 clears an override)",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "escalate-after-resumes",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "first-output-minutes",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "judge-rework-rounds",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "max-resumes",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "max-runtime-minutes",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "output-repair-attempts",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "stall-minutes",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "tier",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "tool-wait-minutes",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "transient-grace",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "unclassified-resumes",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "persona ladder",
+      "description": "Show or replace a persona's escalation ladder",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "name",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "clear",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "rung",
+          "short": null,
+          "valueKind": "vector",
+          "type": "String[]",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "persona list",
+      "description": "List personas",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "persona show",
+      "description": "Show a persona's captain priorities and escalation ladder",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "name",
           "short": null,
           "valueKind": "scalar",
           "type": "String",
@@ -27522,6 +28950,14 @@
         },
         {
           "kind": "option",
+          "name": "mode",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "MissionModeEnum?",
+          "required": false
+        },
+        {
+          "kind": "option",
           "name": "page",
           "short": null,
           "valueKind": "scalar",
@@ -27534,6 +28970,14 @@
           "short": null,
           "valueKind": "scalar",
           "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "persona",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
           "required": false
         },
         {
@@ -28032,6 +29476,12 @@
     }
   ],
   "settings": [
+    {
+      "key": "acceptLegacyMissionMarkers",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
     {
       "key": "admiralPort",
       "type": "int",
@@ -28848,6 +30298,12 @@
       "experimental": false
     },
     {
+      "key": "escalateOnOpenEndpointBreaker",
+      "type": "bool",
+      "default": "false",
+      "experimental": false
+    },
+    {
       "key": "escalationRules",
       "type": "array<object>",
       "default": "[]",
@@ -29131,6 +30587,12 @@
       "experimental": false
     },
     {
+      "key": "judgeReworkRounds",
+      "type": "int",
+      "default": "2",
+      "experimental": false
+    },
+    {
       "key": "landingDeferralDeadlineHours",
       "type": "int",
       "default": "24",
@@ -29211,6 +30673,12 @@
       "experimental": false
     },
     {
+      "key": "maxEscalations",
+      "type": "int",
+      "default": "2",
+      "experimental": false
+    },
+    {
       "key": "maxLandingRetries",
       "type": "int",
       "default": "3",
@@ -29286,6 +30754,24 @@
       "key": "mcpPort",
       "type": "int",
       "default": "7891",
+      "experimental": false
+    },
+    {
+      "key": "mergeQueueBatchSize",
+      "type": "int",
+      "default": "1",
+      "experimental": false
+    },
+    {
+      "key": "mergeQueueLeaseSeconds",
+      "type": "int",
+      "default": "900",
+      "experimental": false
+    },
+    {
+      "key": "mergeQueueRequeueLimit",
+      "type": "int",
+      "default": "3",
       "experimental": false
     },
     {
@@ -29499,6 +30985,12 @@
       "experimental": false
     },
     {
+      "key": "outputRepairNormalizerCaptainId",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
       "key": "permissions",
       "type": "object",
       "default": null,
@@ -29570,6 +31062,18 @@
       "experimental": false
     },
     {
+      "key": "promptVariantCompactMaxContextTokens",
+      "type": "int",
+      "default": "32768",
+      "experimental": false
+    },
+    {
+      "key": "promptVariantLeanMaxContextTokens",
+      "type": "int",
+      "default": "65536",
+      "experimental": false
+    },
+    {
       "key": "push",
       "type": "object",
       "default": null,
@@ -29577,8 +31081,8 @@
     },
     {
       "key": "push.categories",
-      "type": "array<enum PushCategoryEnum (AskProposal|CliPermission|MissionReview|DeploymentApproval|MissionFailed|LandingFailed|CaptainStalled|VoyageFinished|ModelAlert)>",
-      "default": "[\"AskProposal\",\"CliPermission\",\"MissionReview\",\"DeploymentApproval\",\"MissionFailed\",\"LandingFailed\",\"CaptainStalled\",\"VoyageFinished\",\"ModelAlert\"]",
+      "type": "array<enum PushCategoryEnum (AskProposal|CliPermission|MissionReview|DeploymentApproval|MissionFailed|LandingFailed|CaptainStalled|VoyageFinished|ModelAlert|MissionEscalated|RecoveryExhausted)>",
+      "default": "[\"AskProposal\",\"CliPermission\",\"MissionReview\",\"DeploymentApproval\",\"MissionFailed\",\"LandingFailed\",\"CaptainStalled\",\"VoyageFinished\",\"ModelAlert\",\"MissionEscalated\",\"RecoveryExhausted\"]",
       "experimental": false
     },
     {
@@ -29900,6 +31404,36 @@
       "experimental": false
     },
     {
+      "key": "routingData",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "routingData.halfLifeDays",
+      "type": "int",
+      "default": "14",
+      "experimental": false
+    },
+    {
+      "key": "routingData.minimumSamples",
+      "type": "int",
+      "default": "20",
+      "experimental": false
+    },
+    {
+      "key": "routingData.rankByOutcomes",
+      "type": "bool",
+      "default": "false",
+      "experimental": false
+    },
+    {
+      "key": "routingData.suggestTiers",
+      "type": "bool",
+      "default": "false",
+      "experimental": false
+    },
+    {
       "key": "selfVesselId",
       "type": "string",
       "default": "null",
@@ -30026,6 +31560,12 @@
       "experimental": false
     },
     {
+      "key": "timeoutScaleReferenceTokensPerSecond",
+      "type": "int",
+      "default": "30",
+      "experimental": false
+    },
+    {
       "key": "toolWaitHardLimitMinutes",
       "type": "int",
       "default": "60",
@@ -30041,6 +31581,12 @@
       "key": "transientResumeDelaySeconds",
       "type": "int",
       "default": "5",
+      "experimental": false
+    },
+    {
+      "key": "unclassifiedResumeLimit",
+      "type": "int",
+      "default": "1",
       "experimental": false
     },
     {

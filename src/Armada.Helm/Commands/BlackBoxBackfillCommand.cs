@@ -24,7 +24,7 @@ namespace Armada.Helm.Commands
                 BlackBoxBackfillRequest request = new BlackBoxBackfillRequest();
                 if (!String.IsNullOrWhiteSpace(settings.Since)) request.Since = BlackBoxCli.ParseSince(settings.Since, DateTime.UtcNow);
                 if (settings.Max.HasValue) request.MaxSubjects = settings.Max.Value;
-                BlackBoxBackfillResult? r = await client.BackfillBlackBoxAsync(request, cancellationToken).ConfigureAwait(false);
+                BlackBoxBackfillResult? r = await client.BlackBox.BackfillAsync(request, cancellationToken).ConfigureAwait(false);
                 if (settings.Json) WritePureJson(r);
                 else if (r != null) AnsiConsole.MarkupLine("[green]Backfill[/] scanned " + r.Scanned + ", captured " + r.Captured + ", skipped " + r.Skipped + ", failed " + r.Failed + ", requeued " + r.EnrichmentRequeued + ".");
                 return 0;

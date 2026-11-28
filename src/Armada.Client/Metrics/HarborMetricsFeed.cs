@@ -70,7 +70,7 @@ namespace Armada.Client.Metrics
             {
                 try
                 {
-                    HarborMetrics? metrics = await client.GetHarborMetricsAsync(harborId, wire, token).ConfigureAwait(false);
+                    HarborMetrics? metrics = await client.Harbors.GetMetricsAsync(harborId, wire, token).ConfigureAwait(false);
                     token.ThrowIfCancellationRequested();
                     if (metrics == null) return Fail(result, HarborMetricsLoadStateEnum.Failed, 200, "The Admiral returned an empty response");
                     result.State = HarborMetricsLoadStateEnum.Loaded;
@@ -148,7 +148,7 @@ namespace Armada.Client.Metrics
             // or it has no such route (an older Admiral). Asking for the Harbor itself tells them apart.
             try
             {
-                Harbor? harbor = await client.GetHarborAsync(harborId, token).ConfigureAwait(false);
+                Harbor? harbor = await client.Harbors.GetAsync(harborId, token).ConfigureAwait(false);
                 return harbor != null ? HarborMetricsLoadStateEnum.AdmiralOutdated : HarborMetricsLoadStateEnum.NotRegistered;
             }
             catch (ArmadaApiException ex) when (!token.IsCancellationRequested)

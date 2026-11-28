@@ -1,0 +1,71 @@
+{
+  "_comment": "Reference pipelines for the 1.5.0 acceptance gate (RELIABILITY_SIMPLICITY_PLAN.md RS-1.6, Run budget). Roles name models; benchmarks/config/gate-endpoints.local.json (git-ignored) says where each open model is served. Frontier roles use the local Claude Code and Codex logins.",
+  "roles": [
+    { "name": "opus", "runtime": "ClaudeCode", "model": "claude-opus-5-5", "tier": "Premium" },
+    { "name": "gpt", "runtime": "Codex", "model": "gpt-6.1", "tier": "Premium" },
+    { "name": "qwen", "runtime": "ApiEndpoint", "source": "conductor", "modelKey": "qwen3.8" },
+    { "name": "inkling", "runtime": "ApiEndpoint", "source": "conductor", "modelKey": "inkling-2-mini" },
+    { "name": "deepseek", "runtime": "ApiEndpoint", "source": "ollamaCloud", "modelKey": "deepseek-4.1" },
+    { "name": "glm", "runtime": "ApiEndpoint", "source": "ollamaCloud", "modelKey": "glm" },
+    { "name": "kimi", "runtime": "ApiEndpoint", "source": "ollamaCloud", "modelKey": "kimi" }
+  ],
+  "pipelines": [
+    {
+      "name": "Gate-A",
+      "description": "P-A: Opus Architect, Qwen Worker and Test Engineer, GPT-6.1 Judge",
+      "stages": [ "Architect", "Worker", "TestEngineer", "Judge" ],
+      "staffing": { "Architect": "opus", "Worker": "qwen", "TestEngineer": "qwen", "Judge": "gpt" },
+      "runsPerPack": 3
+    },
+    {
+      "name": "Gate-B",
+      "description": "P-B: GPT-6.1 Architect fanning out to Qwen Workers, Opus Judge",
+      "stages": [ "Architect", "Worker", "Judge" ],
+      "staffing": { "Architect": "gpt", "Worker": "qwen", "Judge": "opus" },
+      "runsPerPack": 3
+    },
+    {
+      "name": "Gate-C",
+      "description": "P-C: Qwen Architect, Opus Worker, Qwen Judge under the judge strength rule (RS-8.7)",
+      "stages": [ "Architect", "Worker", "Judge" ],
+      "staffing": { "Architect": "qwen", "Worker": "opus", "Judge": "qwen" },
+      "runsPerPack": 3
+    },
+    {
+      "name": "Gate-D",
+      "description": "P-D: every persona Qwen, escalating Qwen to GPT-6.1 to Opus (RS-5.6)",
+      "stages": [ "Architect", "Worker", "TestEngineer", "Judge" ],
+      "staffing": { "Architect": "qwen", "Worker": "qwen", "TestEngineer": "qwen", "Judge": "qwen" },
+      "runsPerPack": 10
+    },
+    {
+      "name": "Gate-D-inkling",
+      "description": "P-D with inkling-2-mini in place of Qwen3.8",
+      "stages": [ "Architect", "Worker", "TestEngineer", "Judge" ],
+      "staffing": { "Architect": "inkling", "Worker": "inkling", "TestEngineer": "inkling", "Judge": "inkling" },
+      "runsPerPack": 10
+    },
+    {
+      "name": "Gate-D-deepseek",
+      "description": "P-D with DeepSeek 4.1 (Ollama Cloud, frugal)",
+      "stages": [ "Architect", "Worker", "TestEngineer", "Judge" ],
+      "staffing": { "Architect": "deepseek", "Worker": "deepseek", "TestEngineer": "deepseek", "Judge": "deepseek" },
+      "runsPerPack": 1
+    },
+    {
+      "name": "Gate-D-glm",
+      "description": "P-D with GLM (Ollama Cloud, frugal)",
+      "stages": [ "Architect", "Worker", "TestEngineer", "Judge" ],
+      "staffing": { "Architect": "glm", "Worker": "glm", "TestEngineer": "glm", "Judge": "glm" },
+      "runsPerPack": 1
+    },
+    {
+      "name": "Gate-D-kimi",
+      "description": "P-D with Kimi (Ollama Cloud, frugal)",
+      "stages": [ "Architect", "Worker", "TestEngineer", "Judge" ],
+      "staffing": { "Architect": "kimi", "Worker": "kimi", "TestEngineer": "kimi", "Judge": "kimi" },
+      "runsPerPack": 1
+    }
+  ],
+  "packs": [ "csharp", "python", "javascript", "go", "java", "php", "ruby", "rust" ]
+}

@@ -108,9 +108,64 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(await services.Missions.TryAssignAsync(work.Missions[1], work.Vessel, true), "admitted before the failing launch");
                 for (int i = 0; i < 100 && (await db.Missions.ReadAsync(work.Missions[1].Id))!.Status != MissionStatusEnum.Pending; i++) await Task.Delay(20);
                 AssertEqual(MissionStatusEnum.Pending, (await db.Missions.ReadAsync(work.Missions[1].Id))!.Status, "a failed background launch rolls back");
-                AssertEqual(0, (await db.Captains.ReadAsync(work.Captains[0].Id))!.ActiveMissionCount, "and releases the captain");
-                // Failure handling continues after the rollback; let it finish before the next case resets the shared database.
+                // The rollback reverts the mission, then releases the captain in a separate write; on a server provider a
+                // read can land between the two, so let the launch finish before checking the captain (and before the next
+                // case resets the shared database).
                 AssertTrue(await services.Missions.WaitForBackgroundLaunchesAsync(TimeSpan.FromSeconds(30)), "background launches drain");
+                AssertEqual(0, (await db.Captains.ReadAsync(work.Captains[0].Id))!.ActiveMissionCount, "and releases the captain");
+            }));
+
+            cases.Add(CaseAsync("dispatch_wake_coalesces", "Many dispatch wakes raised while one is pending collapse into one pass", TestTags.Positive, async () =>
+            {
+                DispatchWakeSignal signal = new DispatchWakeSignal();
+                await Task.WhenAll(Enumerable.Range(0, 200).Select(_ => Task.Run(signal.Request)));
+                AssertEqual(200L, signal.Requests, "every request is counted");
+                AssertTrue(signal.IsPending, "a pass is pending");
+                await signal.WaitAsync();
+                AssertFalse(signal.IsPending, "one wait consumes all 200 requests");
+                using CancellationTokenSource timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+                bool waited = false;
+                try { await signal.WaitAsync(timeout.Token); waited = true; } catch (OperationCanceledException) { }
+                AssertFalse(waited, "no second pass without a new request");
+            }));
+
+            cases.Add(CaseAsync("completion_wakes_dispatcher_without_waiting", "Completion frees the captain and wakes the dispatcher but never assigns inline; the dispatcher loop assigns the next mission", TestTags.Positive, async () =>
+            {
+                using TestDatabase fixture = await TestDatabaseHelper.CreateDatabaseAsync();
+                DatabaseDriver db = fixture.Driver;
+                LoggingModule logging = CreateLogging();
+                ArmadaSettings settings = CreateSettings();
+                ServiceSet services = CreateServices(logging, db, settings, new StubGitService());
+                TestFixture work = await SetupFixtureAsync(db, captainCount: 1, missionCount: 2);
+                AssertTrue(await services.Missions.TryAssignAsync(work.Missions[0], work.Vessel), "first mission admitted");
+
+                Captain captain = (await db.Captains.ReadAsync(work.Captains[0].Id))!;
+                await services.Missions.HandleCompletionAsync(captain, work.Missions[0].Id);
+                AssertEqual(1, services.Dispatcher.Wakes, "completion raised one wake");
+                AssertEqual(MissionStatusEnum.Pending, (await db.Missions.ReadAsync(work.Missions[1].Id))!.Status, "completion does not dispatch inline");
+
+                // The real loop: a wake raised before the loop starts is kept, and the loop assigns the next mission.
+                AdmiralService admiral = new AdmiralService(logging, db, settings, services.Captains, services.Missions, new VoyageService(logging, db), services.Docks);
+                using CancellationTokenSource stop = new CancellationTokenSource();
+                admiral.RequestDispatch();
+                admiral.StartDispatcher(stop.Token);
+                for (int i = 0; i < 100 && (await db.Missions.ReadAsync(work.Missions[1].Id))!.Status != MissionStatusEnum.InProgress; i++) await Task.Delay(20);
+                AssertEqual(MissionStatusEnum.InProgress, (await db.Missions.ReadAsync(work.Missions[1].Id))!.Status, "the dispatcher loop assigned the next mission");
+                stop.Cancel();
+            }));
+
+            cases.Add(CaseAsync("background_launch_stops_on_shutdown", "A background launch runs under the shutdown token, not CancellationToken.None", TestTags.Negative, async () =>
+            {
+                using TestDatabase fixture = await TestDatabaseHelper.CreateDatabaseAsync();
+                DatabaseDriver db = fixture.Driver;
+                ServiceSet services = CreateServices(CreateLogging(), db, CreateSettings(), new StubGitService());
+                TestFixture work = await SetupFixtureAsync(db, captainCount: 1, missionCount: 1);
+                using CancellationTokenSource shutdown = new CancellationTokenSource();
+                services.Missions.ShutdownToken = shutdown.Token;
+                services.Captains.OnLaunchAgent = async (_, _, _) => { await Task.Delay(Timeout.Infinite, shutdown.Token); return 1; };
+                AssertTrue(await services.Missions.TryAssignAsync(work.Missions[0], work.Vessel, true), "admitted");
+                shutdown.Cancel();
+                AssertTrue(await services.Missions.WaitForBackgroundLaunchesAsync(TimeSpan.FromSeconds(30)), "the launch ends once shutdown is requested");
             }));
 
             // Section 15 scheduler matrix rows not covered elsewhere.
@@ -368,8 +423,11 @@ namespace Test.Shared.Suites.Services
                 await db.Captains.ReconcileMissionSlotsAsync();
                 Mission recovered = (await db.Missions.ReadAsync(orphan.Id))!;
                 Captain captain = (await db.Captains.ReadAsync(work.Captains[0].Id))!;
+                // A mission that never launched was not interrupted: it returns to Pending without spending an attempt
+                // (RS-2.7); releasing the captain may dispatch it again at once.
                 AssertTrue(recovered.Status == MissionStatusEnum.Pending || recovered.Status == MissionStatusEnum.InProgress,
                     "restart recovery returns the orphan to Pending or relaunches it, never leaves it Assigned without a process: " + recovered.Status);
+                AssertEqual(0, recovered.RedispatchAttempts, "a never-launched mission is not charged a redispatch attempt");
                 if (recovered.Status == MissionStatusEnum.Pending)
                 {
                     AssertEqual(0, captain.ActiveMissionCount, "the orphan's slot is released");
@@ -534,6 +592,7 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(3, blocker.BlockingMissionCount);
                     Captain captain = (await db.Captains.ReadAsync(running[0].CaptainId!))!;
                     await services.Missions.HandleCompletionAsync(captain, running[0].Id);
+                    await services.Dispatcher.DispatchAsync();
                     running = await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.InProgress);
                     AssertEqual(3, running.Count, "Completion dispatch must fill the freed slot");
                     AssertEqual(1, (await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.WorkProduced)).Count);
@@ -610,7 +669,7 @@ namespace Test.Shared.Suites.Services
                     Vessel vessel = fixture.Vessel;
                     List<Mission> missions = fixture.Missions;
 
-                    // Step 1: Assign mission 1 — captain is idle, should get assigned
+                    // Step 1: Assign mission 1: captain is idle, should get assigned
                     await missionService.TryAssignAsync(missions[0], vessel);
 
                     Mission? m1 = await db.Missions.ReadAsync(missions[0].Id);
@@ -621,21 +680,22 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(CaptainStateEnum.Working, captainAfterM1!.State, "Captain should be Working");
                     AssertEqual(m1.Id, captainAfterM1.ActiveMissionIds.SingleOrDefault(), "Captain should track mission 1");
 
-                    // Step 2: Try to assign mission 2 — captain is working, should NOT be assigned
+                    // Step 2: Try to assign mission 2: captain is working, should NOT be assigned
                     await missionService.TryAssignAsync(missions[1], vessel);
 
                     Mission? m2 = await db.Missions.ReadAsync(missions[1].Id);
                     AssertEqual(MissionStatusEnum.Pending, m2!.Status, "Mission 2 should still be Pending");
 
-                    // Step 3: Try to assign mission 3 — same, should NOT be assigned
+                    // Step 3: Try to assign mission 3: same, should NOT be assigned
                     await missionService.TryAssignAsync(missions[2], vessel);
 
                     Mission? m3 = await db.Missions.ReadAsync(missions[2].Id);
                     AssertEqual(MissionStatusEnum.Pending, m3!.Status, "Mission 3 should still be Pending");
 
-                    // Step 4: Complete mission 1 — should release captain and pick up mission 2
+                    // Step 4: Complete mission 1: should release captain and pick up mission 2
                     Captain? captainForCompletion = await db.Captains.ReadAsync(captain.Id);
                     await missionService.HandleCompletionAsync(captainForCompletion!, captainForCompletion!.ActiveMissionIds.SingleOrDefault()!);
+                    await services.Dispatcher.DispatchAsync();
 
                     m1 = await db.Missions.ReadAsync(missions[0].Id);
                     AssertEqual(MissionStatusEnum.WorkProduced, m1!.Status, "Mission 1 should be WorkProduced (landing happens in ArmadaServer)");
@@ -647,9 +707,10 @@ namespace Test.Shared.Suites.Services
                     Captain? captainAfterM2Assign = await db.Captains.ReadAsync(captain.Id);
                     AssertEqual(CaptainStateEnum.Working, captainAfterM2Assign!.State, "Captain should be Working with mission 2");
 
-                    // Step 5: Complete mission 2 — should pick up mission 3
+                    // Step 5: Complete mission 2: should pick up mission 3
                     captainForCompletion = await db.Captains.ReadAsync(captain.Id);
                     await missionService.HandleCompletionAsync(captainForCompletion!, m2.Id);
+                    await services.Dispatcher.DispatchAsync();
 
                     m2 = await db.Missions.ReadAsync(missions[1].Id);
                     AssertEqual(MissionStatusEnum.WorkProduced, m2!.Status, "Mission 2 should be WorkProduced (landing happens in ArmadaServer)");
@@ -658,9 +719,10 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(MissionStatusEnum.InProgress, m3!.Status, "Mission 3 should be InProgress after mission 2 completion");
                     AssertEqual(captain.Id, m3.CaptainId, "Mission 3 should be assigned to the same captain");
 
-                    // Step 6: Complete mission 3 — captain should be released to Idle
+                    // Step 6: Complete mission 3: captain should be released to Idle
                     captainForCompletion = await db.Captains.ReadAsync(captain.Id);
                     await missionService.HandleCompletionAsync(captainForCompletion!, m3.Id);
+                    await services.Dispatcher.DispatchAsync();
 
                     m3 = await db.Missions.ReadAsync(missions[2].Id);
                     AssertEqual(MissionStatusEnum.WorkProduced, m3!.Status, "Mission 3 should be WorkProduced (landing happens in ArmadaServer)");
@@ -696,7 +758,7 @@ namespace Test.Shared.Suites.Services
                     await db.Vessels.UpdateAsync(vessel);
                     List<Mission> missions = fixture.Missions;
 
-                    // Assign first 2 missions — each captain should get one
+                    // Assign first 2 missions: each captain should get one
                     await missionService.TryAssignAsync(missions[0], vessel);
                     await missionService.TryAssignAsync(missions[1], vessel);
 
@@ -723,9 +785,10 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(MissionStatusEnum.Pending, m4!.Status, "Mission 4 should be Pending");
                     AssertEqual(MissionStatusEnum.Pending, m5!.Status, "Mission 5 should be Pending");
 
-                    // Complete mission 1 — the captain should pick up mission 3
+                    // Complete mission 1: the captain should pick up mission 3
                     Captain? captain1 = await db.Captains.ReadAsync(m1CaptainId!);
                     await missionService.HandleCompletionAsync(captain1!, m1.Id);
+                    await services.Dispatcher.DispatchAsync();
 
                     m1 = await db.Missions.ReadAsync(missions[0].Id);
                     AssertEqual(MissionStatusEnum.WorkProduced, m1!.Status, "Mission 1 should be WorkProduced");
@@ -733,9 +796,10 @@ namespace Test.Shared.Suites.Services
                     m3 = await db.Missions.ReadAsync(missions[2].Id);
                     AssertEqual(MissionStatusEnum.InProgress, m3!.Status, "Mission 3 should be InProgress after mission 1 completion");
 
-                    // Complete mission 2 — the other captain should pick up mission 4
+                    // Complete mission 2: the other captain should pick up mission 4
                     Captain? captain2 = await db.Captains.ReadAsync(m2CaptainId!);
                     await missionService.HandleCompletionAsync(captain2!, m2.Id);
+                    await services.Dispatcher.DispatchAsync();
 
                     m2 = await db.Missions.ReadAsync(missions[1].Id);
                     AssertEqual(MissionStatusEnum.WorkProduced, m2!.Status, "Mission 2 should be WorkProduced");
@@ -743,9 +807,10 @@ namespace Test.Shared.Suites.Services
                     m4 = await db.Missions.ReadAsync(missions[3].Id);
                     AssertEqual(MissionStatusEnum.InProgress, m4!.Status, "Mission 4 should be InProgress after mission 2 completion");
 
-                    // Complete mission 3 — should pick up mission 5
+                    // Complete mission 3: should pick up mission 5
                     captain1 = await db.Captains.ReadAsync(m3.CaptainId!);
                     await missionService.HandleCompletionAsync(captain1!, m3.Id);
+                    await services.Dispatcher.DispatchAsync();
 
                     m3 = await db.Missions.ReadAsync(missions[2].Id);
                     AssertEqual(MissionStatusEnum.WorkProduced, m3!.Status, "Mission 3 should be WorkProduced");
@@ -753,9 +818,10 @@ namespace Test.Shared.Suites.Services
                     m5 = await db.Missions.ReadAsync(missions[4].Id);
                     AssertEqual(MissionStatusEnum.InProgress, m5!.Status, "Mission 5 should be InProgress after mission 3 completion");
 
-                    // Complete mission 4 — no more pending, captain should go Idle
+                    // Complete mission 4: no more pending, captain should go Idle
                     captain2 = await db.Captains.ReadAsync(m4.CaptainId!);
                     await missionService.HandleCompletionAsync(captain2!, m4.Id);
+                    await services.Dispatcher.DispatchAsync();
 
                     m4 = await db.Missions.ReadAsync(missions[3].Id);
                     AssertEqual(MissionStatusEnum.WorkProduced, m4!.Status, "Mission 4 should be WorkProduced");
@@ -763,9 +829,10 @@ namespace Test.Shared.Suites.Services
                     captain2 = await db.Captains.ReadAsync(captain2!.Id);
                     AssertEqual(CaptainStateEnum.Idle, captain2!.State, "Captain 2 should be Idle");
 
-                    // Complete mission 5 — last captain should go Idle
+                    // Complete mission 5: last captain should go Idle
                     captain1 = await db.Captains.ReadAsync(m5.CaptainId!);
                     await missionService.HandleCompletionAsync(captain1!, m5.Id);
+                    await services.Dispatcher.DispatchAsync();
 
                     m5 = await db.Missions.ReadAsync(missions[4].Id);
                     AssertEqual(MissionStatusEnum.WorkProduced, m5!.Status, "Mission 5 should be WorkProduced");
@@ -810,9 +877,10 @@ namespace Test.Shared.Suites.Services
                     string? worktreePath1 = dock1!.WorktreePath;
                     AssertNotNull(worktreePath1, "Dock should have a worktree path");
 
-                    // Complete mission 1 — should auto-assign mission 2
+                    // Complete mission 1: should auto-assign mission 2
                     Captain? captainForCompletion = await db.Captains.ReadAsync(captain.Id);
                     await missionService.HandleCompletionAsync(captainForCompletion!, m1.Id);
+                    await services.Dispatcher.DispatchAsync();
 
                     // Mission 2 should now be assigned with its own dock
                     Mission? m2 = await db.Missions.ReadAsync(fixture.Missions[1].Id);
@@ -857,10 +925,11 @@ namespace Test.Shared.Suites.Services
                     Mission? m1 = await db.Missions.ReadAsync(fixture.Missions[0].Id);
                     AssertEqual(MissionStatusEnum.InProgress, m1!.Status, "Mission 1 should be InProgress");
 
-                    // Complete mission 1 — OnMissionComplete will throw (fire-and-forget),
+                    // Complete mission 1: OnMissionComplete will throw (fire-and-forget),
                     // but captain should still be released and mission 2 should be picked up
                     Captain? captainForCompletion = await db.Captains.ReadAsync(captain.Id);
                     await missionService.HandleCompletionAsync(captainForCompletion!, m1.Id);
+                    await services.Dispatcher.DispatchAsync();
 
                     // A thrown landing handoff is persisted as LandingFailed with its reason, rather than stranding the
                     // verified work in the idempotently skipped WorkProduced state.
@@ -870,7 +939,7 @@ namespace Test.Shared.Suites.Services
 
                     // Verify mission 2 was picked up (re-dispatch was attempted)
                     Mission? m2 = await db.Missions.ReadAsync(fixture.Missions[1].Id);
-                    AssertEqual(MissionStatusEnum.InProgress, m2!.Status, "Mission 2 should be InProgress — handler failure should not block re-dispatch");
+                    AssertEqual(MissionStatusEnum.InProgress, m2!.Status, "Mission 2 should be InProgress, handler failure should not block re-dispatch");
                     AssertEqual(captain.Id, m2.CaptainId, "Mission 2 should be assigned to the same captain");
                 }
             }));
@@ -964,7 +1033,7 @@ namespace Test.Shared.Suites.Services
                     // Assign the single mission
                     await missionService.TryAssignAsync(fixture.Missions[0], vessel);
 
-                    // Complete it — no more pending missions, captain should become Idle
+                    // Complete it: no more pending missions, captain should become Idle
                     Captain? captainForCompletion = await db.Captains.ReadAsync(captain.Id);
                     await missionService.HandleCompletionAsync(captainForCompletion!, fixture.Missions[0].Id);
 
@@ -1059,7 +1128,9 @@ namespace Test.Shared.Suites.Services
             };
 
             MissionService missionService = new MissionService(logging, db, settings, dockService, captainService);
-            return new ServiceSet(missionService, captainService, dockService);
+            ServiceSet services = new ServiceSet(missionService, captainService, dockService);
+            services.Dispatcher = new DispatchWakeProbe(logging, db, settings, captainService, missionService, dockService);
+            return services;
         }
 
         /// <summary>
@@ -1128,6 +1199,11 @@ namespace Test.Shared.Suites.Services
             /// Dock service.
             /// </summary>
             public IDockService Docks { get; }
+
+            /// <summary>
+            /// Stands in for the Admiral dispatcher loop: completion wakes it, the test runs the pass.
+            /// </summary>
+            public DispatchWakeProbe Dispatcher { get; set; } = null!;
 
             /// <summary>
             /// Instantiate.

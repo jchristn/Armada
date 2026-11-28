@@ -145,7 +145,18 @@ namespace Armada.Core.Services
         /// <summary>
         /// Create a git worktree from a bare repository.
         /// </summary>
-        public async Task CreateWorktreeAsync(string repoPath, string worktreePath, string branchName, string baseBranch = "main", CancellationToken token = default)
+        public Task CreateWorktreeAsync(string repoPath, string worktreePath, string branchName, string baseBranch = "main", CancellationToken token = default)
+        {
+            return CreateWorktreeCoreAsync(repoPath, worktreePath, branchName, baseBranch, true, token);
+        }
+
+        /// <inheritdoc />
+        public Task CreateWorktreeFromFetchedRefsAsync(string repoPath, string worktreePath, string branchName, string baseBranch, CancellationToken token = default)
+        {
+            return CreateWorktreeCoreAsync(repoPath, worktreePath, branchName, baseBranch, false, token);
+        }
+
+        private async Task CreateWorktreeCoreAsync(string repoPath, string worktreePath, string branchName, string baseBranch, bool fetch, CancellationToken token)
         {
             if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
             if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
@@ -160,7 +171,7 @@ namespace Armada.Core.Services
 
             try
             {
-                bool hasBaseBranch = await EnsureLocalBranchAsync(repoPath, baseBranch, token).ConfigureAwait(false);
+                bool hasBaseBranch = await EnsureLocalBranchCoreAsync(repoPath, baseBranch, fetch, token).ConfigureAwait(false);
                 if (!hasBaseBranch)
                 {
                     throw new InvalidOperationException("Unable to prepare base branch " + baseBranch + " in repository " + repoPath);
@@ -1120,12 +1131,17 @@ namespace Armada.Core.Services
         /// Ensure a local branch exists, preferring the matching remote branch and otherwise
         /// creating it from the repository's default available history.
         /// </summary>
-        public async Task<bool> EnsureLocalBranchAsync(string repoPath, string branchName, CancellationToken token = default)
+        public Task<bool> EnsureLocalBranchAsync(string repoPath, string branchName, CancellationToken token = default)
+        {
+            return EnsureLocalBranchCoreAsync(repoPath, branchName, true, token);
+        }
+
+        private async Task<bool> EnsureLocalBranchCoreAsync(string repoPath, string branchName, bool fetch, CancellationToken token)
         {
             if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
             if (String.IsNullOrEmpty(branchName)) throw new ArgumentNullException(nameof(branchName));
 
-            await FetchAsync(repoPath, token).ConfigureAwait(false);
+            if (fetch) await FetchAsync(repoPath, token).ConfigureAwait(false);
 
             if (await SyncLocalBranchFromRemoteAsync(repoPath, branchName).ConfigureAwait(false))
             {
@@ -1338,11 +1354,10 @@ namespace Armada.Core.Services
             {
                 await RunGitAsync(worktreePath, token, "commit", "--no-verify", "-m", message).ConfigureAwait(false);
             }
-            catch (InvalidOperationException ex) when (ex.Message.Contains("user.email", StringComparison.OrdinalIgnoreCase)
-                || ex.Message.Contains("user.name", StringComparison.OrdinalIgnoreCase)
-                || ex.Message.Contains("identity", StringComparison.OrdinalIgnoreCase))
+            catch (InvalidOperationException)
             {
-                // No git identity on this host: commit as Armada rather than lose the work.
+                // No git identity on this host: commit as Armada rather than lose the work. Any other failure is rethrown.
+                if (await HasCommitIdentityAsync(worktreePath, token).ConfigureAwait(false)) throw;
                 await RunGitAsync(worktreePath, token, "-c", "user.name=Armada", "-c", "user.email=armada@localhost", "commit", "--no-verify", "-m", message).ConfigureAwait(false);
             }
 
@@ -1701,7 +1716,7 @@ namespace Armada.Core.Services
             }
             catch
             {
-                // Config key missing entirely — set it
+                // Config key missing entirely: set it
                 await EnsureSafeFetchRefspecAsync(repoPath).ConfigureAwait(false);
             }
 
@@ -1714,7 +1729,7 @@ namespace Armada.Core.Services
             }
             catch
             {
-                // Best effort — don't let prune failure block fetch
+                // Best effort: don't let prune failure block fetch
             }
 
             _Logging.Debug(_Header + "fetching: " + repoPath);
@@ -1775,6 +1790,21 @@ namespace Armada.Core.Services
         private async Task<string> RunGitAsync(string? workingDirectory, CancellationToken token, params string[] args)
         {
             return await RunProcessAsync(workingDirectory, "git", token, args).ConfigureAwait(false);
+        }
+
+        // git var exits non-zero when it cannot determine an author or committer identity, as git commit would.
+        private async Task<bool> HasCommitIdentityAsync(string worktreePath, CancellationToken token)
+        {
+            try
+            {
+                await RunGitAsync(worktreePath, token, "var", "GIT_AUTHOR_IDENT").ConfigureAwait(false);
+                await RunGitAsync(worktreePath, token, "var", "GIT_COMMITTER_IDENT").ConfigureAwait(false);
+                return true;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
         }
 
         private async Task EnsureTrackedFilesCleanAsync(string worktreePath, CancellationToken token)

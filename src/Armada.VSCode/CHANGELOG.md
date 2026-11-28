@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.5.0 (unreleased)
+
+- **Mission attempts in the mission view**: the compact mission view lists every stage attempt from the Admiral's
+  attempt history (`GET /api/v1/missions/{id}/attempts`): model and captain, disposition, failure kind, runtime failure
+  kind, repair and its kind, escalation, Judge verdict and duration, with the tier, escalation count and redispatch,
+  output repair, no-op and stall recovery counters. Older Admirals without the route show the view as before.
+- **Why a mission waits**: a pending mission shows its typed blocker reason (for example Endpoint Mission Limit) with the
+  advice that clears it.
+- **Mode** shows on the mission view.
+- **Model Profiles**: Manage lists the Captains hub's new Model Profiles tab, and model profile pages (`mdl_` ids) open
+  in editor tabs.
+
 ## 1.4.0
 
 - **Loading indicators everywhere**: dashboard pages show a spinner for every value, table, cell and chart that is still loading, never a default 0 or an empty state; the status bar shows a spinner while missions load and opens the Missions page.

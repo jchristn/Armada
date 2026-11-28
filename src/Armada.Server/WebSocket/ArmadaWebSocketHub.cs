@@ -57,6 +57,7 @@ namespace Armada.Server.WebSocket
         #region Private-Members
 
         private string _Header = "[WebSocketHub] ";
+        private readonly MissionAttemptChangeTracker _AttemptChanges = new MissionAttemptChangeTracker();
         private LoggingModule _Logging;
         private IAdmiralService _Admiral;
         private WebSocketCommandHandler _CommandHandler;
@@ -410,8 +411,17 @@ namespace Armada.Server.WebSocket
                 title = mission.Title,
                 status = statusOverride ?? mission.Status.ToString(),
                 voyageId = mission.VoyageId,
-                activity = MissionActivityLookup?.Invoke(mission.Id)
+                activity = MissionActivityLookup?.Invoke(mission.Id),
+                persona = mission.Persona,
+                mode = mission.Mode.ToString(),
+                captainId = mission.CaptainId,
+                tier = mission.Tier?.ToString(),
+                escalationCount = mission.EscalationCount,
+                redispatchAttempts = mission.RedispatchAttempts,
+                outputRepairAttempts = mission.OutputRepairAttempts
             });
+            foreach (string attemptEvent in _AttemptChanges.Observe(mission))
+                BroadcastToRecordReaders(mission.TenantId, mission.UserId, attemptEvent, MissionAttemptChange.From(mission));
             RaiseEntityChanged("mission", mission.Id);
             MissionStatusEnum? effective = null;
             if (!String.IsNullOrEmpty(statusOverride) && Enum.TryParse<MissionStatusEnum>(statusOverride, true, out MissionStatusEnum parsed)) effective = parsed;

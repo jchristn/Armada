@@ -16,14 +16,30 @@ import { personaRoutingForm, validatePersonaPriorities, type PersonaRoutingForm 
 
 vi.mock('../../context/LocaleContext', () => ({ useLocale: () => ({ t: (text: string, params?: Record<string, unknown>) => text.replace('{{number}}', String(params?.number ?? '')) }) }));
 
-function Harness({ initial = personaRoutingForm() }: { initial?: PersonaRoutingForm }) {
+function Harness({ initial = personaRoutingForm(), list }: { initial?: PersonaRoutingForm; list?: 'captainPriorities' | 'escalationLadder' }) {
   const [value, setValue] = useState(initial);
-  return <><PersonaPriorityEditor value={value} onChange={setValue} /><output data-testid="payload">{JSON.stringify(value)}</output></>;
+  return <><PersonaPriorityEditor value={value} onChange={setValue} list={list} /><output data-testid="payload">{JSON.stringify(value)}</output></>;
 }
 
 function payload(): PersonaRoutingForm { return JSON.parse(screen.getByTestId('payload').textContent!); }
 
 describe('Persona priority editor', () => {
+  it('edits the escalation ladder without touching the priorities or showing the routing policies', async () => {
+    render(<Harness list="escalationLadder" initial={personaRoutingForm({ captainPriorities: [{ runtime: 'Codex' }], escalationLadder: [{ model: 'qwen3.8' }] })} />);
+    await screen.findAllByRole('option', { name: /First API/ });
+    expect(screen.getByText('Escalation ladder')).toBeInTheDocument();
+    expect(screen.getByText('Rung 1')).toBeInTheDocument();
+    expect(screen.queryByText('When a priority is unavailable')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Add rung'), { target: { value: 'Codex' } });
+    expect(payload().escalationLadder).toEqual([{ model: 'qwen3.8' }, { runtime: 'Codex' }]);
+    fireEvent.click(screen.getAllByLabelText('Move up')[1]);
+    expect(payload().escalationLadder[0]).toEqual({ runtime: 'Codex' });
+    fireEvent.click(screen.getAllByLabelText('Remove rung')[0]);
+    expect(payload().escalationLadder).toEqual([{ model: 'qwen3.8' }]);
+    expect(payload().captainPriorities).toEqual([{ runtime: 'Codex' }]);
+    expect(validatePersonaPriorities([{}])).not.toBeNull();
+  });
+
   it('adds a specific inference endpoint as a first-class target and edits its identity', async () => {
     render(<Harness />);
     await screen.findByRole('option', { name: 'API Endpoint: First API (XAI / same-model)' });

@@ -127,7 +127,7 @@ namespace Armada.Tui.Screens.Operations
             Loading = true;
             UpdateFooter();
             long at = Math.Max(0, offset);
-            _Screen.Call((c, t) => c.ReadBlackBoxObjectAsync(EntryId, Name, at, ChunkSize, t), content =>
+            _Screen.Call((c, t) => c.BlackBox.ReadObjectAsync(EntryId, Name, at, ChunkSize, t), content =>
             {
                 Loading = false;
                 Offset = content.Offset;

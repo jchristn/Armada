@@ -124,6 +124,16 @@ namespace Armada.Tui.Screens.Operations
         public OpsDocumentView Playbooks { get; } = new OpsDocumentView();
 
         /// <summary>
+        /// Attempts panel: recovery counters, escalations and each attempt (RS-12.9).
+        /// </summary>
+        public OpsDocumentView Attempts { get; } = new OpsDocumentView();
+
+        /// <summary>
+        /// The mission's attempt history, or null before it loads (or when the Admiral has no attempts route).
+        /// </summary>
+        public MissionAttemptHistory? AttemptHistory { get; private set; } = null;
+
+        /// <summary>
         /// Failure panel: the mission's black box entry (user brief, recovery paths) with its own keys.
         /// </summary>
         public BlackBoxFailurePanel Failure { get; }
@@ -200,6 +210,9 @@ namespace Armada.Tui.Screens.Operations
             AddPanel("description", "Description", Description);
             AddPanel("linked", "Linked Checks and Deployments", Linked);
             AddPanel("playbooks", "Playbooks", Playbooks);
+            Attempts.Builder = doc => MissionAttemptsText.Build(doc, AttemptHistory, s => Tr(s));
+            Attempts.Empty = "No attempts recorded yet.";
+            AddPanel("attempts", "Attempts", Attempts);
             AddPanel("selection", "Captain Selection", Selection);
             AddPanel("failure", "Failure", Failure);
             Tabs.SelectedChanged += (s, e) =>
@@ -209,10 +222,14 @@ namespace Armada.Tui.Screens.Operations
             };
 
             SubscribeCoalesced("mission.changed", Load);
+            SubscribeCoalesced(ArmadaEventTypes.MissionAttemptChanged, LoadAttempts);
+            SubscribeCoalesced(ArmadaEventTypes.MissionEscalated, LoadAttempts);
+            SubscribeCoalesced(ArmadaEventTypes.MissionRepaired, LoadAttempts);
             SubscribeCoalesced("blackbox.", () => { if (Failure.Loaded) Failure.Reload(); });
             Track(Context.Events.Subscribe(ArmadaEventTypes.CaptainSelectionChanged, Selection.OnSocketMessage));
             Load();
             LoadLinked();
+            LoadAttempts();
         }
 
         #endregion
@@ -278,7 +295,7 @@ namespace Armada.Tui.Screens.Operations
         public override void Load()
         {
             bool initial = !Loaded;
-            Call((c, t) => c.GetMissionAsync(MissionId, t), m =>
+            Call((c, t) => c.Missions.GetAsync(MissionId, t), m =>
             {
                 if (m == null)
                 {
@@ -345,7 +362,7 @@ namespace Armada.Tui.Screens.Operations
         private void LoadPreview()
         {
             _LoadingPreview = LandingPreview == null;
-            Call((c, t) => c.GetMissionLandingPreviewAsync(MissionId, t), p =>
+            Call((c, t) => c.Missions.GetLandingPreviewAsync(MissionId, t), p =>
             {
                 LandingPreview = p;
                 _LoadingPreview = false;
@@ -363,7 +380,7 @@ namespace Armada.Tui.Screens.Operations
             // The note is written once per launch, before the captain starts; read it until it is there.
             if (CliPermissionNote != null || _LoadingNote) return;
             _LoadingNote = true;
-            Call((c, t) => c.GetMissionLogAsync(MissionId, NoteLogLines, t), log =>
+            Call((c, t) => c.Missions.GetLogAsync(MissionId, NoteLogLines, t), log =>
             {
                 _LoadingNote = false;
                 string? note = CliPermissionPolicyResolver.FindMissionLogNote(log?.Log);
@@ -381,11 +398,11 @@ namespace Armada.Tui.Screens.Operations
             Invalidate();
             Call(async (c, t) =>
             {
-                GitHubPullRequestDetail? pr = await c.GetMissionGitHubPullRequestAsync(MissionId, t).ConfigureAwait(false);
+                GitHubPullRequestDetail? pr = await c.Missions.GetGitHubPullRequestAsync(MissionId, t).ConfigureAwait(false);
                 EnumerationQuery page = new EnumerationQuery();
                 page.PageSize = PullRequestPageSize;
-                EnumerationResult<GitHubPullRequestReview>? reviews = pr == null || pr.ReviewCount == 0 ? null : await c.EnumerateMissionPullRequestReviewsAsync(MissionId, page, t).ConfigureAwait(false);
-                EnumerationResult<GitHubPullRequestCheck>? checks = pr == null || pr.CheckCount == 0 ? null : await c.EnumerateMissionPullRequestChecksAsync(MissionId, page, t).ConfigureAwait(false);
+                EnumerationResult<GitHubPullRequestReview>? reviews = pr == null || pr.ReviewCount == 0 ? null : await c.Missions.EnumeratePullRequestReviewsAsync(MissionId, page, t).ConfigureAwait(false);
+                EnumerationResult<GitHubPullRequestCheck>? checks = pr == null || pr.CheckCount == 0 ? null : await c.Missions.EnumeratePullRequestChecksAsync(MissionId, page, t).ConfigureAwait(false);
                 return new PullRequestEvidence(pr, reviews?.Objects, checks?.Objects);
             }, evidence =>
             {
@@ -402,6 +419,15 @@ namespace Armada.Tui.Screens.Operations
             });
         }
 
+        private void LoadAttempts()
+        {
+            Call((c, t) => c.Reliability.GetMissionAttemptsAsync(MissionId, t), r =>
+            {
+                AttemptHistory = r;
+                Invalidate();
+            }, null, ex => { });
+        }
+
         private void LoadLinked()
         {
             Call((c, t) =>
@@ -409,7 +435,7 @@ namespace Armada.Tui.Screens.Operations
                 ArmadaPageQuery q = new ArmadaPageQuery();
                 q.PageSize = 1000;
                 q.With("missionId", MissionId);
-                return c.ListCheckRunsAsync(q, t);
+                return c.CheckRuns.ListAsync(q, t);
             }, r =>
             {
                 LinkedChecks = r?.Objects ?? new List<CheckRun>();
@@ -420,7 +446,7 @@ namespace Armada.Tui.Screens.Operations
                 DeploymentQuery q = new DeploymentQuery();
                 q.PageSize = 1000;
                 q.MissionId = MissionId;
-                return c.ListDeploymentsAsync(q, t);
+                return c.Deployments.ListAsync(q, t);
             }, r =>
             {
                 LinkedDeployments = r?.Objects ?? new List<Deployment>();
@@ -430,12 +456,12 @@ namespace Armada.Tui.Screens.Operations
 
         private void LoadHierarchyAndWaits()
         {
-            Call((c, t) => c.GetMissionWaitsAsync(MissionId, 1, 100, t), page =>
+            Call((c, t) => c.Concurrency.GetMissionWaitsAsync(MissionId, 1, 100, t), page =>
             {
                 Waits = page?.Objects ?? new List<MissionWaitInterval>();
                 Invalidate();
             }, null, ex => { });
-            Call((c, t) => c.ListMissionSummariesAsync(new ArmadaPageQuery(1, 50).With("parentMissionId", MissionId).With("order", "CreatedAscending"), t), page =>
+            Call((c, t) => c.Missions.ListSummariesAsync(new ArmadaPageQuery(1, 50).With("parentMissionId", MissionId).With("order", "CreatedAscending"), t), page =>
             {
                 Children = page?.Objects ?? new List<MissionSummary>();
                 ChildCount = page?.TotalRecords ?? 0;
@@ -586,6 +612,7 @@ namespace Armada.Tui.Screens.Operations
         private void RenderBlocker(OpsDocument doc, MissionAssignmentBlocker blocker)
         {
             doc.Section("Why This Mission Is Waiting");
+            doc.Field("Reason", Tr(MissionBlockerText.ReasonLabel(blocker.Reason)));
             doc.Text(blocker.Summary, blocker.Reason == MissionAssignmentBlockerReasonEnum.AwaitingDispatch ? doc.Theme.Text : doc.Theme.Warning);
             if (blocker.Advice.Count > 0)
             {

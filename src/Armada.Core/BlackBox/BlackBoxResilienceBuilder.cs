@@ -222,7 +222,7 @@ namespace Armada.Core.BlackBox
             if (res.ArmadaVersionCount > 1) sb.Append(" across ").Append(res.ArmadaVersionCount.ToString(CultureInfo.InvariantCulture)).Append(" Armada versions");
             sb.Append(". Severity ").Append(c.Severity).Append('.');
             if (res.DetectionGap != null) sb.Append(" Detection gap: ").Append(res.DetectionGap);
-            return BlackBoxLimits.Clip(sb.ToString().Replace('—', '-').Replace('–', '-'), BlackBoxLimits.MaxShortTextChars) ?? String.Empty;
+            return BlackBoxLimits.Clip(sb.ToString().Replace('\u2014', '-').Replace('–', '-'), BlackBoxLimits.MaxShortTextChars) ?? String.Empty;
         }
 
         private static string FirstSentence(string text)

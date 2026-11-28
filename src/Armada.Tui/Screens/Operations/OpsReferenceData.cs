@@ -283,27 +283,27 @@ namespace Armada.Tui.Screens.Operations
                     switch (name)
                     {
                         case "vessels":
-                            List<Vessel> vessels = (await client.ListVesselsAsync(q).ConfigureAwait(false))?.Objects ?? new List<Vessel>();
+                            List<Vessel> vessels = (await client.Vessels.ListAsync(q).ConfigureAwait(false))?.Objects ?? new List<Vessel>();
                             Apply(name, () => Vessels = vessels);
                             break;
                         case "captains":
-                            List<Captain> captains = (await client.ListCaptainsAsync(q).ConfigureAwait(false))?.Objects ?? new List<Captain>();
+                            List<Captain> captains = (await client.Captains.ListAsync(q).ConfigureAwait(false))?.Objects ?? new List<Captain>();
                             Apply(name, () => Captains = captains);
                             break;
                         case "fleets":
-                            List<Fleet> fleets = (await client.ListFleetsAsync(q).ConfigureAwait(false))?.Objects ?? new List<Fleet>();
+                            List<Fleet> fleets = (await client.Fleets.ListAsync(q).ConfigureAwait(false))?.Objects ?? new List<Fleet>();
                             Apply(name, () => Fleets = fleets);
                             break;
                         case "pipelines":
-                            List<Pipeline> pipelines = await ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => client.ListPipelinesAsync(new ArmadaPageQuery(p, 1000), ct)).ConfigureAwait(false);
+                            List<Pipeline> pipelines = await ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => client.Pipelines.ListAsync(new ArmadaPageQuery(p, 1000), ct)).ConfigureAwait(false);
                             Apply(name, () => Pipelines = pipelines);
                             break;
                         case "personas":
-                            List<Persona> personas = (await client.ListPersonasAsync(q).ConfigureAwait(false))?.Objects ?? new List<Persona>();
+                            List<Persona> personas = (await client.Personas.ListAsync(q).ConfigureAwait(false))?.Objects ?? new List<Persona>();
                             Apply(name, () => Personas = personas);
                             break;
                         case "voyages":
-                            List<Voyage> voyages = (await client.ListVoyagesAsync(q).ConfigureAwait(false))?.Objects ?? new List<Voyage>();
+                            List<Voyage> voyages = (await client.Voyages.ListAsync(q).ConfigureAwait(false))?.Objects ?? new List<Voyage>();
                             Apply(name, () => Voyages = voyages);
                             break;
                         case "users":
@@ -313,11 +313,11 @@ namespace Armada.Tui.Screens.Operations
                                 break;
                             }
 
-                            List<UserMaster> users = (await client.ListUsersAsync().ConfigureAwait(false))?.Objects ?? new List<UserMaster>();
+                            List<UserMaster> users = (await client.Users.ListAsync().ConfigureAwait(false))?.Objects ?? new List<UserMaster>();
                             Apply(name, () => Users = users);
                             break;
                         case "playbooks":
-                            List<Playbook> playbooks = await ArmadaPaging.ReadAllAsync<Playbook>((p, ct) => client.ListPlaybooksAsync(new ArmadaPageQuery(p, 1000), ct)).ConfigureAwait(false);
+                            List<Playbook> playbooks = await ArmadaPaging.ReadAllAsync<Playbook>((p, ct) => client.Playbooks.ListAsync(new ArmadaPageQuery(p, 1000), ct)).ConfigureAwait(false);
                             Apply(name, () => Playbooks = playbooks);
                             break;
                     }

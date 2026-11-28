@@ -6,6 +6,7 @@ namespace Armada.Core.Services
     using System.Text.RegularExpressions;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Protocol;
 
     /// <summary>
     /// Safe, deterministic repair of stage reports whose work was acceptable but whose output broke the contract
@@ -37,6 +38,19 @@ namespace Armada.Core.Services
 
         private static readonly Regex _NearbyVerdict = new Regex(
             @"^\[?[ \t]*ARMADA[ \t]*[:_\- ][ \t]*VERDICT[ \t]*\]?[ \t]*[:=\-]?[ \t]*[*_`]*[ \t]*(?<verdict>PASS|FAIL|NEEDS[ _\-]?REVISION|SPEC[ _\-]?CONFLICT)[*_`]*$",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        // A verdict without the ARMADA token, read only inside a "Verdict" section: "Verdict: NEEDS_REVISION" or a bare word.
+        private static readonly Regex _ProseVerdict = new Regex(
+            @"^(?:(?:final[ \t]+)?verdict[ \t]*[:=\-]?[ \t]*)?[*_`]*[ \t]*(?<verdict>PASS|FAIL|NEEDS[ _\-]?REVISION|SPEC[ _\-]?CONFLICT)[*_`]*$",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        private static readonly Regex _VerdictHeading = new Regex(
+            @"^(?:final[ \t]+)?verdict$",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        private static readonly Regex _VerdictHeadingWithValue = new Regex(
+            @"^(?:final[ \t]+)?verdict[ \t]*[:=\-]",
             RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         private static readonly char[] _LeadingDecoration = new char[] { ' ', '\t', '*', '`', '>', '#', '-' };
@@ -81,13 +95,16 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Recover a Judge verdict written in a nearby non-canonical form, such as <c>**[ARMADA:VERDICT] PASS**</c>,
-        /// <c>[ARMADA:VERDICT]: FAIL</c> or <c>ARMADA VERDICT: NEEDS REVISION.</c>. Refused when any canonical verdict line
-        /// exists (the canonical parser decides, including conflicts), when there is not exactly one candidate line, or when
-        /// the candidate is a SPEC_CONFLICT (which needs a quoted criterion). Fenced lines are ignored, as they are by the
-        /// canonical parser.
+        /// <c>[ARMADA:VERDICT]: FAIL</c> or <c>ARMADA VERDICT: NEEDS REVISION.</c>, or in prose inside a section headed
+        /// "Verdict" (<c>## Verdict</c> then <c>**Verdict: NEEDS_REVISION**</c> or a bare <c>FAIL</c>, or a heading such as
+        /// <c>### Verdict: FAIL</c>). A prose PASS is never recovered, because only a line naming the ARMADA verdict marker
+        /// may permit landing; it goes to the format repair turn instead. Refused when any canonical verdict line exists (the canonical parser decides, including
+        /// conflicts), when there is not exactly one candidate line, or when the candidate is a SPEC_CONFLICT without a
+        /// non-empty <c>## Spec Conflict</c> section quoting the criterion. Fenced lines are ignored, as they are by the
+        /// canonical parser, and fence state resets at the output truncation marker.
         /// </summary>
         /// <param name="output">Judge output.</param>
-        /// <param name="verdict">The recovered PASS, FAIL or NEEDS_REVISION verdict; None when refused.</param>
+        /// <param name="verdict">The recovered PASS, FAIL, NEEDS_REVISION, or SPEC_CONFLICT verdict; None when refused.</param>
         /// <param name="sourceLine">The trimmed line the verdict was read from; null when refused.</param>
         /// <returns>True when exactly one unambiguous verdict was recovered.</returns>
         public static bool TryRecoverVerdict(string? output, out JudgeVerdictEnum verdict, out string? sourceLine)
@@ -99,10 +116,17 @@ namespace Armada.Core.Services
             List<string> candidates = new List<string>();
             JudgeVerdictEnum candidateVerdict = JudgeVerdictEnum.None;
             bool inFence = false;
+            bool inVerdictSection = false;
             foreach (string rawLine in output.Replace("\r\n", "\n").Split('\n'))
             {
                 string line = rawLine.Trim();
-                if (line.StartsWith("```", StringComparison.Ordinal) || line.StartsWith("~~~", StringComparison.Ordinal))
+                if (ProtocolLines.IsTruncationMarker(line))
+                {
+                    inFence = false;
+                    continue;
+                }
+
+                if (ProtocolLines.IsFence(line))
                 {
                     inFence = !inFence;
                     continue;
@@ -113,47 +137,61 @@ namespace Armada.Core.Services
 
                 string stripped = line.TrimStart(_LeadingDecoration).TrimEnd(_TrailingDecoration);
                 Match match = _NearbyVerdict.Match(stripped);
+                bool proseMatch = !match.Success;
+                if (!match.Success && line.StartsWith("#", StringComparison.Ordinal))
+                {
+                    // A heading opens a new section; "## Verdict" opens the one section where prose verdicts are read,
+                    // and a heading that states the verdict itself ("### Verdict: PASS") is read as one.
+                    inVerdictSection = _VerdictHeading.IsMatch(stripped);
+                    if (inVerdictSection || !_VerdictHeadingWithValue.IsMatch(stripped)) continue;
+                    match = _ProseVerdict.Match(stripped);
+                }
+                else if (!match.Success && inVerdictSection)
+                {
+                    match = _ProseVerdict.Match(stripped);
+                }
+
                 if (!match.Success) continue;
 
                 candidates.Add(line);
-                string word = match.Groups["verdict"].Value.ToUpperInvariant().Replace(" ", "").Replace("_", "").Replace("-", "");
-                candidateVerdict = word switch
-                {
-                    "PASS" => JudgeVerdictEnum.Pass,
-                    "FAIL" => JudgeVerdictEnum.Fail,
-                    "NEEDSREVISION" => JudgeVerdictEnum.NeedsRevision,
-                    _ => JudgeVerdictEnum.None
-                };
+                candidateVerdict = ToVerdict(match.Groups["verdict"].Value);
+
+                // Only a line naming the ARMADA verdict marker can permit landing; a prose PASS goes to the format repair turn.
+                if (proseMatch && candidateVerdict == JudgeVerdictEnum.Pass) return false;
             }
 
             if (candidates.Count != 1 || candidateVerdict == JudgeVerdictEnum.None) return false;
+
+            // A spec conflict sends the stage to a person, so it is only recovered with its quoted criterion and evidence.
+            if (candidateVerdict == JudgeVerdictEnum.SpecConflict)
+            {
+                // The verdict line itself does not count as the quoted criterion.
+                string withoutVerdict = String.Join("\n", output.Replace("\r\n", "\n").Split('\n').Where(l => !String.Equals(l.Trim(), candidates[0], StringComparison.Ordinal)));
+                if (JudgeContract.ExtractSpecConflict(withoutVerdict) == null) return false;
+            }
             verdict = candidateVerdict;
             sourceLine = candidates[0];
             return true;
         }
 
         /// <summary>
-        /// The canonical verdict line for a PASS, FAIL or NEEDS_REVISION verdict.
+        /// The canonical verdict line for a PASS, FAIL, NEEDS_REVISION, or SPEC_CONFLICT verdict.
         /// </summary>
         /// <param name="verdict">Verdict.</param>
         /// <returns>The canonical line.</returns>
         /// <exception cref="ArgumentOutOfRangeException">Thrown for any other verdict.</exception>
         public static string CanonicalVerdictLine(JudgeVerdictEnum verdict)
         {
-            return verdict switch
-            {
-                JudgeVerdictEnum.Pass => "[ARMADA:VERDICT] PASS",
-                JudgeVerdictEnum.Fail => "[ARMADA:VERDICT] FAIL",
-                JudgeVerdictEnum.NeedsRevision => "[ARMADA:VERDICT] NEEDS_REVISION",
-                _ => throw new ArgumentOutOfRangeException(nameof(verdict))
-            };
+            return StageOutputContract.VerdictLine(verdict);
         }
 
         /// <summary>
         /// Recover an Architect plan that is valid but not in a closed <c>armada-plan</c> fence: a single fenced block with
-        /// another info string (<c>json</c>, none, a misspelled fence name) or an <c>armada-plan</c> fence left open at the end.
-        /// Refused when any canonical plan block exists (the canonical parser decides), when more than one fenced block holds
-        /// plan JSON, or when the single candidate does not pass the plan contract.
+        /// another info string (<c>json</c>, none, a misspelled fence name, a backtick or tilde fence), a plan object
+        /// with prose around it inside a fence, bare JSON with no fence, or an <c>armada-plan</c> fence left open at the
+        /// end. Refused when any closed canonical plan block exists (the canonical parser decides), when more than one
+        /// plan-like object appears anywhere in the output (a draft and a final plan are never told apart), or when the
+        /// single candidate does not pass the plan contract.
         /// </summary>
         /// <param name="output">Architect output.</param>
         /// <param name="planJson">The plan JSON to wrap in a canonical fence; null when refused.</param>
@@ -164,6 +202,8 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(output)) return false;
 
             List<string> planLike = new List<string>();
+            StringBuilder outside = new StringBuilder();
+            string? openFence = null;
             string? openInfo = null;
             StringBuilder? current = null;
             foreach (string rawLine in output.Replace("\r\n", "\n").Split('\n'))
@@ -171,20 +211,27 @@ namespace Armada.Core.Services
                 string line = rawLine.Trim();
                 if (current == null)
                 {
-                    if (line.StartsWith("```", StringComparison.Ordinal))
+                    if (ProtocolLines.IsFence(line))
                     {
+                        openFence = line.Substring(0, 3);
                         openInfo = line.Substring(3).Trim();
                         current = new StringBuilder();
+                    }
+                    else
+                    {
+                        outside.AppendLine(rawLine);
                     }
 
                     continue;
                 }
 
-                if (line.StartsWith("```", StringComparison.Ordinal))
+                bool truncated = ProtocolLines.IsTruncationMarker(line);
+                if (truncated || line.StartsWith(openFence!, StringComparison.Ordinal))
                 {
-                    if (String.Equals(openInfo, ArchitectPlanParser.FenceInfo, StringComparison.OrdinalIgnoreCase)) return false;
-                    if (LooksLikePlan(current.ToString())) planLike.Add(current.ToString());
+                    if (!truncated && String.Equals(openInfo, ArchitectPlanParser.FenceInfo, StringComparison.OrdinalIgnoreCase)) return false;
+                    planLike.AddRange(PlanObjects(current.ToString()));
                     current = null;
+                    openFence = null;
                     openInfo = null;
                     continue;
                 }
@@ -192,12 +239,14 @@ namespace Armada.Core.Services
                 current.AppendLine(rawLine);
             }
 
-            if (current != null && LooksLikePlan(current.ToString())) planLike.Add(current.ToString());
+            if (current != null) planLike.AddRange(PlanObjects(current.ToString()));
+            planLike.AddRange(PlanObjects(outside.ToString()));
             if (planLike.Count != 1) return false;
 
             string json = planLike[0].Trim();
             string canonical = "```" + ArchitectPlanParser.FenceInfo + "\n" + json + "\n```";
-            if (!ArchitectPlanParser.TryParse(canonical, out ArchitectPlan? plan, out string? error) || plan == null || error != null) return false;
+            ArchitectPlanParseResult result = ArchitectPlanParser.Parse(canonical, Constants.DefaultMaxHierarchyDepth);
+            if (result.Status != ArchitectPlanParseStatusEnum.Parsed) return false;
 
             planJson = json;
             return true;
@@ -226,19 +275,38 @@ namespace Armada.Core.Services
 
         #region Private-Methods
 
+        private static JudgeVerdictEnum ToVerdict(string word)
+        {
+            return word.ToUpperInvariant().Replace(" ", "").Replace("_", "").Replace("-", "") switch
+            {
+                "PASS" => JudgeVerdictEnum.Pass,
+                "FAIL" => JudgeVerdictEnum.Fail,
+                "NEEDSREVISION" => JudgeVerdictEnum.NeedsRevision,
+                "SPECCONFLICT" => JudgeVerdictEnum.SpecConflict,
+                _ => JudgeVerdictEnum.None
+            };
+        }
+
         private static bool HasOpenFence(string output)
         {
             bool open = false;
             foreach (string rawLine in output.Replace("\r\n", "\n").Split('\n'))
-                if (rawLine.Trim().StartsWith("```", StringComparison.Ordinal)) open = !open;
+            {
+                if (ProtocolLines.IsTruncationMarker(rawLine)) open = false;
+                else if (rawLine.Trim().StartsWith("```", StringComparison.Ordinal)) open = !open;
+            }
+
             return open;
         }
 
-        private static bool LooksLikePlan(string content)
+        // Every top-level object that names "missions" counts, valid or not, so a broken draft next to a final plan
+        // refuses the repair instead of silently choosing one (R6).
+        private static List<string> PlanObjects(string text)
         {
-            string trimmed = content.Trim();
-            return trimmed.StartsWith("{", StringComparison.Ordinal)
-                && trimmed.IndexOf("\"missions\"", StringComparison.OrdinalIgnoreCase) >= 0;
+            List<string> plans = new List<string>();
+            foreach (string candidate in EmbeddedJsonExtractor.FindObjects(text))
+                if (candidate.IndexOf("\"missions\"", StringComparison.OrdinalIgnoreCase) >= 0) plans.Add(candidate);
+            return plans;
         }
 
         #endregion

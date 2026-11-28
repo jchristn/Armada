@@ -132,6 +132,8 @@ namespace Armada.Core.Database.Sqlite
             BlackBoxFiles = new BlackBoxFileMethods(this);
             BlackBoxLinks = new BlackBoxLinkMethods(this);
             BlackBoxNotes = new BlackBoxNoteMethods(this);
+            RecoveryState = new RecoveryStateMethods(this);
+            StageSubmissions = new StageSubmissionMethods(this);
             BlackBoxMigrations = new BlackBoxMigrationMethods(this);
             BlackBoxSuccesses = new BlackBoxSuccessMethods(this);
             BlackBoxRecoveryOutcomes = new BlackBoxRecoveryOutcomeMethods(this);
@@ -229,6 +231,8 @@ namespace Armada.Core.Database.Sqlite
             BlackBoxFiles = new BlackBoxFileMethods(this);
             BlackBoxLinks = new BlackBoxLinkMethods(this);
             BlackBoxNotes = new BlackBoxNoteMethods(this);
+            RecoveryState = new RecoveryStateMethods(this);
+            StageSubmissions = new StageSubmissionMethods(this);
             BlackBoxMigrations = new BlackBoxMigrationMethods(this);
             BlackBoxSuccesses = new BlackBoxSuccessMethods(this);
             BlackBoxRecoveryOutcomes = new BlackBoxRecoveryOutcomeMethods(this);
@@ -836,6 +840,15 @@ namespace Armada.Core.Database.Sqlite
             mission.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
             mission.StartedUtc = FromIso8601Nullable(reader["started_utc"]);
             mission.RescueOfMissionId = reader["rescue_of_mission_id"] == DBNull.Value ? null : reader["rescue_of_mission_id"].ToString();
+            mission.EscalationCount = reader["escalation_count"] == DBNull.Value ? 0 : Convert.ToInt32(reader["escalation_count"]);
+            mission.EscalatedFromCaptainId = reader["escalated_from_captain_id"] == DBNull.Value ? null : reader["escalated_from_captain_id"].ToString();
+            mission.EscalatedFromModel = reader["escalated_from_model"] == DBNull.Value ? null : reader["escalated_from_model"].ToString();
+            mission.FanOutCompletedUtc = FromIso8601Nullable(reader["fan_out_completed_utc"]);
+            mission.ArchitectSourceMissionId = reader["architect_source_mission_id"] == DBNull.Value ? null : reader["architect_source_mission_id"].ToString();
+            mission.ArchitectPlanIndex = reader["architect_plan_index"] == DBNull.Value ? null : Convert.ToInt32(reader["architect_plan_index"]);
+            mission.LaunchIntentUtc = FromIso8601Nullable(reader["launch_intent_utc"]);
+            mission.LaunchJobId = reader["launch_job_id"] == DBNull.Value ? null : reader["launch_job_id"].ToString();
+            mission.Notes = Armada.Core.Services.MissionNotes.FromJson(reader["notes_json"] == DBNull.Value ? null : reader["notes_json"].ToString());
             mission.BaseBranchName = reader["base_branch_name"] == DBNull.Value ? null : reader["base_branch_name"].ToString();
             mission.OwnedPathsJson = reader["owned_paths_json"] == DBNull.Value ? null : reader["owned_paths_json"].ToString();
             mission.ReadsPathsJson = reader["reads_paths_json"] == DBNull.Value ? null : reader["reads_paths_json"].ToString();
@@ -901,6 +914,7 @@ namespace Armada.Core.Database.Sqlite
             try { voyage.CaptainOverridesJson = NullableString(reader["captain_overrides_json"]); } catch { }
             voyage.ApprovalOptions = RunApprovalOptions.FromJson(NullableString(reader["approval_options_json"]));
             try { voyage.IsEvaluation = reader["is_evaluation"] != DBNull.Value && Convert.ToInt64(reader["is_evaluation"]) == 1; } catch { }
+            try { voyage.JudgeStrength = Armada.Core.Services.JudgeStrengthRule.Parse(reader["judge_strength"]); } catch { }
             try { voyage.LastBlackBoxEntryId = NullableString(reader["last_blackbox_entry_id"]); } catch { }
             return voyage;
         }

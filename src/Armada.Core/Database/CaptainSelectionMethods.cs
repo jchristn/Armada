@@ -11,58 +11,48 @@ namespace Armada.Core.Database
     using Armada.Core.Database.Sqlite;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using static Armada.Core.Database.CaptainSelectionCandidateRows;
+    using static Armada.Core.Database.CaptainSelectionDecisionRows;
+    using static Armada.Core.Database.CaptainSelectionEvidence;
+    using static Armada.Core.Database.CaptainSelectionExecutionEventRows;
+    using static Armada.Core.Database.CaptainSelectionOmittedCandidateStore;
+    using static Armada.Core.Database.CaptainSelectionPolicyRevisionRows;
+    using static Armada.Core.Database.CaptainSelectionReasonRows;
+    using static Armada.Core.Database.CaptainSelectionSql;
+    using static Armada.Core.Database.CaptainSelectionWindowRows;
+    using static Armada.Core.Database.UsageBudgetReservationRows;
 
     /// <summary>Structured selection history and budget lifecycle operations over provider-owned connections.</summary>
-    internal sealed partial class CaptainSelectionMethods : ICaptainSelectionMethods
+    internal sealed class CaptainSelectionMethods : ICaptainSelectionMethods
     {
         /// <summary>Transition reason on a reservation an automatic redispatch took over.</summary>
         internal const string CarriedToRedispatchReason = "CarriedToRedispatch";
 
-        private readonly Func<DbConnection> _Factory;
-        private readonly SqliteWriteGate? _Gate;
-        private static readonly string[] _ChildTables = new[] { "captain_selection_execution_events", "usage_budget_reservations",
+        private readonly CaptainSelectionConnector _Connector;
+        private readonly CaptainSelectionAccountEvidence _AccountEvidence;
+        private readonly CaptainSelectionWaits _Waits;
+        private readonly CaptainSelectionEvidence _Evidence;
+        private readonly CaptainSelectionLifecycle _Lifecycle;
+        private readonly CaptainSelectionProjection _Projection;
+        private readonly CaptainSelectionRecoveryAuthorization _RecoveryAuthorization;
+        private readonly CaptainSelectionLaunchBoundary _LaunchBoundary;
+        private readonly CaptainSelectionUntrackedExecutions _Untracked;
+        private readonly CaptainSelectionOmittedCandidateStore _OmittedCandidates;
+        internal static readonly string[] ChildTables = new[] { "captain_selection_execution_events", "usage_budget_reservations",
             "captain_selection_windows", "captain_selection_candidate_reasons", "captain_selection_omitted_candidates", "captain_selection_candidates" };
 
         internal CaptainSelectionMethods(Func<DbConnection> factory, SqliteWriteGate? gate = null)
         {
-            _Factory = factory;
-            _Gate = gate;
-        }
-
-        private async Task<T> RunAsync<T>(Func<DbConnection, Task<T>> action, CancellationToken token, bool write = false)
-        {
-            using IDisposable? lease = write && _Gate != null ? await _Gate.EnterAsync(token).ConfigureAwait(false) : null;
-            using DbConnection connection = _Factory();
-            await connection.OpenAsync(token).ConfigureAwait(false);
-            return await action(connection).ConfigureAwait(false);
-        }
-
-        private static DbCommand Command(DbConnection connection, DbTransaction? transaction, string sql)
-        {
-            DbCommand command = connection.CreateCommand();
-            command.Transaction = transaction;
-            command.CommandText = sql;
-            return command;
-        }
-
-        private static void Add(DbCommand command, string name, object? value)
-        {
-            DbParameter parameter = command.CreateParameter(); parameter.ParameterName = name; parameter.Value = value ?? DBNull.Value;
-            command.Parameters.Add(parameter);
-        }
-
-        private static string Utc(DateTime value) => UtcClock.Format(value, "o");
-        private static DateTime ParseUtc(object value) => value is DateTime date ? DateTime.SpecifyKind(date, DateTimeKind.Utc) : UtcClock.Parse(Convert.ToString(value, CultureInfo.InvariantCulture)!);
-        private static string PageSql(DbConnection connection) => connection.GetType().Name == "SqlConnection"
-            ? " OFFSET @skip ROWS FETCH NEXT @take ROWS ONLY" : " LIMIT @take OFFSET @skip";
-        private static void Required(string value, string name)
-        {
-            if (String.IsNullOrWhiteSpace(value)) throw new ArgumentException(name + " is required.", name);
-        }
-        private static void Paging(int pageNumber, int pageSize)
-        {
-            if (pageNumber < 1 || pageSize < 1 || pageSize > 1000 || (long)(pageNumber - 1) * pageSize > Int32.MaxValue)
-                throw new ArgumentOutOfRangeException(nameof(pageNumber), "Page number must be positive and page size between 1 and 1000.");
+            _Connector = new CaptainSelectionConnector(factory, gate);
+            _AccountEvidence = new CaptainSelectionAccountEvidence(_Connector);
+            _Waits = new CaptainSelectionWaits(_Connector);
+            _Evidence = new CaptainSelectionEvidence(_Connector);
+            _Lifecycle = new CaptainSelectionLifecycle(_Connector);
+            _Projection = new CaptainSelectionProjection(_Connector);
+            _RecoveryAuthorization = new CaptainSelectionRecoveryAuthorization(_Connector);
+            _LaunchBoundary = new CaptainSelectionLaunchBoundary(_Connector);
+            _Untracked = new CaptainSelectionUntrackedExecutions(_Connector);
+            _OmittedCandidates = new CaptainSelectionOmittedCandidateStore(_Connector);
         }
 
         /// <inheritdoc />
@@ -78,7 +68,7 @@ namespace Armada.Core.Database
             Validate(records);
             if (records.Decision.Mode != expectedMode || String.IsNullOrWhiteSpace(records.Decision.SelectedCaptainId))
                 throw new ArgumentException("Selection admission requires the requested mode and an actual selected captain.", nameof(records));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 CaptainSelectionDecision? existing = await ReadAttemptAsync(connection, null, records.Decision.TenantId, records.Decision.ExecutionAttemptId, token).ConfigureAwait(false);
                 if (existing != null) return Replay(existing, records.Decision);
@@ -107,7 +97,7 @@ namespace Armada.Core.Database
             {
                 try
                 {
-                    return await RunAsync(async connection =>
+                    return await _Connector.RunAsync(async connection =>
                     {
                         using DbTransaction transaction = await connection.BeginTransactionAsync(token).ConfigureAwait(false);
                         CaptainSelectionDecision? existing = await ReadAttemptAsync(connection, transaction, records.Decision.TenantId, records.Decision.ExecutionAttemptId, token).ConfigureAwait(false);
@@ -122,7 +112,7 @@ namespace Armada.Core.Database
                         return records.Decision;
                     }, token, write: true).ConfigureAwait(false);
                 }
-                catch (DbException ex) when (retry < 2 && (ex.Message.Contains("unique", StringComparison.OrdinalIgnoreCase) || ex.Message.Contains("duplicate", StringComparison.OrdinalIgnoreCase)))
+                catch (DbException ex) when (retry < 2 && UniqueConstraintViolation.IsUniqueViolation(ex))
                 {
                     token.ThrowIfCancellationRequested();
                 }
@@ -224,7 +214,7 @@ namespace Armada.Core.Database
                 if (row.DecisionId != decision.Id || row.ExecutionAttemptId != decision.ExecutionAttemptId || row.UserId != decision.UserId) throw new ArgumentException("Execution event belongs to another attempt or owner.");
         }
 
-        private static async Task<CaptainSelectionDecision?> ReadAttemptAsync(DbConnection connection, DbTransaction? transaction, string tenantId, string attemptId, CancellationToken token)
+        internal static async Task<CaptainSelectionDecision?> ReadAttemptAsync(DbConnection connection, DbTransaction? transaction, string tenantId, string attemptId, CancellationToken token)
         {
             using DbCommand command = Command(connection, transaction, "SELECT * FROM captain_selection_decisions WHERE tenant_id=@tenant AND execution_attempt_id=@attempt;");
             Add(command, "@tenant", tenantId); Add(command, "@attempt", attemptId);
@@ -236,7 +226,7 @@ namespace Armada.Core.Database
         public Task<CaptainSelectionDecision?> ReadCurrentDecisionAsync(string tenantId, string missionId, string? ownerUserId = null, CancellationToken token = default)
         {
             Required(tenantId, nameof(tenantId)); Required(missionId, nameof(missionId));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 using DbCommand command = Command(connection, null, "SELECT d.* FROM captain_selection_decisions d JOIN missions m ON m.selection_decision_id=d.id AND m.tenant_id=d.tenant_id WHERE d.tenant_id=@tenant AND m.id=@mission"
                     + (ownerUserId == null ? "" : " AND d.user_id=@owner AND m.user_id=@owner") + ";");
@@ -250,7 +240,7 @@ namespace Armada.Core.Database
         public Task<CaptainSelectionDecision?> ReadDecisionAsync(string tenantId, string decisionId, string? ownerUserId = null, CancellationToken token = default)
         {
             Required(tenantId, nameof(tenantId)); Required(decisionId, nameof(decisionId));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 using DbCommand command = Command(connection, null, "SELECT * FROM captain_selection_decisions WHERE tenant_id=@tenant AND id=@id" + (ownerUserId == null ? "" : " AND user_id=@owner") + ";");
                 Add(command, "@tenant", tenantId); Add(command, "@id", decisionId); if (ownerUserId != null) Add(command, "@owner", ownerUserId);
@@ -263,7 +253,7 @@ namespace Armada.Core.Database
         public Task<CaptainSelectionPolicyRevision?> ReadPolicyAsync(string tenantId, string policyId, CancellationToken token = default)
         {
             Required(tenantId, nameof(tenantId)); Required(policyId, nameof(policyId));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 using DbCommand command = Command(connection, null, "SELECT * FROM captain_selection_policy_revisions WHERE tenant_id=@tenant AND id=@id;");
                 Add(command, "@tenant", tenantId); Add(command, "@id", policyId);
@@ -283,7 +273,7 @@ namespace Armada.Core.Database
             int pageNumber = query.PageNumber; int pageSize = query.PageSize;
             Required(tenantId, nameof(tenantId)); Required(missionId, nameof(missionId)); Paging(pageNumber, pageSize);
             if (query.FromUtc >= query.ToUtc) throw new ArgumentException("History start must precede its end.", nameof(query));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 string where = " FROM captain_selection_decisions WHERE tenant_id=@tenant AND mission_id=@mission" + (ownerUserId == null ? "" : " AND user_id=@owner")
                     + (query.Trigger == null ? "" : " AND trigger_kind=@trigger") + (query.Outcome == null ? "" : " AND outcome=@outcome")
@@ -304,10 +294,10 @@ namespace Armada.Core.Database
             }, token);
         }
 
-        private static string CandidateScope(string? owner, string? candidateOwner)
+        internal static string CandidateScope(string? owner, string? candidateOwner)
             => "c.tenant_id=@tenant AND c.decision_id=@decision AND d.tenant_id=c.tenant_id AND d.id=c.decision_id"
                 + (owner == null ? "" : " AND d.user_id=@owner") + (candidateOwner == null ? "" : " AND (c.user_id=@candidateOwner OR c.user_id IS NULL)");
-        private static void CandidateParameters(DbCommand command, string tenant, string decision, string? owner, string? candidateOwner)
+        internal static void CandidateParameters(DbCommand command, string tenant, string decision, string? owner, string? candidateOwner)
         {
             Add(command, "@tenant", tenant); Add(command, "@decision", decision);
             if (owner != null) Add(command, "@owner", owner); if (candidateOwner != null) Add(command, "@candidateOwner", candidateOwner);
@@ -317,7 +307,7 @@ namespace Armada.Core.Database
         public Task<EnumerationResult<CaptainSelectionCandidateRecord>> EnumerateCandidatesAsync(string tenantId, string decisionId, string? ownerUserId = null, string? candidateOwnerUserId = null, int pageNumber = 1, int pageSize = 25, CancellationToken token = default)
         {
             Required(tenantId, nameof(tenantId)); Required(decisionId, nameof(decisionId)); Paging(pageNumber, pageSize);
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 string where = " FROM captain_selection_candidates c JOIN captain_selection_decisions d ON d.id=c.decision_id WHERE " + CandidateScope(ownerUserId, candidateOwnerUserId);
                 using DbCommand command = Command(connection, null, "SELECT COUNT(*)" + where);
@@ -341,7 +331,7 @@ namespace Armada.Core.Database
         public Task<List<CaptainSelectionWindowRecord>> ReadWindowsAsync(string tenantId, string decisionId, string candidateId, string? ownerUserId = null, string? candidateOwnerUserId = null, CancellationToken token = default)
         {
             Required(tenantId, nameof(tenantId)); Required(decisionId, nameof(decisionId)); Required(candidateId, nameof(candidateId));
-            return RunAsync(async connection =>
+            return _Connector.RunAsync(async connection =>
             {
                 using DbCommand command = Command(connection, null, "SELECT w.* FROM captain_selection_windows w JOIN captain_selection_candidates c ON c.id=w.candidate_id AND c.tenant_id=w.tenant_id JOIN captain_selection_decisions d ON d.id=c.decision_id WHERE "
                     + CandidateScope(ownerUserId, candidateOwnerUserId) + " AND w.decision_id=c.decision_id AND c.id=@candidate ORDER BY w.id;");
@@ -352,5 +342,145 @@ namespace Armada.Core.Database
                 return rows;
             }, token);
         }
+        /// <inheritdoc />
+        public Task<CaptainSelectionAdmissionReceipt> TryAdmitEnforcedAsync(CaptainSelectionRecordSet records, string? dockId = null, int ceiling = 256, CancellationToken token = default)
+            => AdmitSelectionAsync(records, dockId, ceiling, null, UsageSelectionModeEnum.Enforce, token);
+
+        /// <inheritdoc />
+        public Task<CaptainSelectionAdmissionReceipt> TryAdmitEnforcedRepairAsync(CaptainSelectionRecordSet records, DateTime verificationVersion, int ceiling = 256, CancellationToken token = default)
+            => AdmitSelectionAsync(records, null, ceiling, verificationVersion, UsageSelectionModeEnum.Enforce, token);
+
+        /// <inheritdoc />
+        public Task<List<UsageSelectionBudgetTotals>> ReadBudgetTotalsAsync(string tenantId, IReadOnlyList<string> captainIds, CancellationToken token = default, string? carriedExecutionAttemptId = null)
+            => _AccountEvidence.ReadBudgetTotalsAsync(tenantId, captainIds, token, carriedExecutionAttemptId);
+
+        /// <inheritdoc />
+        public Task<Dictionary<string, DateTime>> ReadLastAssignedAsync(string tenantId, IReadOnlyList<string> captainIds, CancellationToken token = default)
+            => _AccountEvidence.ReadLastAssignedAsync(tenantId, captainIds, token);
+
+        /// <inheritdoc />
+        public Task<Dictionary<UsageReservationStateEnum, long>> CountReservationsByStateAsync(CancellationToken token = default)
+            => _AccountEvidence.CountReservationsByStateAsync(token);
+
+        /// <inheritdoc />
+        public Task<List<UsageSelectionAccountEvidence>> ReadAccountEvidenceAsync(string tenantId, IReadOnlyList<string> captainIds, CancellationToken token = default)
+            => _AccountEvidence.ReadAccountEvidenceAsync(tenantId, captainIds, token);
+
+        /// <inheritdoc />
+        public Task<UsageSelectionAccountEvidence?> ReadMembershipEvidenceAsync(string tenantId, string membershipId, CancellationToken token = default)
+            => _AccountEvidence.ReadMembershipEvidenceAsync(tenantId, membershipId, token);
+
+        /// <inheritdoc />
+        public Task<EnumerationResult<CaptainSelectionWaitingItem>> EnumerateActionableWaitsAsync(string? tenantId, string? userId, IReadOnlyList<string> reasonCodes, DateTime waitingSinceBeforeUtc, int pageNumber = 1, int pageSize = 25, CancellationToken token = default)
+            => _Waits.EnumerateActionableWaitsAsync(tenantId, userId, reasonCodes, waitingSinceBeforeUtc, pageNumber, pageSize, token);
+
+        /// <inheritdoc />
+        public Task<CaptainSelectionCandidateRecord?> ReadCandidateByCaptainAsync(string tenantId, string decisionId, string captainId, string? ownerUserId = null, string? candidateOwnerUserId = null, CancellationToken token = default)
+            => _Evidence.ReadCandidateByCaptainAsync(tenantId, decisionId, captainId, ownerUserId, candidateOwnerUserId, token);
+
+        /// <inheritdoc />
+        public Task<CaptainSelectionExecutionEvent?> ReadLastModelReportAsync(string tenantId, string decisionId, string? ownerUserId = null, CancellationToken token = default)
+            => _Evidence.ReadLastModelReportAsync(tenantId, decisionId, ownerUserId, token);
+
+        /// <inheritdoc />
+        public Task<List<CaptainSelectionReason>> ReadReasonsAsync(string tenantId, string decisionId, string candidateId, string? ownerUserId = null, string? candidateOwnerUserId = null, CancellationToken token = default)
+            => _Evidence.ReadReasonsAsync(tenantId, decisionId, candidateId, ownerUserId, candidateOwnerUserId, token);
+
+        /// <inheritdoc />
+        public Task<EnumerationResult<CaptainSelectionExecutionEvent>> EnumerateExecutionEventsAsync(string tenantId, string decisionId, string? ownerUserId = null, int pageNumber = 1, int pageSize = 25, CancellationToken token = default)
+            => _Evidence.EnumerateExecutionEventsAsync(tenantId, decisionId, ownerUserId, pageNumber, pageSize, token);
+
+        /// <inheritdoc />
+        public Task<List<UsageBudgetReservation>> ReadReconciliationBatchAsync(int batchSize = 100, CancellationToken token = default)
+            => _Lifecycle.ReadReconciliationBatchAsync(batchSize, token);
+
+        /// <inheritdoc />
+        public Task<bool> TouchReservationAsync(string tenantId, string reservationId, int revision, DateTime atUtc, CancellationToken token = default)
+            => _Lifecycle.TouchReservationAsync(tenantId, reservationId, revision, atUtc, token);
+
+        /// <inheritdoc />
+        public Task<List<UsageBudgetReservation>> ReadReservationsAsync(string tenantId, string hostId, string runtime, string accountKey, CancellationToken token = default)
+            => _Lifecycle.ReadReservationsAsync(tenantId, hostId, runtime, accountKey, token);
+
+        /// <inheritdoc />
+        public Task<bool> TryTransitionReservationAsync(string tenantId, string reservationId, int revision, UsageReservationStateEnum expected, UsageReservationStateEnum next, DateTime atUtc, string reason, string? snapshotId = null, CancellationToken token = default)
+            => _Lifecycle.TryTransitionReservationAsync(tenantId, reservationId, revision, expected, next, atUtc, reason, snapshotId, token);
+
+        /// <inheritdoc />
+        public Task AppendExecutionEventAsync(CaptainSelectionExecutionEvent entry, CancellationToken token = default)
+            => _Lifecycle.AppendExecutionEventAsync(entry, token);
+
+        /// <inheritdoc />
+        public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize = 100, CancellationToken token = default)
+            => _Lifecycle.DeleteExpiredAsync(cutoffUtc, batchSize, token);
+
+        /// <inheritdoc />
+        public Task<int> DeleteByTenantAsync(string tenantId, CancellationToken token = default)
+            => _Lifecycle.DeleteByTenantAsync(tenantId, token);
+
+        /// <inheritdoc />
+        public Task<List<CaptainSelectionDecisionView>> ReadDecisionViewsAsync(string tenantId, IReadOnlyList<string> decisionIds, string? ownerUserId = null, string? candidateOwnerUserId = null, CancellationToken token = default)
+            => _Projection.ReadDecisionViewsAsync(tenantId, decisionIds, ownerUserId, candidateOwnerUserId, token);
+
+        /// <inheritdoc />
+        public Task<UsageSelectionRecovery?> ReadDecisionRecoveryAsync(string tenantId, string decisionId, CancellationToken token = default)
+            => _RecoveryAuthorization.ReadDecisionRecoveryAsync(tenantId, decisionId, token);
+
+        /// <inheritdoc />
+        public Task<UsageSelectionRecovery?> ReadRecoveryAsync(string tenantId, string missionId, CancellationToken token = default)
+            => _RecoveryAuthorization.ReadRecoveryAsync(tenantId, missionId, token);
+
+        /// <inheritdoc />
+        public Task<UsageSelectionRecovery?> TryAuthorizeRecoveryAsync(string tenantId, string missionId, string actorUserId, UsageSelectionRecoveryRequest request, CancellationToken token = default)
+            => _RecoveryAuthorization.TryAuthorizeRecoveryAsync(tenantId, missionId, actorUserId, request, token);
+
+        /// <inheritdoc />
+        public Task<string?> ReadUsageExecutionKeyAsync(string tenantId, string missionId, CancellationToken token = default)
+            => _LaunchBoundary.ReadUsageExecutionKeyAsync(tenantId, missionId, token);
+
+        /// <inheritdoc />
+        public Task<bool> MarkLaunchAttemptedAsync(string tenantId, string missionId, string captainId, string executionKey, CancellationToken token = default)
+            => _LaunchBoundary.MarkLaunchAttemptedAsync(tenantId, missionId, captainId, executionKey, token);
+
+        /// <inheritdoc />
+        public Task<bool> ReleaseUnstartedAsync(string tenantId, string missionId, string captainId, string executionKey, CancellationToken token = default)
+            => _LaunchBoundary.ReleaseUnstartedAsync(tenantId, missionId, captainId, executionKey, token);
+
+        /// <inheritdoc />
+        public Task<bool> ReleaseStoppedUnstartedAsync(string tenantId, string executionKey, CancellationToken token = default)
+            => _LaunchBoundary.ReleaseStoppedUnstartedAsync(tenantId, executionKey, token);
+
+        /// <inheritdoc />
+        public Task<bool> TryRecordProviderCooldownAsync(UsageProviderCooldownRequest request, CancellationToken token = default)
+            => _LaunchBoundary.TryRecordProviderCooldownAsync(request, token);
+
+        /// <inheritdoc />
+        public Task<bool> TryAdmitLegacyAsync(string captainId, string missionId, string? executionHostId, int ceiling = 256, CancellationToken token = default)
+            => _Untracked.TryAdmitLegacyAsync(captainId, missionId, executionHostId, ceiling, token);
+
+        /// <inheritdoc />
+        public Task<bool> TryAdmitLegacyRepairAsync(string captainId, string missionId, DateTime verificationVersion, string? executionHostId, int ceiling = 256, CancellationToken token = default)
+            => _Untracked.TryAdmitLegacyRepairAsync(captainId, missionId, verificationVersion, executionHostId, ceiling, token);
+
+        /// <inheritdoc />
+        public Task<int> AdoptUntrackedExecutionsAsync(int batchSize = 100, string? localHostId = null, CancellationToken token = default)
+            => _Untracked.AdoptUntrackedExecutionsAsync(batchSize, localHostId, token);
+
+        /// <inheritdoc />
+        public Task<List<UsageUntrackedExecution>> ReadUntrackedExecutionsAsync(int batchSize = 100, CancellationToken token = default)
+            => _Untracked.ReadUntrackedExecutionsAsync(batchSize, token);
+
+        /// <inheritdoc />
+        public Task<bool> UpdateUntrackedExecutionAsync(UsageUntrackedExecution row, int expectedRevision, CancellationToken token = default)
+            => _Untracked.UpdateUntrackedExecutionAsync(row, expectedRevision, token);
+
+        /// <inheritdoc />
+        public Task<bool> IsUntrackedExecutionRunningAsync(string tenantId, string missionId, string executionKey, CancellationToken token = default)
+            => _Untracked.IsUntrackedExecutionRunningAsync(tenantId, missionId, executionKey, token);
+
+        /// <inheritdoc />
+        public Task<List<CaptainSelectionOmittedReason>> ReadOmittedCandidatesAsync(string tenantId, string decisionId, string? ownerUserId = null, string? candidateOwnerUserId = null, CancellationToken token = default)
+            => _OmittedCandidates.ReadOmittedCandidatesAsync(tenantId, decisionId, ownerUserId, candidateOwnerUserId, token);
+
     }
 }

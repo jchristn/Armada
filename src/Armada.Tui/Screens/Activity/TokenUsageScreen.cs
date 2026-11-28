@@ -276,7 +276,7 @@ namespace Armada.Tui.Screens.Activity
             Heatmap.Summary = Context.Loc.T("Loading token usage...");
             ScreenOps.Quiet(Context, async () =>
             {
-                try { return await Context.Client.GetTokenUsageAsync(query).ConfigureAwait(false); }
+                try { return await Context.Client.TokenUsage.GetSummaryAsync(query).ConfigureAwait(false); }
                 catch (Armada.Client.ArmadaApiException) { return null; }
             }, result =>
             {
@@ -317,7 +317,7 @@ namespace Armada.Tui.Screens.Activity
             {
                 try
                 {
-                    return await Context.Client.GetTokenUsageAsync(query).ConfigureAwait(false);
+                    return await Context.Client.TokenUsage.GetSummaryAsync(query).ConfigureAwait(false);
                 }
                 catch (Armada.Client.ArmadaApiException)
                 {

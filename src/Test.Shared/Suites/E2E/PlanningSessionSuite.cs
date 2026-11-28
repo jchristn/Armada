@@ -153,6 +153,7 @@ namespace Test.Shared.Suites.E2E
                     createdVoyageIds.Add(voyage.Id);
                     AssertEqual(created.Session.Id, voyage.SourcePlanningSessionId);
                     AssertEqual(assistant.Id, voyage.SourcePlanningMessageId);
+                    AssertEqual(summary.Description!.Trim(), voyage.Description, "the voyage carries the drafted objective, which Architect slices hand to every Worker (RS-2.4)");
 
                     HttpResponseMessage stopResp = await authClient.PostAsync(
                         "/api/v1/planning-sessions/" + created.Session.Id + "/stop",

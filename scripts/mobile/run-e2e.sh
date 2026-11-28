@@ -72,7 +72,7 @@ PUSH_SIM=0
 PUSH_SIM_ONLY=0
 ASK_FOLLOW=0
 ASK_FOLLOW_ONLY=0
-APP_ID="${ARMADA_MOBILE_BUNDLE_ID:-com.armada.mobile}"
+APP_ID="${ARMADA_MOBILE_BUNDLE_ID:-ai.latticetech.armada}"
 
 while [ $# -gt 0 ]; do
   case "$1" in

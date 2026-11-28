@@ -169,11 +169,11 @@ namespace Armada.Tui.Screens.Admin
             Grid.SetLoading();
             ScreenOps.Run(Context, async () =>
             {
-                EnumerationResult<UserMaster>? users = await Context.Client.ListUsersAsync().ConfigureAwait(false);
+                EnumerationResult<UserMaster>? users = await Context.Client.Users.ListAsync().ConfigureAwait(false);
                 List<TenantMetadata> tenants;
                 if (Context.Session.IsGlobalAdmin)
                 {
-                    EnumerationResult<TenantMetadata>? t = await Context.Client.ListTenantsAsync().ConfigureAwait(false);
+                    EnumerationResult<TenantMetadata>? t = await Context.Client.Tenants.ListAsync().ConfigureAwait(false);
                     tenants = t?.Objects ?? new List<TenantMetadata>();
                 }
                 else
@@ -265,7 +265,7 @@ namespace Armada.Tui.Screens.Admin
                 {
                     try
                     {
-                        await Context.Client.UpdateUserAsync(editing.Id, body).ConfigureAwait(false);
+                        await Context.Client.Users.UpdateAsync(editing.Id, body).ConfigureAwait(false);
                     }
                     catch (ArmadaApiException ex) when (body.CurrentPassword != null && ex.StatusCode == 403)
                     {
@@ -275,7 +275,7 @@ namespace Armada.Tui.Screens.Admin
                 }
                 else
                 {
-                    await Context.Client.CreateUserAsync(body).ConfigureAwait(false);
+                    await Context.Client.Users.CreateAsync(body).ConfigureAwait(false);
                 }
 
                 return null;
@@ -407,7 +407,7 @@ namespace Armada.Tui.Screens.Admin
             string mail = row.Email;
             Context.Confirm("Delete User", Context.Loc.T("Delete user \"{{email}}\"? This cannot be undone.", LocalizationArgs.Of("email", mail)), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting user", ct => Context.Client.DeleteUserAsync(id, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting user", ct => Context.Client.Users.DeleteAsync(id, ct), () =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "User \"{{email}}\" deleted.", LocalizationArgs.Of("email", mail));
                     Load();
@@ -424,7 +424,7 @@ namespace Armada.Tui.Screens.Admin
             Context.Confirm("Delete Selected Users", Context.Loc.T("Delete {{count}} user(s)?", LocalizationArgs.Of("count", ids.Count)), () =>
             {
                 Grid.ClearMarks();
-                UserAdminOps.BulkDelete(Context, ids, id => Context.Client.DeleteUserAsync(id), "users", Load, "{count, plural, one {Deleting # user} other {Deleting # users}}");
+                UserAdminOps.BulkDelete(Context, ids, id => Context.Client.Users.DeleteAsync(id), "users", Load, "{count, plural, one {Deleting # user} other {Deleting # users}}");
             }, "Delete", "delete");
         }
 

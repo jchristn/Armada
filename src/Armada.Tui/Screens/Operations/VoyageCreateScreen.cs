@@ -83,6 +83,16 @@ namespace Armada.Tui.Screens.Operations
         public List<OpsTextArea> MissionDescriptions { get; } = new List<OpsTextArea>();
 
         /// <summary>
+        /// Mission personas ("" leaves the choice to the pipeline).
+        /// </summary>
+        public List<SelectField<string>> MissionPersonas { get; } = new List<SelectField<string>>();
+
+        /// <summary>
+        /// Mission modes ("" is Implementation).
+        /// </summary>
+        public List<SelectField<string>> MissionModes { get; } = new List<SelectField<string>>();
+
+        /// <summary>
         /// True while creating.
         /// </summary>
         public bool Submitting { get; private set; } = false;
@@ -159,7 +169,7 @@ namespace Armada.Tui.Screens.Operations
             });
             DeliveryMode.SetValue("InstructionWithReference");
             Reference.Changed += (s, name) => ApplyReference(name);
-            Reference.Ensure("vessels", "pipelines", "playbooks");
+            Reference.Ensure("vessels", "pipelines", "playbooks", "personas");
             AddMissionFields();
             Rebuild();
         }
@@ -188,6 +198,8 @@ namespace Armada.Tui.Screens.Operations
             MissionTitles.RemoveAt(index);
             MissionPriorities.RemoveAt(index);
             MissionDescriptions.RemoveAt(index);
+            MissionPersonas.RemoveAt(index);
+            MissionModes.RemoveAt(index);
             Rebuild();
         }
 
@@ -220,6 +232,8 @@ namespace Armada.Tui.Screens.Operations
                 m.Description = d.Length > 0 ? d : t;
                 m.VesselId = Vessel.Value;
                 m.Priority = Int32.TryParse(MissionPriorities[i].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int p) && p != 0 ? p : 100;
+                if (!String.IsNullOrWhiteSpace(MissionPersonas[i].Value)) m.Persona = MissionPersonas[i].Value!.Trim();
+                if (Enum.TryParse<MissionModeEnum>(MissionModes[i].Value ?? "", out MissionModeEnum missionMode) && missionMode != MissionModeEnum.Implementation) m.Mode = missionMode;
                 missions.Add(m);
             }
 
@@ -245,7 +259,7 @@ namespace Armada.Tui.Screens.Operations
 
             string title = req.Title;
             Submitting = true;
-            Call((c, t) => c.CreateVoyageAsync(req, t), v =>
+            Call((c, t) => c.Voyages.CreateAsync(req, t), v =>
             {
                 Submitting = false;
                 Toast(NotificationSeverityEnum.Success, Tr("Voyage \"{{title}}\" created.", LocalizationArgs.Of("title", title)));
@@ -352,6 +366,10 @@ namespace Armada.Tui.Screens.Operations
                 Pipeline.Options = options;
                 Pipeline.SetValue(p ?? "");
             }
+            else if (name == "personas")
+            {
+                foreach (SelectField<string> persona in MissionPersonas) ApplyPersonaOptions(persona);
+            }
             else if (name == "playbooks")
             {
                 Playbooks.Options = Reference.Playbooks.Where(p => p.Active).Select(p => new SelectOption<string>(p.Id, p.FileName, p.Description ?? "")).ToList();
@@ -371,6 +389,25 @@ namespace Armada.Tui.Screens.Operations
             MissionTitles.Add(title);
             MissionPriorities.Add(priority);
             MissionDescriptions.Add(description);
+            SelectField<string> persona = NewSelect("Persona", new List<SelectOption<string>>());
+            ApplyPersonaOptions(persona);
+            MissionPersonas.Add(persona);
+            SelectField<string> mode = NewSelect("Mode", new List<SelectOption<string>>
+            {
+                new SelectOption<string>("", Tr("Implementation (changes code)")),
+                new SelectOption<string>("Audit", Tr("Audit (read-only report)"), Tr("The captain writes a report; an empty diff counts as success.")),
+                new SelectOption<string>("Research", Tr("Research (read-only report)"), Tr("The captain writes a report; an empty diff counts as success.")),
+            });
+            mode.SetValue("");
+            MissionModes.Add(mode);
+        }
+
+        private void ApplyPersonaOptions(SelectField<string> field)
+        {
+            string? current = field.Value;
+            List<SelectOption<string>> options = Reference.PersonaOptions("From the pipeline");
+            field.Options = options.GroupBy(o => o.Value).Select(g => g.First()).ToList();
+            field.SetValue(current ?? "");
         }
 
         private int FocusedMission()
@@ -378,7 +415,8 @@ namespace Armada.Tui.Screens.Operations
             IWidget? focused = Form.Scope.Focused;
             for (int i = 0; i < MissionTitles.Count; i++)
             {
-                if (ReferenceEquals(focused, MissionTitles[i]) || ReferenceEquals(focused, MissionPriorities[i]) || ReferenceEquals(focused, MissionDescriptions[i])) return i;
+                if (ReferenceEquals(focused, MissionTitles[i]) || ReferenceEquals(focused, MissionPriorities[i]) || ReferenceEquals(focused, MissionDescriptions[i])
+                    || ReferenceEquals(focused, MissionPersonas[i]) || ReferenceEquals(focused, MissionModes[i])) return i;
             }
 
             return -1;
@@ -410,6 +448,8 @@ namespace Armada.Tui.Screens.Operations
                 form.AddField(n + " " + Tr("Title"), MissionTitles[i]);
                 form.AddField(n + " " + Tr("Priority"), MissionPriorities[i]);
                 form.AddField(n + " " + Tr("Description"), MissionDescriptions[i], null, 2);
+                form.AddField(n + " " + Tr("Persona"), MissionPersonas[i], i == 0 ? Tr("When every mission names a persona and no pipeline is chosen, each runs as one step with its persona. A multi-step pipeline picks its own personas.") : null);
+                form.AddField(n + " " + Tr("Mode"), MissionModes[i]);
             }
 
             Form = AddChild(form);

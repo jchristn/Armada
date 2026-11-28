@@ -341,8 +341,8 @@ namespace Armada.Tui.Screens.Build
         protected override async Task<GridPage<VesselHealth>> FetchAsync(GridQuery query, CancellationToken token)
         {
             VesselHealthEnumerateRequest req = BuildRequest(query);
-            Task<EnumerationResult<VesselHealth>?> rows = Context.Client.EnumerateVesselHealthAsync(req, token);
-            Task<VesselHealthSummary?> summary = Context.Client.GetVesselHealthSummaryAsync(token);
+            Task<EnumerationResult<VesselHealth>?> rows = Context.Client.VesselHealth.EnumerateAsync(req, token);
+            Task<VesselHealthSummary?> summary = Context.Client.VesselHealth.GetSummaryAsync(token);
             try { await Task.WhenAll(rows, summary).ConfigureAwait(false); }
             catch (Exception) when (rows.IsCompletedSuccessfully)
             {
@@ -599,7 +599,7 @@ namespace Armada.Tui.Screens.Build
 
         private void LoadDefaultBranches()
         {
-            Call((c, t) => c.ListVesselsAsync(new ArmadaPageQuery(1, 9999), t), result =>
+            Call((c, t) => c.Vessels.ListAsync(new ArmadaPageQuery(1, 9999), t), result =>
             {
                 Dictionary<string, string> map = new Dictionary<string, string>(StringComparer.Ordinal);
                 foreach (Vessel v in result?.Objects ?? new List<Vessel>())

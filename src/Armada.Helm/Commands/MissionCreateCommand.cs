@@ -48,6 +48,16 @@ namespace Armada.Helm.Commands
                 }
                 mission.BranchStrategy = strategy;
             }
+            if (!string.IsNullOrWhiteSpace(settings.Persona)) mission.Persona = settings.Persona.Trim();
+            if (!string.IsNullOrWhiteSpace(settings.Mode))
+            {
+                if (!Enum.TryParse<MissionModeEnum>(settings.Mode, true, out MissionModeEnum mode) || !Enum.IsDefined(typeof(MissionModeEnum), mode))
+                {
+                    HelmConsole.Error.MarkupLine("[red]--mode must be Implementation, Audit or Research.[/]");
+                    return 1;
+                }
+                mission.Mode = mode;
+            }
             if (settings.MaxFiles.HasValue || settings.MaxSteps.HasValue || settings.MinServedContextTokens.HasValue || (settings.RequiredTools != null && settings.RequiredTools.Length > 0))
             {
                 // The server validates the envelope (it may only tighten the vessel default) and answers 400 with the reason.

@@ -108,18 +108,27 @@ namespace Armada.Runtimes.Tools
                     edits.Add(new EditOperation { OldString = editArguments!.OldString!, NewString = editArguments.NewString! });
                 }
 
-                string originalContent = await File.ReadAllTextAsync(resolvedPath, cancellationToken).ConfigureAwait(false);
-                string lineEnding = DetectLineEnding(originalContent);
-                string lfContent = originalContent.Replace("\r\n", "\n").Replace("\r", "\n");
+                TextFileSnapshot original = await TextFileCodec.ReadAsync(resolvedPath, cancellationToken).ConfigureAwait(false);
+                string lfContent = original.LfContent;
 
                 // Validate all edits against original content
                 for (int i = 0; i < edits.Count; i++)
                 {
-                    string lfOldString = edits[i].OldString.Replace("\r\n", "\n").Replace("\r", "\n");
+                    string lfOldString = TextFileCodec.NormalizeToLf(edits[i].OldString);
                     int matchCount = CountOccurrences(lfContent, lfOldString);
 
                     if (matchCount == 0)
                     {
+                        if (LineNumberPrefix.OldStringHasPrefixes(lfContent, lfOldString))
+                        {
+                            return new ToolResult
+                            {
+                                ToolCallId = toolCallId,
+                                Success = false,
+                                Content = JsonSerializer.Serialize(new { success = false, error = LineNumberPrefix.ErrorCode, edit_index = i, message = "Edit at index " + i + ": " + LineNumberPrefix.Message("old_string") })
+                            };
+                        }
+
                         return new ToolResult
                         {
                             ToolCallId = toolCallId,
@@ -131,6 +140,16 @@ namespace Armada.Runtimes.Tools
                                 edit_index = i,
                                 message = $"Edit at index {i}: old_string was not found in the original file content."
                             })
+                        };
+                    }
+
+                    if (LineNumberPrefix.NewTextHasPrefixes(lfContent, TextFileCodec.NormalizeToLf(edits[i].NewString)))
+                    {
+                        return new ToolResult
+                        {
+                            ToolCallId = toolCallId,
+                            Success = false,
+                            Content = JsonSerializer.Serialize(new { success = false, error = LineNumberPrefix.ErrorCode, edit_index = i, message = "Edit at index " + i + ": " + LineNumberPrefix.Message("new_string") })
                         };
                     }
 
@@ -155,8 +174,8 @@ namespace Armada.Runtimes.Tools
                 string workingContent = lfContent;
                 for (int i = 0; i < edits.Count; i++)
                 {
-                    string lfOldString = edits[i].OldString.Replace("\r\n", "\n").Replace("\r", "\n");
-                    string lfNewString = edits[i].NewString.Replace("\r\n", "\n").Replace("\r", "\n");
+                    string lfOldString = TextFileCodec.NormalizeToLf(edits[i].OldString);
+                    string lfNewString = TextFileCodec.NormalizeToLf(edits[i].NewString);
 
                     int pos = workingContent.IndexOf(lfOldString, StringComparison.Ordinal);
                     if (pos < 0)
@@ -180,8 +199,7 @@ namespace Armada.Runtimes.Tools
                         + workingContent.Substring(pos + lfOldString.Length);
                 }
 
-                string outputContent = workingContent.Replace("\n", lineEnding);
-                await File.WriteAllTextAsync(resolvedPath, outputContent, cancellationToken).ConfigureAwait(false);
+                await TextFileCodec.WriteAsync(resolvedPath, workingContent, original, cancellationToken).ConfigureAwait(false);
 
                 int newLineCount = workingContent.Split('\n').Length;
 
@@ -237,30 +255,6 @@ namespace Armada.Runtimes.Tools
             }
 
             return count;
-        }
-
-        private string DetectLineEnding(string content)
-        {
-            int crlfIndex = content.IndexOf("\r\n", StringComparison.Ordinal);
-            int lfIndex = content.IndexOf("\n", StringComparison.Ordinal);
-            int crIndex = content.IndexOf("\r", StringComparison.Ordinal);
-
-            if (crlfIndex >= 0 && (crlfIndex <= lfIndex || lfIndex < 0))
-            {
-                return "\r\n";
-            }
-
-            if (lfIndex >= 0)
-            {
-                return "\n";
-            }
-
-            if (crIndex >= 0)
-            {
-                return "\r";
-            }
-
-            return Environment.NewLine;
         }
 
         private string ResolvePath(string filePath, string workingDirectory)

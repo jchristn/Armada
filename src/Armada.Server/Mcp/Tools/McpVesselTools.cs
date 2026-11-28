@@ -419,12 +419,10 @@ namespace Armada.Server.Mcp.Tools
                     }
                     else
                     {
-                        mission.Status = Armada.Core.Enums.MissionStatusEnum.Cancelled;
                         mission.FailureKind = Armada.Core.Enums.MissionFailureKindEnum.OperatorAction;
                         mission.FailureReason = "Vessel deleted";
                         mission.CompletedUtc = DateTime.UtcNow;
-                        mission.LastUpdateUtc = DateTime.UtcNow;
-                        await database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                        await new Armada.Core.Services.MissionTransitions(database).TryTransitionAsync(mission, new[] { statusBefore }, Armada.Core.Enums.MissionStatusEnum.Cancelled).ConfigureAwait(false);
                         await BlackBoxOperatorCapture.RecordVesselDeletedAsync(blackBox, mission, statusBefore, vessel, "MCP").ConfigureAwait(false);
                     }
                 }

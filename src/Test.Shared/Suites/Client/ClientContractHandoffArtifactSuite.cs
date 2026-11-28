@@ -38,20 +38,20 @@ namespace Test.Shared.Suites.Client
             {
                 Mission mission = await SeedAsync(fx).ConfigureAwait(false);
 
-                EnumerationResult<HandoffArtifact> page = (await c.ListMissionHandoffArtifactsAsync(mission.Id))!;
+                EnumerationResult<HandoffArtifact> page = (await c.HandoffArtifacts.ListForMissionAsync(mission.Id))!;
                 AssertEqual(2, (int)page.TotalRecords, "both artifacts");
                 AssertTrue(page.Objects.All(a => a.Output == null), "list leaves out output");
-                EnumerationResult<HandoffArtifact> second = (await c.ListMissionHandoffArtifactsAsync(mission.Id, 2, 1))!;
+                EnumerationResult<HandoffArtifact> second = (await c.HandoffArtifacts.ListForMissionAsync(mission.Id, 2, 1))!;
                 AssertEqual(1, second.PageSize, "page size sent");
                 AssertEqual(2, second.PageNumber, "page number sent");
                 string id = second.Objects.Single().Id;
 
-                HandoffArtifact read = (await c.GetHandoffArtifactAsync(id))!;
+                HandoffArtifact read = (await c.HandoffArtifacts.GetAsync(id))!;
                 AssertEqual(mission.Id, read.MissionId, "get");
                 AssertEqual("contract output", read.Output, "full output on get");
                 AssertEqual("src/Contract.cs", read.Findings.Single().File, "finding");
-                await ClientContract.ExpectErrorAsync(() => c.GetHandoffArtifactAsync("hoa_missing"), "get unknown", 404, 404);
-                await ClientContract.ExpectErrorAsync(() => c.ListMissionHandoffArtifactsAsync("msn_missing_" + ClientContract.Suffix()), "list unknown mission", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.HandoffArtifacts.GetAsync("hoa_missing"), "get unknown", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.HandoffArtifacts.ListForMissionAsync("msn_missing_" + ClientContract.Suffix()), "list unknown mission", 404, 404);
             }));
 
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "Armada.Client contract: handoff artifacts", cases: cases);

@@ -20,7 +20,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Classified failure kind.
         /// </summary>
-        public RuntimeFailureKindEnum FailureKind { get; set; } = RuntimeFailureKindEnum.Crash;
+        public RuntimeFailureKindEnum FailureKind { get; set; } = RuntimeFailureKindEnum.Unclassified;
 
         /// <summary>
         /// The last structured provider error the runtime reported before exiting, if any.
@@ -63,12 +63,17 @@ namespace Armada.Core.Models
                 "output_token_limit_reached" => "Increase Max Output Tokens in the inference endpoint, including room for reasoning and the visible answer. Reduce reasoning effort where the model supports it.",
                 "incomplete_completion" => "Inspect the final inference turn and mission log. Check output-token limits and model tool support; the captain must finish the work and return the required completion marker and summary.",
                 "context_limit_exceeded" => "Reduce tool output and mission context, or select a model with a larger context window.",
+                "model_out_of_memory" => "The model server could not fit the model in memory. Unload other models, lower the context length, choose a smaller quantization, or route this persona to a different endpoint.",
+                "tool_calling_unsupported" => "The model or server cannot do tool calling as configured. Choose a model with tool support, or enable the server's tool-call parser (vLLM: --enable-auto-tool-choice and --tool-call-parser).",
+                "tool_call_parse_error" => "The server could not parse the model's tool call. Check the server's tool-call parser for this model, lower the temperature, or select a model that emits tool calls reliably.",
                 _ => FailureKind switch
                 {
                     RuntimeFailureKindEnum.AuthFailure => "Check the endpoint credentials and provider permissions, then re-enable the captain.",
                     RuntimeFailureKindEnum.UsageLimit => "Check provider quota, billing and rate limits; wait for the limit to reset or select an available endpoint.",
                     RuntimeFailureKindEnum.ModelUnavailable => "Check the endpoint URL, model identifier and account access to that model.",
+                    RuntimeFailureKindEnum.Transient when ProviderError?.HttpStatusCode == 429 => "The endpoint is rate limiting requests. Armada resumes the captain after the endpoint's Retry-After; if this repeats, lower the concurrency for this endpoint.",
                     RuntimeFailureKindEnum.Transient => "Check provider availability, connectivity and request timeout settings.",
+                    RuntimeFailureKindEnum.Unclassified when ProviderError == null => "The runtime reported no provider error. Inspect the mission log for the last model turn and tool call; if the cause is a provider message Armada does not recognize, report it so it can be classified.",
                     _ => ProviderError?.HttpStatusCode switch
                     {
                         400 or 405 or 415 or 422 => "The provider rejected the request. Check the endpoint URL, provider, model, inference options and tool support. If these are correct, inspect the provider error and SDK compatibility; a rejected request can also be an integration defect. Validate the endpoint after correcting the cause before restarting the mission.",
